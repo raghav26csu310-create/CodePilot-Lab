@@ -1,0 +1,107 @@
+/*
+ * CodePilot Lab — design tokens
+ * Single source of truth for colour, type, space, motion and layout.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- Surfaces ------------------------------------------------------- */
+  --void: #04060b;
+  --carbon: #070b12;
+  --graphite: #0c111a;
+  --slate: #121a27;
+  --midnight: #0a1626;
+
+  --surface-1: rgb(13 19 29 / 0.72);
+  --surface-2: rgb(18 26 39 / 0.68);
+  --surface-3: rgb(24 34 49 / 0.7);
+  --glass: rgb(8 13 21 / 0.78);
+
+  /* ---- Ink ------------------------------------------------------------ */
+  --text: #e9eff8;
+  --text-2: #a3b0c4;
+  --text-3: #7a8799;
+  --text-inverse: #05070c;
+
+  /* ---- Accents (use sparingly) --------------------------------------- */
+  --cyan: #57e2e6;
+  --cyan-dim: #2a8f96;
+  --cyan-wash: rgb(87 226 230 / 0.1);
+  --ice: #a9dcff;
+  --violet: #8c7bff;
+  --violet-wash: rgb(140 123 255 / 0.12);
+
+  /* ---- State ---------------------------------------------------------- */
+  --ok: #5be0a8;
+  --warn: #f0c46a;
+  --danger: #ff7e8c;
+
+  /* ---- Lines ---------------------------------------------------------- */
+  --hairline: rgb(150 180 220 / 0.11);
+  --hairline-strong: rgb(160 195 235 / 0.22);
+  --hairline-accent: rgb(87 226 230 / 0.32);
+
+  /* ---- Typography ----------------------------------------------------- */
+  --font-display: 'Space Grotesk Variable', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-ui: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --fs-10: 0.625rem;
+  --fs-11: 0.6875rem;
+  --fs-12: 0.75rem;
+  --fs-13: 0.8125rem;
+  --fs-14: 0.875rem;
+  --fs-16: 1rem;
+  --fs-20: 1.25rem;
+  --fs-26: 1.625rem;
+  --fs-34: 2.125rem;
+  --fs-hero: clamp(2.6rem, 5.1vw, 4.6rem);
+
+  /* ---- Space ---------------------------------------------------------- */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.25rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+  --s-10: 2.5rem;
+  --s-12: 3rem;
+  --s-16: 4rem;
+  --s-20: 5rem;
+
+  /* ---- Radii ---------------------------------------------------------- */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+
+  /* ---- Motion --------------------------------------------------------- */
+  --d-1: 120ms;
+  --d-2: 200ms;
+  --d-3: 320ms;
+  --d-4: 560ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-state: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ---- Layout --------------------------------------------------------- */
+  --header-h: 66px;
+  --status-h: 34px;
+  --page-x: clamp(1.25rem, 4vw, 4rem);
+  --max-w: 1480px;
+
+  /* ---- Elevation ------------------------------------------------------ */
+  --shadow-panel: 0 32px 90px -44px rgb(0 0 0 / 0.95);
+  --shadow-float: 0 18px 50px -24px rgb(0 0 0 / 0.85);
+  --glow-cyan: 0 0 26px -6px rgb(87 226 230 / 0.55);
+
+  /* ---- Layers --------------------------------------------------------- */
+  --z-atmosphere: 0;
+  --z-content: 10;
+  --z-header: 40;
+  --z-status: 40;
+  --z-grain: 60;
+  --z-overlay: 90;
+}

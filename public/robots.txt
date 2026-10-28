@@ -1,0 +1,3 @@
+# CodePilot Lab is a local-first tool, not a public site.
+User-agent: *
+Disallow: /

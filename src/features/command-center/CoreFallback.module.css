@@ -1,0 +1,42 @@
+.fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.fallback::before {
+  content: '';
+  position: absolute;
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(47 160 180 / 0.16), transparent 66%);
+  filter: blur(14px);
+}
+
+.svg {
+  position: relative;
+  width: 84%;
+  max-width: 430px;
+  height: auto;
+  filter: drop-shadow(0 0 24px rgb(87 226 230 / 0.16));
+}
+
+.caption {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  background: rgb(4 6 11 / 0.6);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
