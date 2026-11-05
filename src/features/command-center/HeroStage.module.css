@@ -175,6 +175,21 @@
   }
 }
 
+.compact {
+  gap: 8px;
+}
+
+.compact .stage {
+  width: min(100%, 500px, 40vh);
+  margin-inline: auto;
+}
+
+@media (max-width: 1180px) {
+  .compact .stage {
+    width: min(100%, 460px, 38vh);
+  }
+}
+
 @media (max-width: 520px) {
   .labels {
     padding: 13px 15px;

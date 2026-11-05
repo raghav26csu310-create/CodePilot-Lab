@@ -29,7 +29,11 @@ checks. ESLint ignores `dist/` and `node_modules/`.
 ## Architecture facts
 
 - `src/app/routes.ts` is the single source for nav/palette metadata. A new route needs
-  an entry there, a route in `src/app/App.tsx`, and a page.
+  an entry there, a route in `src/app/App.tsx`, and a page. `/workspace/:projectId`
+  renders a real project dossier; `/workspace` itself is still a scheduled placeholder.
+- The sidebar collapse preference is stored under `codepilot.sidebar.collapsed` and
+  applied at mount. The desktop sidebar appears at 1024 px and above; below that the
+  mobile navigation dialog is the only navigation surface.
 - Styling is CSS Modules + tokens in `src/design-system/tokens.css` / `base.css`.
   There is no Tailwind. Reuse existing primitives and tokens; do not redesign the
   system per page.
@@ -44,7 +48,8 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   it instead of failing silently.
 - Import is a real folder scan via the File System Access API or a `webkitdirectory`
   input. Excluded directories and the scan cap are product-visible policy; do not
-  silently drop files.
+  silently drop files. Recent projects and dossiers must read from Dexie or show an
+  explicit unavailable/empty state — never seed sample projects.
 - App version is injected as `__APP_VERSION__` from `package.json` in
   `vite.config.ts`. Never hardcode a version string.
 
@@ -68,3 +73,9 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   in-app browser, not from a headless screenshot.
 - Fixed/sticky elements can stitch badly in tall screenshots; capture the viewport and
   scroll to a deterministic position first.
+- Framer Motion exit animations may appear stuck in a backgrounded in-app tab because
+  rAF is throttled. Force a screenshot/frame before judging overlay state, and verify
+  overlay logic through `aria-expanded`, body overflow, and the actual route.
+- Headless Chromium enforces a minimum window width, so `--window-size=390,844` clips a
+  wider layout. For true narrow-viewport checks, use a same-origin iframe harness at the
+  target width and measure `documentElement.scrollWidth` plus element rects.

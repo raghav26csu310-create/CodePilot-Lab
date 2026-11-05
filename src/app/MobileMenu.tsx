@@ -1,11 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { X } from 'lucide-react'
+import { Settings2, X } from 'lucide-react'
 import { useCallback, useEffect, useRef } from 'react'
 import { NavLink } from 'react-router-dom'
 
 import { Badge } from '../design-system/primitives/Badge'
 import { useFocusTrap } from '../lib/useFocusTrap'
-import { ROUTES } from './routes'
+import { NAV_ROUTES } from './routes'
 import styles from './MobileMenu.module.css'
 
 type MobileMenuProps = {
@@ -47,7 +47,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
           transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
         >
           <div className={styles.top}>
-            <span>Navigation / 07 modules</span>
+            <span>Navigation / {String(NAV_ROUTES.length).padStart(2, '0')} areas</span>
             <button type="button" className={styles.close} onClick={close}>
               <X size={14} aria-hidden="true" />
               Close
@@ -56,7 +56,7 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
 
           <nav aria-label="All modules">
             <ul className={styles.list}>
-              {ROUTES.map((route) => {
+              {NAV_ROUTES.map((route) => {
                 const Icon = route.icon
                 return (
                   <li key={route.path}>
@@ -70,10 +70,10 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
                     >
                       <Icon size={17} className={styles.itemIcon} aria-hidden="true" />
                       <span className={styles.itemLabel}>{route.label}</span>
-                      {route.phase === 'Live' ? (
+                      {route.status === 'live' ? (
                         <Badge tone="live">Live</Badge>
                       ) : (
-                        <Badge tone="planned">{route.phase}</Badge>
+                        <Badge tone="planned">Scheduled</Badge>
                       )}
                     </NavLink>
                   </li>
@@ -82,12 +82,22 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
             </ul>
           </nav>
 
+          <div className={styles.utility}>
+            <NavLink to="/settings" onClick={close} className={styles.utilityLink}>
+              <Settings2 size={17} className={styles.itemIcon} aria-hidden="true" />
+              <span className={styles.itemLabel}>Settings</span>
+              <Badge tone="planned">Scheduled</Badge>
+            </NavLink>
+          </div>
+
           <div className={styles.footer}>
             <span className={styles.footerLine}>
               <span className={styles.dot} aria-hidden="true" />
               Local only · no account · no telemetry
             </span>
-            <span>CodePilot Lab v0.1.0 · Phase 01</span>
+            <span>
+              CodePilot Lab v{__APP_VERSION__} · Milestone 02
+            </span>
           </div>
         </motion.div>
       ) : null}

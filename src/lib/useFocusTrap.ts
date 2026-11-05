@@ -30,7 +30,8 @@ export function useFocusTrap(
       )
 
     const focusFirst = () => {
-      const first = getFocusable()[0]
+      const preferred = node.querySelector<HTMLElement>('[data-autofocus]')
+      const first = preferred ?? getFocusable()[0]
       ;(first ?? node).focus()
     }
 

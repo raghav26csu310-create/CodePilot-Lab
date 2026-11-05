@@ -2,20 +2,21 @@ import {
   Activity,
   Code2,
   FlaskConical,
-  FolderKanban,
-  Gauge,
   Network,
+  Radar,
   Settings2,
+  Sparkles,
+  Vault,
   type LucideIcon,
 } from 'lucide-react'
 
-export type RoutePhase = 'Live' | 'Phase 2' | 'Phase 3' | 'Phase 4'
+export type RouteStatus = 'live' | 'scheduled'
 
 export type RouteInfo = {
   path: string
   label: string
   icon: LucideIcon
-  phase: RoutePhase
+  status: RouteStatus
   tagline: string
   planned: string[]
 }
@@ -23,70 +24,84 @@ export type RouteInfo = {
 export const ROUTES: RouteInfo[] = [
   {
     path: '/',
-    label: 'Command',
-    icon: Gauge,
-    phase: 'Live',
-    tagline: 'Workspace overview, system state and the way in.',
+    label: 'Command Center',
+    icon: Radar,
+    status: 'live',
+    tagline: 'Local projects, dispatch and verifiable system state.',
     planned: [],
   },
   {
-    path: '/vault',
-    label: 'Vault',
-    icon: FolderKanban,
-    phase: 'Phase 3',
-    tagline: 'Create, open and manage locally stored projects.',
-    planned: [
-      'Project creation, rename and deletion backed by IndexedDB',
-      'Search, import and export of project archives',
-      'Storage usage reporting and quota handling',
-    ],
-  },
-  {
     path: '/workspace',
-    label: 'Workspace',
+    label: 'Code Workspace',
     icon: Code2,
-    phase: 'Phase 2',
-    tagline: 'Files, tabs, editor and the copilot surface.',
+    status: 'scheduled',
+    tagline: 'The editor surface, tabs and project files.',
     planned: [
       'File explorer with create, rename and delete',
       'Monaco editor, tabs and unsaved-change tracking',
       'Collapsible copilot and console panels',
-      'Command palette wired to project actions',
+      'Command palette wired to file actions',
+    ],
+  },
+  {
+    path: '/copilot',
+    label: 'AI Copilot',
+    icon: Sparkles,
+    status: 'scheduled',
+    tagline: 'A local model bridge with its limits on the table.',
+    planned: [
+      'Opt-in connection to a local model provider',
+      'Context assembled from files you explicitly select',
+      'Streamed responses with cancellation',
+      'No hidden provider calls and no simulated answers',
     ],
   },
   {
     path: '/atlas',
-    label: 'Atlas',
+    label: 'Project Atlas',
     icon: Network,
-    phase: 'Phase 4',
-    tagline: "A map of how the project's modules reference each other.",
+    status: 'scheduled',
+    tagline: 'Module relationships extracted from real project files.',
     planned: [
-      'Import graph extracted from the real project files',
+      'Import graph extracted from real files',
       'Pan, zoom and focus on a module',
       'Dependency inspection without inventing relationships',
     ],
   },
   {
     path: '/lab',
-    label: 'Lab',
+    label: 'Execution Lab',
     icon: FlaskConical,
-    phase: 'Phase 4',
+    status: 'scheduled',
     tagline: 'Run and trace a file, keeping real output separate from simulation.',
     planned: [
       'JavaScript execution in a local Web Worker',
       'Captured console output, errors and timeouts',
       'Instrumented step visualisation, clearly labelled as simulated',
-      'No claimed test or build results that were not performed',
+      'No claimed results that were not performed',
+    ],
+  },
+  {
+    path: '/vault',
+    label: 'Project Vault',
+    icon: Vault,
+    status: 'scheduled',
+    tagline: 'The local project archive and storage controls.',
+    planned: [
+      'Project rename, archive and deletion',
+      'Search across the local registry',
+      'Export and import of project archives',
+      'Storage usage reporting and quota handling',
     ],
   },
   {
     path: '/activity',
-    label: 'Activity',
+    label: 'Activity & Diagnostics',
     icon: Activity,
-    phase: 'Phase 4',
-    tagline: 'Captured events, problems and storage health.',
+    status: 'scheduled',
+    tagline: 'An event log written only by real application actions.',
     planned: [
-      'Event log written only by real application actions',
+      'Event log backed by real application actions',
       'Editor diagnostics collected from Monaco',
       'Storage health and persistence status',
       'No fabricated metrics or synthetic build results',
@@ -96,8 +111,8 @@ export const ROUTES: RouteInfo[] = [
     path: '/settings',
     label: 'Settings',
     icon: Settings2,
-    phase: 'Phase 3',
-    tagline: 'Local preferences, AI provider and storage.',
+    status: 'scheduled',
+    tagline: 'Local preferences, provider and data controls.',
     planned: [
       'Opt-in connection to a local model provider',
       'Motion and interface preferences',
@@ -110,4 +125,15 @@ export const NAV_ROUTES = ROUTES.filter((route) => route.path !== '/settings')
 
 export function getRouteInfo(path: string): RouteInfo {
   return ROUTES.find((route) => route.path === path) ?? ROUTES[0]!
+}
+
+/** Longest-prefix match so nested routes keep the correct section active. */
+export function getSectionRoute(pathname: string): RouteInfo {
+  const matches = ROUTES.filter(
+    (route) =>
+      route.path !== '/' &&
+      (pathname === route.path || pathname.startsWith(`${route.path}/`)),
+  ).sort((a, b) => b.path.length - a.path.length)
+
+  return matches[0] ?? ROUTES[0]!
 }

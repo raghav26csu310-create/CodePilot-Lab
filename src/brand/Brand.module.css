@@ -18,6 +18,10 @@
   border-radius: var(--r-xs);
 }
 
+.brandCompact {
+  gap: 0;
+}
+
 .brand:hover .name {
   color: #fff;
 }

@@ -1,22 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 
+import { readSidebarPreference, writeSidebarPreference } from '../lib/sidebarPreference'
 import { CommandPalette } from './CommandPalette'
-import { Header } from './Header'
 import { MobileMenu } from './MobileMenu'
-import { StatusBar } from './StatusBar'
 import { PageTransition } from './PageTransition'
+import { Sidebar } from './Sidebar'
+import { StatusBar } from './StatusBar'
+import { TopBar } from './TopBar'
 import styles from './AppShell.module.css'
 
 export function AppShell() {
   const location = useLocation()
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarPreference)
 
   const openPalette = useCallback(() => setPaletteOpen(true), [])
   const closePalette = useCallback(() => setPaletteOpen(false), [])
   const openMenu = useCallback(() => setMenuOpen(true), [])
   const closeMenu = useCallback(() => setMenuOpen(false), [])
+
+  const toggleSidebar = useCallback(() => {
+    const next = !sidebarCollapsed
+    setSidebarCollapsed(next)
+    writeSidebarPreference(next)
+  }, [sidebarCollapsed])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -44,18 +53,22 @@ export function AppShell() {
   }, [location.pathname])
 
   return (
-    <div className={styles.shell}>
+    <div className={styles.shell} data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
 
-      <Header onOpenPalette={openPalette} onOpenMenu={openMenu} menuOpen={menuOpen} />
+      <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
 
-      <main id="main" className={styles.main}>
-        <PageTransition key={location.pathname}>
-          <Outlet />
-        </PageTransition>
-      </main>
+      <div className={styles.body}>
+        <TopBar onOpenPalette={openPalette} onOpenMenu={openMenu} menuOpen={menuOpen} />
+
+        <main id="main" className={styles.main}>
+          <PageTransition key={location.pathname}>
+            <Outlet />
+          </PageTransition>
+        </main>
+      </div>
 
       <StatusBar />
       <CommandPalette open={paletteOpen} onClose={closePalette} />

@@ -1,8 +1,17 @@
 .shell {
+  display: flex;
   min-height: 100dvh;
 }
 
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .main {
+  flex: 1;
   min-height: calc(100dvh - var(--header-h));
   padding-bottom: var(--status-h);
 }
@@ -19,4 +28,10 @@
   opacity: 0.035;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+@media (max-width: 1023px) {
+  .shell {
+    display: block;
+  }
 }

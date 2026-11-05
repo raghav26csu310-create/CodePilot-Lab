@@ -38,14 +38,20 @@ export function BrandMark({ size = 26 }: { size?: number }) {
   )
 }
 
-export function Brand() {
+export function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <Link to="/" className={styles.brand} aria-label="CodePilot Lab — home">
+    <Link
+      to="/"
+      className={`${styles.brand} ${compact ? styles.brandCompact : ''}`}
+      aria-label="CodePilot Lab — home"
+    >
       <BrandMark />
-      <span className={styles.wordmark}>
-        <span className={styles.name}>Codepilot</span>{' '}
-        <span className={styles.lab}>Lab</span>
-      </span>
+      {compact ? null : (
+        <span className={styles.wordmark}>
+          <span className={styles.name}>Codepilot</span>{' '}
+          <span className={styles.lab}>Lab</span>
+        </span>
+      )}
     </Link>
   )
 }

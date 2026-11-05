@@ -39,7 +39,7 @@ function PaletteOverlay({
       return ROUTES
     }
     return ROUTES.filter((route) =>
-      `${route.label} ${route.tagline} ${route.phase}`.toLowerCase().includes(normalized),
+      `${route.label} ${route.tagline} ${route.status}`.toLowerCase().includes(normalized),
     )
   }, [query])
 
@@ -152,10 +152,10 @@ function PaletteOverlay({
                     <span className={styles.optionMeta}>{route.tagline}</span>
                   </span>
                   <span className={styles.optionAside}>
-                    {route.phase === 'Live' ? (
+                    {route.status === 'live' ? (
                       <Badge tone="live">Live</Badge>
                     ) : (
-                      <Badge tone="planned">{route.phase}</Badge>
+                      <Badge tone="planned">Scheduled</Badge>
                     )}
                     <CornerDownLeft size={13} className={styles.enterHint} aria-hidden="true" />
                   </span>

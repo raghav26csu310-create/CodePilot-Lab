@@ -13,11 +13,13 @@ export function PlaceholderPage({ path }: { path: string }) {
     <section className={styles.page} aria-labelledby="module-title">
       <div className={styles.head}>
         <div className={styles.meta}>
-          <span>Module {String(index).padStart(2, '0')} / 07</span>
+          <span>
+            Module {String(index).padStart(2, '0')} / {String(ROUTES.length).padStart(2, '0')}
+          </span>
           <span aria-hidden="true">·</span>
           <span>Scheduled</span>
         </div>
-        <Badge tone="planned">{route.phase}</Badge>
+        <Badge tone="planned">Scheduled</Badge>
       </div>
 
       <div className={styles.titleRow}>
@@ -48,7 +50,8 @@ export function PlaceholderPage({ path }: { path: string }) {
           <span className={styles.panelLabel}>Current state</span>
           <p className={styles.panelTitle}>Not built yet.</p>
           <p className={styles.panelCopy}>
-            This module arrives in {route.phase}. Nothing here is simulated: no sample projects,
+            This module is scheduled for a later milestone. The command center can already create
+            and import local project records, but nothing here is simulated: no sample files,
             metrics or activity are shown because none exist yet.
           </p>
           <div className={styles.panelActions}>
@@ -56,7 +59,9 @@ export function PlaceholderPage({ path }: { path: string }) {
               Return to command center
             </Button>
           </div>
-          <p className={styles.phaseNote}>Phase 01 · this page intentionally contains no data</p>
+          <p className={styles.phaseNote}>
+            Milestone 02 · this page intentionally contains no data
+          </p>
         </aside>
       </div>
     </section>

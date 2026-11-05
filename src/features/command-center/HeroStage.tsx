@@ -9,7 +9,7 @@ import styles from './HeroStage.module.css'
 
 const CoreScene = lazy(() => import('../../three/CoreScene'))
 
-export function HeroStage() {
+export function HeroStage({ compact = false }: { compact?: boolean }) {
   const stageRef = useRef<HTMLDivElement>(null)
   const fpsRef = useRef<HTMLSpanElement>(null)
   const [pulse, setPulse] = useState(0)
@@ -29,7 +29,7 @@ export function HeroStage() {
   const fallbackReason = reducedMotion ? 'reduced-motion' : 'no-webgl'
 
   return (
-    <div className={styles.wrap}>
+    <div className={`${styles.wrap} ${compact ? styles.compact : ''}`}>
       <div className={styles.head}>
         <span>Core observatory</span>
         <span className={styles.headRight}>

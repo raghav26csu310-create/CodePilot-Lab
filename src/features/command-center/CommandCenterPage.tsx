@@ -1,42 +1,25 @@
-import { motion, type Variants } from 'framer-motion'
-import { ArrowRight, Lock } from 'lucide-react'
+import { AnimatePresence, motion, type Variants } from 'framer-motion'
+import { ArrowRight, FolderPlus, Lock } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 
-import { Badge } from '../../design-system/primitives/Badge'
 import { Button } from '../../design-system/primitives/Button'
+import { touchProject, type ProjectRecord } from '../../lib/db'
+import { greetingFor } from '../../lib/format'
 import { HeroStage } from './HeroStage'
+import { ProjectDialog } from './ProjectDialog'
+import { QuickActions } from './QuickActions'
+import { RecentProjects } from './RecentProjects'
+import { SystemStatus } from './SystemStatus'
 import styles from './CommandCenter.module.css'
 
-const CAPABILITIES = [
-  {
-    title: 'Command center',
-    description: 'Shell, routing, command palette',
-    status: 'Live',
-    live: true,
-  },
-  {
-    title: 'Core lattice',
-    description: 'Realtime 3D · static fallback',
-    status: 'Live',
-    live: true,
-  },
-  {
-    title: 'Workspace',
-    description: 'Monaco, files, tabs, local save',
-    status: 'Phase 2',
-    live: false,
-  },
-  {
-    title: 'Copilot',
-    description: 'Local provider bridge, disclosed limits',
-    status: 'Phase 3',
-    live: false,
-  },
-] as const
+type DialogMode = 'create' | 'import'
 
 const container: Variants = {
   hidden: {},
   show: {
-    transition: { staggerChildren: 0.065, delayChildren: 0.04 },
+    transition: { staggerChildren: 0.06, delayChildren: 0.03 },
   },
 }
 
@@ -45,39 +28,92 @@ const item: Variants = {
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] },
+    transition: { duration: 0.55, ease: [0.16, 1, 0.3, 1] },
+  },
+}
+
+const stageItem: Variants = {
+  hidden: { opacity: 0, scale: 0.985 },
+  show: {
+    opacity: 1,
+    scale: 1,
+    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.08 },
   },
 }
 
 export function CommandCenterPage() {
+  const navigate = useNavigate()
+  const [greeting] = useState(() => greetingFor(new Date()))
+  const [dialog, setDialog] = useState<DialogMode | null>(null)
+
+  const closeDialog = useCallback(() => setDialog(null), [])
+  const openCreate = useCallback(() => setDialog('create'), [])
+  const openImport = useCallback(() => setDialog('import'), [])
+
+  const handleCompleted = useCallback(
+    async (project: ProjectRecord) => {
+      setDialog(null)
+      try {
+        await touchProject(project.id)
+      } catch {
+        // The new record still opens; only the last-opened stamp failed.
+      }
+      navigate(`/workspace/${project.id}`)
+    },
+    [navigate],
+  )
+
+  const openProject = useCallback(
+    async (project: ProjectRecord) => {
+      try {
+        await touchProject(project.id)
+      } catch {
+        // The record can still be opened; only the last-opened stamp failed.
+      }
+      navigate(`/workspace/${project.id}`)
+    },
+    [navigate],
+  )
+
   return (
-    <div className={styles.command}>
+    <div className={styles.page}>
       <section className={styles.hero} aria-labelledby="hero-title">
         <div className={styles.heroGrid} aria-hidden="true" />
 
-        <div className={styles.heroInner}>
-          <motion.div className={styles.copy} variants={container} initial="hidden" animate="show">
+        <motion.div
+          className={styles.heroInner}
+          variants={container}
+          initial="hidden"
+          animate="show"
+        >
+          <div className={styles.copy}>
             <motion.p className={styles.eyebrow} variants={item}>
               <span className={styles.eyebrowDot} aria-hidden="true" />
-              Local-first · AI-native · Cinematic
+              {greeting} · CodePilot Lab · Local session
             </motion.p>
 
             <motion.h1 id="hero-title" className={styles.title} variants={item}>
-              A laboratory for software that <span className={styles.accent}>thinks</span> with you.
+              A laboratory for software that <span className={styles.accent}>thinks</span> with
+              you.
             </motion.h1>
 
             <motion.p className={styles.lead} variants={item}>
-              A local-first coding environment built as an instrument, not a dashboard. Files,
-              editor, execution and copilot will share one surface — with output you can verify and
-              nothing staged for show.
+              Create and import real local projects, then step into the surfaces that exist. Every
+              record here is yours, stored in this browser — no seeded dashboards, no fabricated
+              activity.
             </motion.p>
 
             <motion.div className={styles.actions} variants={item}>
               <Button to="/workspace" size="lg" iconRight={<ArrowRight size={16} />}>
-                Enter the workspace
+                Enter workspace
               </Button>
-              <Button href="#capabilities" variant="secondary" size="lg">
-                See system status
+              <Button
+                variant="secondary"
+                size="lg"
+                icon={<FolderPlus size={15} />}
+                onClick={openCreate}
+              >
+                Create new project
               </Button>
             </motion.div>
 
@@ -87,53 +123,48 @@ export function CommandCenterPage() {
                 Local assets only · no account · no API key
               </span>
               <span className={styles.noteSep} aria-hidden="true" />
-              <span className={`${styles.noteItem} ${styles.noteSoon}`}>
-                Workspace arrives in Phase 02
+              <span className={`${styles.noteItem} ${styles.noteLive}`}>
+                Project registry live · milestone 02
               </span>
             </motion.p>
-          </motion.div>
-
-          <motion.div
-            className={styles.stageCol}
-            initial={{ opacity: 0, scale: 0.985 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-          >
-            <HeroStage />
-          </motion.div>
-        </div>
-      </section>
-
-      <motion.section
-        id="capabilities"
-        className={styles.rail}
-        aria-labelledby="capabilities-title"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.32 }}
-      >
-        <div className={styles.railInner}>
-          <div className={styles.railHead}>
-            <h2 id="capabilities-title" className={styles.railTitle}>
-              System capability
-            </h2>
-            <span className={styles.railMeta}>Phase 01 · Identity</span>
           </div>
 
-          <ul className={styles.caps}>
-            {CAPABILITIES.map((capability, index) => (
-              <li key={capability.title} className={styles.cap}>
-                <div className={styles.capTop}>
-                  <span className={styles.capIndex}>{String(index + 1).padStart(2, '0')}</span>
-                  <Badge tone={capability.live ? 'live' : 'planned'}>{capability.status}</Badge>
-                </div>
-                <span className={styles.capTitle}>{capability.title}</span>
-                <span className={styles.capDesc}>{capability.description}</span>
-              </li>
-            ))}
-          </ul>
+          <motion.div className={styles.stageCol} variants={stageItem}>
+            <HeroStage compact />
+          </motion.div>
+        </motion.div>
+      </section>
+
+      <motion.div
+        className={styles.dashboard}
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.16 }}
+      >
+        <RecentProjects
+          onCreate={openCreate}
+          onImport={openImport}
+          onOpen={openProject}
+        />
+
+        <div className={styles.aside}>
+          <QuickActions onCreate={openCreate} onImport={openImport} />
+          <SystemStatus />
         </div>
-      </motion.section>
+      </motion.div>
+
+      {createPortal(
+        <AnimatePresence>
+          {dialog ? (
+            <ProjectDialog
+              mode={dialog}
+              onClose={closeDialog}
+              onCompleted={handleCompleted}
+            />
+          ) : null}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   )
 }

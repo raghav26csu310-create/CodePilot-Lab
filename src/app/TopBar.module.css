@@ -1,64 +1,64 @@
-.header {
+.topbar {
   position: sticky;
   top: 0;
   z-index: var(--z-header);
   height: var(--header-h);
   border-bottom: 1px solid var(--hairline);
-  background: rgb(4 6 11 / 0.98);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  background: rgb(4 6 11 / 0.94);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
 }
 
 .inner {
   display: flex;
   align-items: center;
-  gap: clamp(1rem, 3vw, 2.5rem);
+  justify-content: space-between;
+  gap: 16px;
   height: 100%;
-  max-width: var(--max-w);
-  margin-inline: auto;
-  padding-inline: var(--page-x);
+  padding-inline: clamp(1.1rem, 3vw, 2.4rem);
 }
 
-.nav {
+.left {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 12px;
+  min-width: 0;
 }
 
-.navLink {
-  position: relative;
-  padding: 9px 10px;
-  border-radius: var(--r-xs);
+.section {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kicker {
   color: var(--text-3);
-  font-size: var(--fs-12);
-  font-weight: 450;
-  letter-spacing: 0.015em;
-  transition: color var(--d-2) var(--ease-state);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
-.navLink:hover {
+.sectionName {
+  overflow: hidden;
   color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-13);
+  letter-spacing: 0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.navActive {
-  color: var(--text);
-}
-
-.navActive::after {
-  content: '';
-  position: absolute;
-  right: 10px;
-  bottom: 1px;
-  left: 10px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+.mobileBrand {
+  display: none;
 }
 
 .actions {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 .palette {
@@ -135,6 +135,7 @@
 
 .menuButton {
   display: none;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: 34px;
@@ -153,23 +154,27 @@
   border-color: var(--hairline-strong);
 }
 
-@media (max-width: 1180px) {
-  .nav {
-    display: none;
-  }
-
+@media (max-width: 1023px) {
   .menuButton {
     display: inline-flex;
   }
+
+  .section {
+    display: none;
+  }
+
+  .mobileBrand {
+    display: flex;
+  }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 720px) {
   .iconLink {
     display: none;
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 600px) {
   .paletteLabel,
   .paletteKeys {
     display: none;
@@ -183,9 +188,5 @@
 
   .local {
     display: none;
-  }
-
-  .actions {
-    gap: 6px;
   }
 }
