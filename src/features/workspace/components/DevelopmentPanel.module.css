@@ -1,0 +1,599 @@
+.panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  max-height: 58%;
+  min-height: 34px;
+  overflow: hidden;
+  border-top: 1px solid var(--hairline);
+  background:
+    radial-gradient(600px 180px at 50% 120%, rgb(87 226 230 / 0.04), transparent 70%),
+    linear-gradient(180deg, rgb(7 11 18 / 0.96), rgb(5 8 13 / 0.98));
+}
+
+/* ---------------------------------- Bar ---------------------------------- */
+
+.bar {
+  display: flex;
+  flex: none;
+  align-items: stretch;
+  height: 34px;
+  min-width: 0;
+  border-bottom: 1px solid transparent;
+  background: rgb(3 6 11 / 0.46);
+}
+
+.bar:has(+ .content) {
+  border-bottom-color: var(--hairline);
+}
+
+.tabList {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabList::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding-inline: 12px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--d-1) var(--ease-state),
+    background-color var(--d-1) var(--ease-state);
+}
+
+.tab:hover {
+  color: var(--text-2);
+  background: rgb(255 255 255 / 0.022);
+}
+
+.tab[data-active='true'] {
+  color: var(--text);
+  background: rgb(87 226 230 / 0.045);
+}
+
+.tab[data-active='true']::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 1px;
+  background: var(--cyan);
+  box-shadow: 0 0 10px rgb(87 226 230 / 0.6);
+}
+
+.tab:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: -2px;
+}
+
+.zero {
+  min-width: 15px;
+  padding: 1px 4px 2px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  color: var(--text-3);
+  font-size: 7px;
+  line-height: 1;
+  text-align: center;
+}
+
+.zero[data-hit='true'],
+.countHit {
+  min-width: 15px;
+  padding: 1px 4px 2px;
+  border: 1px solid rgb(244 108 106 / 0.4);
+  border-radius: 3px;
+  color: rgb(255 170 180);
+  background: rgb(244 108 106 / 0.12);
+  font-size: 7px;
+  line-height: 1;
+  text-align: center;
+}
+
+.barRight {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 8px 6px;
+  border-left: 1px solid var(--hairline);
+}
+
+.barNote {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.collapse {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 3px;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--d-1) var(--ease-state),
+    background-color var(--d-1) var(--ease-state);
+}
+
+.collapse:hover {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.05);
+}
+
+.collapse:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+}
+
+/* -------------------------------- Content -------------------------------- */
+
+.content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgb(150 180 220 / 0.2) transparent;
+  scrollbar-width: thin;
+}
+
+.content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.content::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgb(150 180 220 / 0.22);
+  background-clip: content-box;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 100%;
+  padding: 18px 22px 20px;
+  text-align: center;
+}
+
+.emptyIcon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  color: var(--cyan-dim);
+  background: rgb(87 226 230 / 0.035);
+}
+
+.emptyKicker {
+  color: var(--cyan-dim);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.emptyTitle {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.emptyCopy {
+  max-width: 74ch;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin-top: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.chips li {
+  padding: 2px 6px 3px;
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 6.8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.disabledAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 27px;
+  margin-top: 8px;
+  padding-inline: 9px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* -------------------------------- Problems ------------------------------- */
+
+.problems {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 100%;
+  padding: 12px 18px;
+}
+
+.problems[data-populated='true'] {
+  align-items: stretch;
+  padding: 10px 18px;
+}
+
+.problemsMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.problemsMain > .empty {
+  align-items: flex-start;
+  padding: 0;
+  text-align: left;
+}
+
+.problemsMain .chips {
+  justify-content: flex-start;
+}
+
+.problemList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-color: rgb(150 180 220 / 0.2) transparent;
+  scrollbar-width: thin;
+}
+
+.problemRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: var(--r-sm);
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    color var(--d-1) var(--ease-state),
+    background-color var(--d-1) var(--ease-state);
+}
+
+.problemRow:hover {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.problemRow:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: -1px;
+}
+
+.problemSeverity {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--text-3);
+}
+
+.problemSeverity[data-severity='error'] {
+  background: var(--danger);
+  box-shadow: 0 0 7px rgb(244 108 106 / 0.6);
+}
+
+.problemSeverity[data-severity='warning'] {
+  background: var(--warn);
+  box-shadow: 0 0 7px rgb(240 196 106 / 0.55);
+}
+
+.problemSeverity[data-severity='info'],
+.problemSeverity[data-severity='hint'] {
+  background: var(--cyan-dim);
+}
+
+.problemText {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.problemLocationMono {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  overflow: hidden;
+  max-width: 46vw;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.problemOwner {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 900px) {
+  .problemOwner {
+    display: none;
+  }
+}
+
+.problemCounts {
+  display: flex;
+  flex: none;
+  gap: 7px;
+}
+
+.problemCounts > div {
+  min-width: 74px;
+  padding: 8px 10px 9px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: rgb(0 0 0 / 0.16);
+}
+
+.problemCounts dt {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 6.8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.problemCounts dd {
+  margin-top: 3px;
+  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* ------------------------------- Diagnostics ----------------------------- */
+
+.diagnostics {
+  padding: 14px 18px 16px;
+}
+
+.diagHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.diagTitle {
+  margin-top: 4px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+}
+
+.diagTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding-top: 2px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.diagDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 6px rgb(91 224 168 / 0.7);
+}
+
+.diagGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(205px, 1fr));
+  gap: 0 26px;
+  margin-top: 11px;
+  border-top: 1px solid var(--hairline);
+}
+
+.diagRow {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  min-height: 25px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgb(150 180 220 / 0.06);
+}
+
+.diagRow dt {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 6.8px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.diagRow dd {
+  overflow: hidden;
+  color: var(--text-2);
+  font-size: 9.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagRow dd[data-mono='true'] {
+  font-family: var(--font-mono);
+  font-size: 8px;
+}
+
+.diagFoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.diagAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 25px;
+  padding-inline: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    color var(--d-2) var(--ease-state),
+    border-color var(--d-2) var(--ease-state);
+}
+
+.diagAction:hover {
+  color: var(--cyan);
+  border-color: var(--hairline-accent);
+}
+
+.diagAction:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: 2px;
+}
+
+.diagNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 860px) {
+  .barNote {
+    display: none;
+  }
+
+  .problems {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .problemsMain > .empty {
+    align-items: center;
+    text-align: center;
+  }
+
+  .problemsMain .chips {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 560px) {
+  .tab {
+    padding-inline: 9px;
+  }
+
+  .tab span:not(.zero) {
+    display: none;
+  }
+
+  .tab {
+    gap: 0;
+  }
+
+  .diagnostics {
+    padding-inline: 14px;
+  }
+
+  .diagGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .problemCounts {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .collapse,
+  .diagAction {
+    transition: none;
+  }
+}

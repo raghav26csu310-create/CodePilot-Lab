@@ -2,55 +2,72 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Phase 2 — Cinematic Command Center.** The application now has a
-persistent navigation shell, a real local project registry, project creation and folder
-import, recent project activity, and verifiable system status. It is still not an editor.
+**Current milestone: Phase 4 — The Core Editing Engine.** The workspace now mounts a
+real Monaco editor wired to a persisted project tree: real stored file contents,
+unsaved-change tracking, local saves to IndexedDB, quick open and project-wide content
+search, and project rename/delete in the registry picker. It still does not execute code
+and does not call any model.
 
 ## What actually works
 
 - **Command Center** with a personalized time-of-day greeting, product headline,
   descriptions, `Enter workspace` and `Create new project` actions, and the live
   Lattice-01 visual.
-- **Collapsible sidebar** with seven product areas, active states, keyboard-accessible
-  controls, and a persisted collapse preference (`localStorage`,
-  `codepilot.sidebar.collapsed`). Below 1024 px it is replaced by a focused mobile
-  navigation dialog.
-- **Command palette** (`Ctrl/⌘ K` or **Jump to**): substring search across module names,
-  taglines, and live/scheduled status; arrow-key navigation, `Enter` to open, `Esc` to
-  close, focus trap and focus restore.
 - **Real local project registry** in IndexedDB through Dexie. Records contain only data
   that was actually written or scanned: name, language, source, timestamps, file counts,
-  sizes, manifest, exclusions, and an optional directory handle.
-- **Create project** writes a real record to this browser. Duplicate names are rejected,
-  input is validated, and failures caused by unavailable storage are reported.
-- **Import project** performs a genuine local folder scan through the File System Access
-  API, with a `webkitdirectory` fallback. Vendored directories are excluded and disclosed;
-  manifests are capped at 3,000 files and 12 directory levels; truncation is shown.
-- **Recent projects** are read live from IndexedDB, sorted by last opened, and show real
-  language, file count, modified time, and folder-link status. Opening a project
-  increments its real open count and last-opened timestamp.
-- **Project dossier** at `/workspace/:projectId`: loads the stored record, shows real
-  metadata and a manifest preview, handles missing records and unavailable IndexedDB, and
-  states plainly that the editor is scheduled. The record ID can be copied.
-- **Quick actions** for Open Workspace, Create Project, Import Project, Project Atlas, and
-  Execution Lab. Implemented destinations work; scheduled destinations open their
-  placeholder pages and are labelled `Soon`.
-- **System status** reports only checks performed in this browser: application build,
-  IndexedDB/localStorage availability and storage estimate, WebGL support, whether a
-  browser language model is present, motion preference, and the injected app version.
-- **Lattice-01**, the centerpiece: React Three Fiber scene with an instanced faceted core,
-  wireframe shell, orbital rings, dust, pointer parallax, and a click pulse. The FPS
-  readout is measured at runtime, not simulated.
-- Static SVG fallback for reduced-motion and no-WebGL environments, chosen from real
-  capability detection. Canvas pauses while offscreen or hidden.
-- Honest placeholder pages for modules that are scheduled but not built.
+  sizes, manifest, exclusions, and an optional directory handle. Projects can now be
+  **renamed and deleted** from the picker, both with confirmation dialogs and duplicate
+  name checks. Deletion cascades to the stored tree and contents; linked folders on disk
+  are never touched.
+- **Project picker** (`/workspace`) lists stored records with live search, real
+  timestamps, open counts, and honest empty/unavailable states. The registry is never
+  seeded.
+- **Versioned storage schema (v2).** Tree entries (`files`) and file contents
+  (`contents`) are stored separately from project records. Opening a Phase-2/3 era
+  record transparently migrates its manifest into entries — no user data is reset.
+- **Workspace** at `/workspace/:projectId`: persisted explorer tree, elegant tabs,
+  breadcrumbs, Copilot dock, and the bottom development panel.
+- **Monaco editor** (bundled locally, lazy-loaded; no CDN) with line numbers, bracket
+  matching, folding, indentation, find & replace, multi-cursor editing, a configurable
+  minimap, word wrap, font size controls, and auto resize. Monaco is loaded only when a
+  file is opened and always shows the selected file's real contents — placeholder text is
+  never shown in its place; loading, unavailable, and error states are rendered around
+  the canvas instead.
+- **Language modes** for TypeScript, JavaScript, Python, Java, C, C++, HTML, CSS/SCSS/
+  Less, JSON, Markdown, YAML, XML, Shell, PowerShell, SQL, Rust, Go, Ruby, PHP, Swift,
+  Kotlin, C#, Dockerfile and more, plus two custom themes that match the lab (Midnight
+  and Graphite). TypeScript/JavaScript get the in-file language service; import
+  resolution (codes 2307/2792/6133) is deliberately ignored because there is no module
+  graph yet, and the Problems panel says so. Syntax highlighting does not mean the
+  language can execute — runtime support is not built.
+- **File operations.** Create, rename and delete files/folders (persisted, with
+  rename carrying over the unsaved draft), tab switching that preserves edits in Monaco
+  models, dirty indicators, close-tab protection for unsaved buffers
+  (Save & close / Discard / Cancel), save all, and content restore when reopening a
+  project.
+- **Editor workflow.** `Ctrl/⌘ S` save, `Ctrl/⌘ Shift S` save all, `Ctrl/⌘ P` quick
+  open over stored files, `Ctrl/⌘ F` find & replace in the editor, `Ctrl/⌘ Shift F`
+  project search over stored contents (results are capped and disclosed),
+  `Ctrl/⌘ PageUp/PageDown` tab cycling, plus `Ctrl/⌘ B` panel toggling from Phase 3.
+- **Real persistence.** Every save writes through to IndexedDB; reloading the page and
+  reopening the project restores saved files. Linked folder handles are used only as an
+  honest read fallback when nothing was ever saved.
+- **Problems** panel fed by real Monaco markers collected from open buffers, with
+  per-language validation coverage disclosed in Diagnostics.
+- **Recent projects** are read live from IndexedDB, sorted by last opened. Opening a
+  project increments its real open count and last-opened timestamp.
+- **Project dossier** at `/workspace/:projectId/overview`: real metadata, manifest
+  preview, and storage facts.
+- **System status** reports only checks performed in this browser.
+- **Lattice-01** centerpiece with measured FPS, capability-based SVG fallback, and
+  offscreen pausing.
 
 ## What is deliberately not built yet
 
-Code Workspace (file tree, tabs, Monaco, local save), AI Copilot, Project Atlas,
-Execution Lab, Project Vault, Activity & Diagnostics, and Settings are placeholders. They
-state that they are scheduled and do not render invented files, output, metrics, or AI
-responses. `Open editor` is visibly disabled on project dossiers.
+AI Copilot bridge, Project Atlas, Execution Lab (code cannot be run in any language),
+Project Vault, Activity & Diagnostics, and Settings remain placeholders. The development
+panel's Terminal and Output views state plainly that no process has ever run and no
+output is simulated.
 
 No backend, account, API key, database service, or paid dependency is required to run
 this milestone.
@@ -73,9 +90,9 @@ npm run preview
 
 ## Stack
 
-React 19 + TypeScript + Vite, React Router, Dexie / IndexedDB, Three.js / React Three
-Fiber / drei, Framer Motion, Lucide, CSS Modules with custom-property tokens, and locally
-bundled Inter / Space Grotesk / JetBrains Mono via Fontsource.
+React 19 + TypeScript + Vite, React Router, Dexie / IndexedDB, Monaco Editor, Three.js /
+React Three Fiber / drei, Framer Motion, Lucide, CSS Modules with custom-property
+tokens, and locally bundled Inter / Space Grotesk / JetBrains Mono via Fontsource.
 
 ## Structure
 
@@ -84,50 +101,48 @@ src/
   app/              shell, sidebar, top bar, command palette, mobile menu, status bar, routes
   brand/            logo mark and wordmark
   design-system/    tokens, base styles, button / badge / kbd / skeleton primitives
-  features/         command center, project dossier, placeholder pages
-  lib/              Dexie records, folder scanning, formatting, focus trap, WebGL support,
-                    stage activity, sidebar preference, platform helpers
+  features/
+    editor/         Monaco integration layer: setup (workers, themes, TS service),
+                    language registry, editor preferences, command context
+    workspace/      state (reducer/context), storage-backed pages, explorer, tabs,
+                    Monaco workbench, dialogs, quick open, development panel
+    command-center/ landing, quick actions, system status
+  lib/              Dexie schema (v2) + storage services, folder scanning, formatting,
+                    focus trap, WebGL support, stage activity, sidebar preference
   three/            lazy-loaded R3F canvas and Lattice scene
 ```
 
 ## Local data and policy
 
-- Projects live in the `codepilot-lab` IndexedDB database in this browser profile.
-- `directoryHandle` is stored when the File System Access API returns one. It is
-  structured-clone data; the folder may still need permission again when the editor ships.
-- Excluded directories: `node_modules`, `.git`, `dist`, `build`, `.next`, `.nuxt`,
-  `.output`, `.svelte-kit`, `.turbo`, `.cache`, `coverage`, `__pycache__`, `.venv`, `venv`,
-  and `target`.
-- Import caps: 3,000 files and 12 directory levels. Truncation is disclosed in the import
-  flow and on the project dossier.
-- There is no delete/archive UI yet. Clearing site data for the origin removes the registry.
+- The database (`codepilot-lab`) is versioned. Schema v2 keeps `projects`, adds `files`
+  (tree entries, keyed `[projectId+path]`), `contents` (saved text, keyed
+  `[projectId+path]`), and `settings`. Migration backfills entries from old manifests
+  and fabricates no content.
+- Stored content is authoritative after the first save. A linked `directoryHandle` is
+  read only when no saved copy exists; permission prompts are disclosed.
+- `directoryHandle` is structured-clone data; re-permission may be requested on read.
+- Excluded directories and the 3,000-file / 12-level import caps are product-visible
+  policy and disclosed on import and in Diagnostics.
+- Deleting a project is explicit, confirmed, and cascades through the registry, tree and
+  contents. Clearing site data for the origin removes everything stored.
 
 ## Verification
 
 - `npm run typecheck`, `npm run lint`, and `npm run build` pass.
-- Navigation across all seven areas, active states, mobile menu, palette search/open/close,
-  sidebar collapse persistence, project creation, project opening, folder-import
-  fallback, missing-record handling, and the empty state were exercised in a real browser.
-- Layouts were checked at 390 px, 768 px, 912 px, and 1440 px. No horizontal overflow was
-  measured at 390 px or 768 px.
-- Reduced-motion fallback was checked with headless Chromium/Edge
-  (`--force-prefers-reduced-motion`): the static SVG visual, `Motion reduced` status, and
-  the `NO GPU RESOURCES USED` note render correctly.
-- The live WebGL lattice was confirmed in the in-app browser; headless screenshots may
-  render it blank depending on GPU/SwiftShader availability.
+- Phase 4 verification covered: Monaco mount and highlighting, multi-file tab switching
+  with draft preservation, save/reload persistence through IndexedDB, create/rename/
+  delete of files and folders, project rename/delete, quick open and content search,
+  shortcut behaviour, storage failure disclosure, and regression checks over the Command
+  Center, dossier and responsive layouts. See the final phase report for details.
+- The 3D lattice still requires WebGL; the static fallback is used otherwise.
 
 ## Known constraints
 
 - The registry is specific to this browser profile. It does not sync and is not exported
   yet.
-- The folder picker is Chromium-only. Other browsers use the `webkitdirectory` fallback,
-  which stores the manifest but not a directory handle.
-- The 3D scene needs WebGL; the static fallback is used when WebGL is unavailable or
-  reduced motion is requested.
-- The main bundle is split: the shell is ~578 kB (183 kB gzip) and the lazy 3D scene is
-  ~918 kB (244 kB gzip). No further optimization has been attempted in this phase.
-- Editor, execution, and AI bridge work remain scheduled.
-
-## Next
-
-Code Workspace: local file tree, tabs, Monaco, and unsaved-change tracking. Not started.
+- The folder picker is Chromium-only; other browsers store a manifest without a handle.
+- Monaco's TypeScript service understands the open file in isolation: project-wide
+  resolution, tests and builds are not claimed as verified anywhere in the product.
+- The main bundle still ships the lazy 3D scene; Monaco loads as separate lazy chunks
+  (workers + editor core) only when the editor is opened.
+- Execution, AI bridge, and editor→disk write-through remain scheduled for later phases.

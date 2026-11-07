@@ -1,0 +1,97 @@
+.workbench {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 0;
+}
+
+/* Monaco fills its container; the wrapper owns the chrome. */
+.canvas :global(.monaco-editor) {
+  --vscode-editorGutter: transparent;
+}
+
+.canvas :global(.monaco-editor .margin) {
+  background: transparent;
+}
+
+.status {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  height: 24px;
+  border-top: 1px solid var(--hairline);
+  color: var(--text-3);
+  background: rgb(6 10 17 / 0.9);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex: none;
+}
+
+.status span {
+  flex: none;
+}
+
+.sep {
+  width: 1px;
+  height: 9px;
+  background: var(--hairline-strong);
+  opacity: 0.7;
+}
+
+.failure {
+  display: grid;
+  place-content: center;
+  gap: 8px;
+  height: 100%;
+  padding: 32px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: rgb(12 8 12 / 0.6);
+  text-align: center;
+}
+
+.failureTitle {
+  color: var(--danger);
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+
+.failureCopy {
+  max-width: 46ch;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+@media (max-width: 1100px) {
+  .hideNarrow {
+    display: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .hideXnarrow {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workbench,
+  .status {
+    transition: none;
+  }
+}

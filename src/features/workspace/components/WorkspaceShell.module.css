@@ -1,0 +1,351 @@
+.workspace {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: calc(100dvh - var(--header-h) - var(--status-h));
+  min-height: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 460px at 50% -28%, rgb(33 108 138 / 0.11), transparent 66%),
+    linear-gradient(180deg, rgb(6 10 17 / 0.72), rgb(3 6 11 / 0.9));
+}
+
+/* -------------------------------- Topbar --------------------------------- */
+
+.topbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 52px;
+  min-width: 0;
+  padding-inline: 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: rgb(5 9 15 / 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.identityGroup {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 29px;
+  padding-inline: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    color var(--d-2) var(--ease-state),
+    border-color var(--d-2) var(--ease-state),
+    background-color var(--d-2) var(--ease-state);
+}
+
+.back:hover {
+  color: var(--text);
+  border-color: var(--hairline);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.back:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: 2px;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  background: var(--hairline);
+}
+
+.projectMark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--hairline-accent);
+  border-radius: var(--r-sm);
+  color: var(--cyan);
+  background:
+    linear-gradient(145deg, rgb(87 226 230 / 0.16), rgb(87 226 230 / 0.02)),
+    rgb(255 255 255 / 0.012);
+  box-shadow:
+    0 0 20px -9px rgb(87 226 230 / 0.65),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+.projectCopy {
+  min-width: 0;
+}
+
+.kicker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.kickerSource {
+  color: var(--cyan-dim);
+}
+
+.projectName {
+  overflow: hidden;
+  margin-top: 1px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.008em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionChip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  margin-left: 3px;
+  padding-inline: 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 6.8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sessionDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 7px rgb(87 226 230 / 0.75);
+}
+
+.fileCount {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 9px;
+}
+
+.dossier {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding-inline: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transition:
+    color var(--d-2) var(--ease-state),
+    border-color var(--d-2) var(--ease-state),
+    background-color var(--d-2) var(--ease-state);
+}
+
+.dossier:hover {
+  color: var(--text);
+  border-color: var(--hairline-strong);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.dossier:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: 2px;
+}
+
+.dossierArrow {
+  opacity: 0.62;
+}
+
+.toggles {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: rgb(0 0 0 / 0.18);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding-inline: 7px;
+  border-radius: 4px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    color var(--d-2) var(--ease-state),
+    background-color var(--d-2) var(--ease-state);
+}
+
+.toggle:hover {
+  color: var(--text-2);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.toggle[data-active='true'] {
+  color: var(--cyan);
+  background: rgb(87 226 230 / 0.09);
+  box-shadow: inset 0 0 0 1px rgb(87 226 230 / 0.16);
+}
+
+.toggle:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: -1px;
+}
+
+/* --------------------------------- Body ---------------------------------- */
+
+.body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panelShell {
+  position: relative;
+  flex: none;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.panelInner {
+  height: 100%;
+}
+
+.center {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ------------------------------- Responsive ------------------------------ */
+
+@media (max-width: 900px) {
+  .toggleLabel,
+  .dossierLabel {
+    display: none;
+  }
+
+  .toggle {
+    width: 25px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .dossier {
+    width: 30px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .dossierArrow {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .backLabel {
+    display: none;
+  }
+
+  .back {
+    width: 29px;
+    justify-content: center;
+    padding-inline: 0;
+  }
+
+  .sessionChip {
+    display: none;
+  }
+
+  .fileCount {
+    display: none;
+  }
+
+  .topbar {
+    gap: 10px;
+    padding-inline: 9px;
+  }
+}
+
+@media (max-width: 520px) {
+  .kickerSource {
+    display: none;
+  }
+
+  .projectMark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .divider {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back,
+  .dossier,
+  .toggle {
+    transition: none;
+  }
+}

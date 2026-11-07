@@ -1,0 +1,52 @@
+.glyph {
+  flex: none;
+  color: var(--text-3);
+}
+
+.glyph[data-tone='folder'] {
+  color: var(--cyan-dim);
+}
+
+.glyph[data-tone='typescript'] {
+  color: var(--ice);
+}
+
+.glyph[data-tone='javascript'] {
+  color: var(--warn);
+}
+
+.glyph[data-tone='code'] {
+  color: var(--cyan);
+}
+
+.glyph[data-tone='style'] {
+  color: var(--violet);
+}
+
+.glyph[data-tone='markup'] {
+  color: rgb(244 177 131);
+}
+
+.glyph[data-tone='config'] {
+  color: rgb(240 196 106 / 0.9);
+}
+
+.glyph[data-tone='doc'] {
+  color: var(--text-2);
+}
+
+.glyph[data-tone='image'] {
+  color: var(--ok);
+}
+
+.glyph[data-tone='archive'] {
+  color: rgb(255 126 140 / 0.85);
+}
+
+.glyph[data-tone='shell'] {
+  color: var(--ok);
+}
+
+.glyph[data-tone='plain'] {
+  color: var(--text-3);
+}

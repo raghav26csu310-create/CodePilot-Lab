@@ -35,9 +35,8 @@ export function QuickActions({ onCreate, onImport }: QuickActionsProps) {
             </span>
             <span className={styles.actionBody}>
               <span className={styles.actionTitle}>Open workspace</span>
-              <span className={styles.actionHint}>Editor scheduled · placeholder</span>
+              <span className={styles.actionHint}>Project picker · real session workspace</span>
             </span>
-            <span className={styles.actionChip}>Soon</span>
             <ArrowUpRight size={14} className={styles.actionArrow} aria-hidden="true" />
           </Link>
         </li>

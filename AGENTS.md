@@ -29,8 +29,9 @@ checks. ESLint ignores `dist/` and `node_modules/`.
 ## Architecture facts
 
 - `src/app/routes.ts` is the single source for nav/palette metadata. A new route needs
-  an entry there, a route in `src/app/App.tsx`, and a page. `/workspace/:projectId`
-  renders a real project dossier; `/workspace` itself is still a scheduled placeholder.
+  an entry there, a route in `src/app/App.tsx`, and a page. `/workspace/:projectId` is
+  the real editing workspace; `/workspace` is the project picker; the dossier lives at
+  `/workspace/:projectId/overview`.
 - The sidebar collapse preference is stored under `codepilot.sidebar.collapsed` and
   applied at mount. The desktop sidebar appears at 1024 px and above; below that the
   mobile navigation dialog is the only navigation surface.
@@ -42,10 +43,21 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   reduced-motion / no-WebGL / WebGL failure.
 - `useStageActive` pauses the canvas offscreen/hidden; `useWebGLSupport` and
   `usePrefersReducedMotion` return synchronously. Do not add a second render loop.
-- Project records live in IndexedDB through Dexie (`src/lib/db.ts`). Treat
-  `directoryHandle` as structured-clone data; manifests can be truncated and the UI
-  must disclose the cap. Storage may be unavailable (private mode) — detect and show
-  it instead of failing silently.
+- Project records live in IndexedDB through Dexie (`src/lib/db.ts`) under schema v2:
+  `projects`, `files` (tree entries), `contents` (saved text) and `settings`. Storage
+  services belong in `src/lib/projectStorage.ts`, never in components. Stored content
+  is authoritative after the first save; `directoryHandle` is only an honestly
+  disclosed read fallback and is structured-clone data. Opening a legacy record
+  migrates its manifest into entries without resetting user data.
+- The Monaco surface is `MonacoWorkbench` behind `React.lazy` in `EditorArea`. Keep
+  bundling local (no CDN); editor text models are owned by the workbench and must be
+  disposed with tabs. Dirty state comes from `getAlternativeVersionId`, and live drafts
+  live only inside Monaco models — the reducer keeps snapshots. Cross-component
+  editor actions (save, save-all, find, reveal) go through `EditorCommandsContext`,
+  not ad-hoc window globals.
+- Shortcuts: `Ctrl/⌘ S / Shift S / P / Shift F / F / PageUp / PageDown` are implemented
+  both inside Monaco (`monaco.addCommand`) and in `WorkspaceShell`'s global handler,
+  which skips events originating inside `.monaco-editor` to avoid double handling.
 - Import is a real folder scan via the File System Access API or a `webkitdirectory`
   input. Excluded directories and the scan cap are product-visible policy; do not
   silently drop files. Recent projects and dossiers must read from Dexie or show an

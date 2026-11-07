@@ -109,17 +109,17 @@ function createAccumulator(): ScanAccumulator {
   }
 }
 
-function extensionOf(name: string): string {
+export function extensionForFile(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
 }
 
-function languageOf(name: string): string | null {
+export function languageForFile(name: string): string | null {
   if (name.toLowerCase() === 'dockerfile') {
     return 'Docker'
   }
 
-  return LANGUAGE_BY_EXTENSION[extensionOf(name)] ?? null
+  return LANGUAGE_BY_EXTENSION[extensionForFile(name)] ?? null
 }
 
 function addFile(
@@ -138,7 +138,7 @@ function addFile(
   acc.modifiedAt = Math.max(acc.modifiedAt, file.lastModified)
   acc.manifest.push(path)
 
-  const language = languageOf(file.name)
+  const language = languageForFile(file.name)
   if (language) {
     acc.languages.set(language, (acc.languages.get(language) ?? 0) + 1)
   }

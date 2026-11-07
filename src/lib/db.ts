@@ -1,4 +1,4 @@
-import Dexie, { type EntityTable } from 'dexie'
+import Dexie, { type EntityTable, type Table, type Transaction } from 'dexie'
 
 export type ProjectSource = 'created' | 'imported'
 
@@ -9,13 +9,13 @@ export type ProjectRecord = {
   language: string
   source: ProjectSource
   createdAt: number
-  /** Latest real file mtime for imports, or creation time for new records. */
+  /** Latest real file mtime for imports, or the last persisted workspace edit. */
   modifiedAt: number
   lastOpenedAt: number
   openCount: number
   fileCount: number
   sizeBytes: number
-  /** Relative paths, capped by the importer. Empty for records without files. */
+  /** Relative file paths, capped by the importer. Kept in sync with stored files. */
   manifest: string[]
   truncated: boolean
   excluded: string[]
@@ -37,6 +37,37 @@ export type NewProjectInput = {
   directoryHandle?: FileSystemDirectoryHandle
 }
 
+export type StoredEntryKind = 'file' | 'folder'
+
+/**
+ * Version 2 tree record. The entry table is the source of truth for the
+ * workspace tree; `manifest` on the project remains for import metadata and
+ * dossier compatibility.
+ */
+export type StoredEntry = {
+  projectId: string
+  path: string
+  kind: StoredEntryKind
+  /** Bytes persisted in IndexedDB for this path. Zero when content is not stored. */
+  sizeBytes: number
+  createdAt: number
+  updatedAt: number
+}
+
+/** File contents are separate from tree metadata so large files load on demand. */
+export type StoredContent = {
+  projectId: string
+  path: string
+  content: string
+  updatedAt: number
+}
+
+export type StoredSetting = {
+  key: string
+  value: string
+  updatedAt: number
+}
+
 export type StorageSnapshot = {
   indexedDB: boolean
   estimate: boolean
@@ -47,11 +78,102 @@ export type StorageSnapshot = {
 
 const database = new Dexie('codepilot-lab') as Dexie & {
   projects: EntityTable<ProjectRecord, 'id'>
+  files: Table<StoredEntry, [string, string]>
+  contents: Table<StoredContent, [string, string]>
+  settings: EntityTable<StoredSetting, 'key'>
+}
+
+function normalizePath(path: string): string {
+  return path
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '')
+}
+
+function nameKey(value: string): string {
+  return value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, '')
+}
+
+function normalizeManifestPaths(paths: string[], projectName: string): string[] {
+  const cleaned = [...new Set(paths.map(normalizePath).filter(Boolean))]
+
+  if (cleaned.length === 0) {
+    return []
+  }
+
+  const firstSegments = new Set(cleaned.map((path) => path.split('/')[0] ?? ''))
+  if (firstSegments.size === 1) {
+    const only = [...firstSegments][0]
+    if (only && !only.includes('/')) {
+      const projectKey = nameKey(projectName)
+      if (projectKey.length > 0 && nameKey(only) === projectKey) {
+        const stripped = cleaned
+          .map((path) => path.slice(only.length + 1))
+          .filter((path) => path.length > 0)
+
+        if (stripped.length === cleaned.length) {
+          return stripped
+        }
+      }
+    }
+  }
+
+  return cleaned
+}
+
+function entriesFromManifest(project: ProjectRecord): StoredEntry[] {
+  const kinds = new Map<string, StoredEntryKind>()
+  const paths = normalizeManifestPaths(project.manifest, project.name)
+
+  for (const path of paths) {
+    const segments = path.split('/').filter(Boolean)
+    for (let index = 1; index < segments.length; index += 1) {
+      const folderPath = segments.slice(0, index).join('/')
+      if (!kinds.has(folderPath)) {
+        kinds.set(folderPath, 'folder')
+      }
+    }
+    kinds.set(path, 'file')
+  }
+
+  return [...kinds].map(([path, kind]) => ({
+    projectId: project.id,
+    path,
+    kind,
+    sizeBytes: 0,
+    createdAt: project.createdAt,
+    updatedAt: project.modifiedAt,
+  }))
 }
 
 database.version(1).stores({
   projects: 'id, name, lastOpenedAt',
 })
+
+database.version(2)
+  .stores({
+    projects: 'id, name, lastOpenedAt',
+    files: '[projectId+path], projectId, kind, updatedAt',
+    contents: '[projectId+path], projectId, updatedAt',
+    settings: 'key',
+  })
+  .upgrade(async (tx: Transaction) => {
+    // Backfill tree metadata for projects introduced before the editor existed.
+    // No content is fabricated: manifest-only imports keep content unavailable
+    // until their folder handle can provide the real bytes.
+    const projects = await tx.table<ProjectRecord>('projects').toArray()
+    const files = tx.table<StoredEntry>('files')
+    const rows: StoredEntry[] = []
+
+    for (const project of projects) {
+      rows.push(...entriesFromManifest(project))
+    }
+
+    if (rows.length > 0) {
+      await files.bulkPut(rows)
+    }
+  })
 
 export const db = database
 
@@ -88,12 +210,40 @@ export async function createProjectRecord(input: NewProjectInput): Promise<Proje
     directoryHandle: input.directoryHandle,
   }
 
-  await db.projects.add(record)
+  await db.transaction('rw', db.projects, db.files, async () => {
+    await db.projects.add(record)
+
+    const entries = entriesFromManifest(record)
+    if (entries.length > 0) {
+      await db.files.bulkPut(entries)
+    }
+  })
+
   return record
+}
+
+/**
+ * Safety net for records created between schema versions: backfill their tree
+ * metadata from the stored manifest without touching existing entries.
+ */
+export async function ensureProjectEntries(project: ProjectRecord): Promise<void> {
+  const count = await db.files.where('projectId').equals(project.id).count()
+  if (count > 0 || project.manifest.length === 0) {
+    return
+  }
+
+  const entries = entriesFromManifest(project)
+  if (entries.length > 0) {
+    await db.files.bulkPut(entries)
+  }
 }
 
 export async function listRecentProjects(limit = 6): Promise<ProjectRecord[]> {
   return db.projects.orderBy('lastOpenedAt').reverse().limit(limit).toArray()
+}
+
+export async function listProjects(): Promise<ProjectRecord[]> {
+  return db.projects.orderBy('lastOpenedAt').reverse().toArray()
 }
 
 export async function getProject(id: string): Promise<ProjectRecord | undefined> {
@@ -114,6 +264,35 @@ export async function touchProject(id: string): Promise<ProjectRecord | undefine
     }
     await db.projects.put(updated)
     return updated
+  })
+}
+
+export async function renameProjectRecord(
+  id: string,
+  name: string,
+): Promise<ProjectRecord | undefined> {
+  return db.transaction('rw', db.projects, async () => {
+    const current = await db.projects.get(id)
+    if (!current) {
+      return undefined
+    }
+
+    const updated: ProjectRecord = {
+      ...current,
+      name: name.trim(),
+      modifiedAt: Date.now(),
+    }
+    await db.projects.put(updated)
+    return updated
+  })
+}
+
+/** Removes the project, its tree entries and every stored content record. */
+export async function deleteProjectCascade(id: string): Promise<void> {
+  await db.transaction('rw', db.projects, db.files, db.contents, async () => {
+    await db.files.where('projectId').equals(id).delete()
+    await db.contents.where('projectId').equals(id).delete()
+    await db.projects.delete(id)
   })
 }
 

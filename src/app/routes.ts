@@ -34,13 +34,12 @@ export const ROUTES: RouteInfo[] = [
     path: '/workspace',
     label: 'Code Workspace',
     icon: Code2,
-    status: 'scheduled',
-    tagline: 'The editor surface, tabs and project files.',
+    status: 'live',
+    tagline: 'A real Monaco editor over a persisted local project tree.',
     planned: [
-      'File explorer with create, rename and delete',
-      'Monaco editor, tabs and unsaved-change tracking',
-      'Collapsible copilot and console panels',
-      'Command palette wired to file actions',
+      'Writing file changes through to a linked folder handle',
+      'A local model bridge for the Copilot dock',
+      'Terminal, task and output channels',
     ],
   },
   {
@@ -88,8 +87,7 @@ export const ROUTES: RouteInfo[] = [
     status: 'scheduled',
     tagline: 'The local project archive and storage controls.',
     planned: [
-      'Project rename, archive and deletion',
-      'Search across the local registry',
+      'Project archive and move',
       'Export and import of project archives',
       'Storage usage reporting and quota handling',
     ],
@@ -101,8 +99,7 @@ export const ROUTES: RouteInfo[] = [
     status: 'scheduled',
     tagline: 'An event log written only by real application actions.',
     planned: [
-      'Event log backed by real application actions',
-      'Editor diagnostics collected from Monaco',
+      'An event log backed by real application actions',
       'Storage health and persistence status',
       'No fabricated metrics or synthetic build results',
     ],
