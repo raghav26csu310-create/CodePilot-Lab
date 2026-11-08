@@ -38,6 +38,21 @@ export function relativeTime(timestamp: number, now: number): string {
   return DATE_FORMAT.format(timestamp)
 }
 
+/** Compact character count, e.g. 840, 4.2k, 1.3M. */
+export function formatChars(chars: number): string {
+  if (!Number.isFinite(chars) || chars <= 0) {
+    return '0'
+  }
+  if (chars < 1000) {
+    return `${Math.round(chars)}`
+  }
+  if (chars < 1_000_000) {
+    const value = chars / 1000
+    return `${value >= 100 ? Math.round(value) : value.toFixed(1)}k`
+  }
+  return `${(chars / 1_000_000).toFixed(1)}M`
+}
+
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return '0 B'

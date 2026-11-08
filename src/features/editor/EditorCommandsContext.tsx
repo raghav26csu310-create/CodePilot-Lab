@@ -9,6 +9,17 @@ export type SaveOutcome = {
 export type EditorCommandApi = {
   /** Live Monaco draft, or null when no model is mounted for the path. */
   getDraft(path: string): string | null
+  /** Current non-empty selection, or null when the cursor is collapsed. */
+  getSelection(): {
+    path: string
+    text: string
+    startLine: number
+    startColumn: number
+    endLine: number
+    endColumn: number
+  } | null
+  /** Replaces a whole buffer with an undoable edit. Never writes storage. */
+  applyContent(path: string, content: string): Promise<{ ok: boolean; message?: string }>
   save(path: string): Promise<boolean>
   saveAll(): Promise<{ saved: number; failed: number }>
   focusFind(): void

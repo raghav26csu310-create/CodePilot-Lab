@@ -296,11 +296,23 @@
   scrollbar-width: thin;
 }
 
+.problemItem {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--r-sm);
+}
+
+.problemItem:hover {
+  background: rgb(255 255 255 / 0.03);
+}
+
 .problemRow {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 5px 8px;
   border-radius: var(--r-sm);
   color: var(--text-2);
@@ -313,7 +325,35 @@
 
 .problemRow:hover {
   color: var(--text);
-  background: rgb(255 255 255 / 0.03);
+}
+
+.problemAsk {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition:
+    color var(--d-1) var(--ease-state),
+    border-color var(--d-1) var(--ease-state),
+    background-color var(--d-1) var(--ease-state);
+}
+
+.problemAsk:hover {
+  border-color: rgb(140 123 255 / 0.3);
+  background: var(--violet-wash);
+  color: var(--violet);
+}
+
+.problemAsk:focus-visible {
+  outline: 1px solid var(--hairline-accent);
+  outline-offset: 1px;
 }
 
 .problemRow:focus-visible {

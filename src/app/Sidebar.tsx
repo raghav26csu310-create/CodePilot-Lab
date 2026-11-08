@@ -60,7 +60,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       <div className={styles.footer}>
         <p className={styles.milestone}>
-          Milestone 04 · <span>Code workspace</span>
+          Milestone 05 · <span>AI Copilot</span>
         </p>
 
         <Link

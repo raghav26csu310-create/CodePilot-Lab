@@ -404,7 +404,7 @@ export function ProjectPickerPage() {
         <footer className={styles.foot}>
           <span className={styles.footNote}>
             <span className={styles.footDot} aria-hidden="true" />
-            Projects persist in IndexedDB · the Phase 04 editor saves real file contents locally
+            Projects persist in IndexedDB · the Phase 05 Copilot reads only what you share
           </span>
           <Link to="/" className={styles.footLink}>
             <ArrowLeft size={12} aria-hidden="true" />

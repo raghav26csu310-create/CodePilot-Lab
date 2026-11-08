@@ -82,6 +82,16 @@ export type PendingReveal = {
   column: number
 }
 
+/** Live text selection reported by Monaco; used to scope Copilot requests. */
+export type EditorSelection = {
+  path: string
+  text: string
+  startLine: number
+  startColumn: number
+  endLine: number
+  endColumn: number
+}
+
 export type WorkspaceUiState = WorkspaceLayout & {
   explorerOpen: boolean
   copilotOpen: boolean
@@ -94,6 +104,8 @@ export type WorkspaceUiState = WorkspaceLayout & {
   copilotContext: string[]
   editor: EditorPreferences
   markers: EditorMarker[]
+  /** Current editor selection, or null when the cursor is collapsed. */
+  selection: EditorSelection | null
   palette: 'files' | 'search' | null
   pendingReveal: PendingReveal | null
   toast: WorkspaceToast | null
@@ -143,6 +155,7 @@ export type WorkspaceAction =
   | { type: 'entry/rename'; path: string; name: string; draft?: string | null }
   | { type: 'entry/delete'; path: string }
   | { type: 'editor/set-markers'; markers: EditorMarker[] }
+  | { type: 'editor/set-selection'; selection: EditorSelection | null }
   | { type: 'ui/open-dialog'; dialog: WorkspaceDialog }
   | { type: 'ui/close-dialog' }
   | { type: 'ui/toggle-explorer' }

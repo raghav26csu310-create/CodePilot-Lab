@@ -2,8 +2,8 @@
 
 Local-first, AI-native coding laboratory. React 19 + TypeScript + Vite SPA; no backend,
 no paid APIs, no secrets. Milestones are sequenced deliberately — implement only the
-requested phase (see README) and do not jump ahead to the editor, execution, or AI
-bridge unless asked.
+requested phase (see README) and do not jump ahead to execution or the remaining
+placeholder modules unless asked.
 
 ## Non-negotiable product rules
 
@@ -64,6 +64,31 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   explicit unavailable/empty state — never seed sample projects.
 - App version is injected as `__APP_VERSION__` from `package.json` in
   `vite.config.ts`. Never hardcode a version string.
+
+## AI Copilot (Phase 5)
+
+- Provider code lives in `src/features/copilot/providers/*` behind the `AiProvider`
+  interface. Two adapters exist: native `ollama` (NDJSON `/api/chat`, `/api/tags`) and
+  `openai-compatible` (SSE `/chat/completions`, `/models`). Add a provider by adding an
+  adapter and a preset, not by branching inside the dock.
+- Settings are an external store (`settingsStore.ts`) consumed through
+  `useSyncExternalStore` so the dock and `/settings` stay in sync. Persisted under the
+  Dexie `settings` key `copilot.provider.v1`; the API key is persisted only when the user
+  opts into "remember". Never ship, log or hardcode a key. `verified` means a real
+  request succeeded in this session — saving settings clears it.
+- `context.ts` is the only place that assembles request content. Toggles gate the
+  active file, selection, tree names and Monaco markers; other files are attached
+  explicitly and the exact bundle is previewable. Apply the character budget rather than
+  uploading a project wholesale.
+- Model changes are ` ```codepilot path="..." mode="replace|create" summary="..." `
+  fences containing complete file content. `proposals.ts` parses them defensively and
+  rejects unsafe paths. Apply only through `applyProposal`, which performs one undoable
+  Monaco edit (creating the stored entry first for `create` mode) and never saves.
+  Revisions keep previous whole-file content for restore.
+- The UI is `CopilotDock` (desktop panel and mobile drawer) over `CopilotContext`, which
+  is mounted inside `EditorCommandsProvider` + the workspace provider. Keep the chat
+  alive when the dock closes. `/copilot` is the live overview; `/settings` is the live
+  credential page.
 
 ## TypeScript / React landmines
 

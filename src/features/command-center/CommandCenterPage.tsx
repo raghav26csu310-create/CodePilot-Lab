@@ -124,7 +124,7 @@ export function CommandCenterPage() {
               </span>
               <span className={styles.noteSep} aria-hidden="true" />
               <span className={`${styles.noteItem} ${styles.noteLive}`}>
-                Workspace live · milestone 04
+                Copilot live · milestone 05
               </span>
             </motion.p>
           </div>

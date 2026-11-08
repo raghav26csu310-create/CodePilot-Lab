@@ -148,6 +148,7 @@ export function createInitialWorkspaceState(entries: TreeEntry[] = []): Workspac
       copilotContext: [],
       editor: readEditorPreferences(),
       markers: [],
+      selection: null,
       palette: null,
       pendingReveal: null,
       toast: null,
@@ -373,6 +374,25 @@ export function workspaceReducer(
         return state
       }
       return { tree, ui: { ...ui, markers: action.markers } }
+    }
+
+    case 'editor/set-selection': {
+      const current = ui.selection
+      const next = action.selection
+      if (
+        current === next ||
+        (current !== null &&
+          next !== null &&
+          current.path === next.path &&
+          current.text === next.text &&
+          current.startLine === next.startLine &&
+          current.startColumn === next.startColumn &&
+          current.endLine === next.endLine &&
+          current.endColumn === next.endColumn)
+      ) {
+        return state
+      }
+      return { tree, ui: { ...ui, selection: next } }
     }
 
     case 'entry/create': {

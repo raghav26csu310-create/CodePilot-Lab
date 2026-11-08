@@ -2,14 +2,43 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Phase 4 — The Core Editing Engine.** The workspace now mounts a
-real Monaco editor wired to a persisted project tree: real stored file contents,
-unsaved-change tracking, local saves to IndexedDB, quick open and project-wide content
-search, and project rename/delete in the registry picker. It still does not execute code
-and does not call any model.
+**Current milestone: Phase 5 — Intelligent AI Copilot.** The workspace now hosts a
+provider-independent assistant that reads the files you allow, streams answers, and
+proposes complete-file changes that you review in a diff before anything happens. It
+still does not execute code, and it makes no model call until you configure a provider
+and press Send.
 
 ## What actually works
 
+- **AI Copilot** in the workspace dock (`/copilot` explains the model; `/settings`
+  configures it). Provider-independent by design: a native **Ollama** adapter
+  (`/api/chat`, NDJSON streaming) and an **OpenAI-compatible** adapter (SSE
+  `/chat/completions`) that covers DeepSeek, OpenAI, OpenRouter, Groq, LM Studio,
+  llama.cpp and user-run proxies. The app is fully usable with no provider configured;
+  the dock states that plainly instead of inventing an answer.
+- **Seven AI modes** — free-form chat, explain (beginner/intermediate/advanced),
+  debug, code generation, code review, test generation, and a learning assistant that
+  starts with hints and only gives the full solution when asked. Every mode shares the
+  same conversation, context controls, streaming and stop button.
+- **Project-aware context you can inspect.** Toggles decide whether the active file,
+  selection, file tree and real Monaco diagnostics are eligible; other files must be
+  attached explicitly from a tab or the explorer. A character budget caps the bundle,
+  truncation and unreadable files are disclosed, and the context panel shows the exact
+  bundle before it is sent. No project is ever uploaded wholesale.
+- **Reviewable changes, never silent writes.** Models answer with complete-file
+  `codepilot` proposal blocks. CodePilot parses them defensively, refuses absolute or
+  escaping paths, and shows a side-by-side diff against the live draft, saved copy or
+  linked folder copy. Accepting applies one undoable Monaco edit; saving stays manual.
+  Revisions keep the previous whole-file content for restore, and an applied file is
+  visibly dirty until you save it.
+- **Credentials stay yours.** No key ships in the bundle. Keys are typed at runtime,
+  live in memory by default, and are only persisted to IndexedDB when you opt in. A
+  local proxy can hold secrets server-side by pointing the base URL at it. Status is
+  honest: `unconfigured` → `configured` (saved, unverified) → `verified` only after a
+  real model list or chat request succeeded in this session.
+- **Streamed, stoppable responses** with copy, clear conversation, per-request context
+  disclosure, and explicit error kinds for auth, network, provider, CORS and rate-limit
+  failures. Nothing is retried silently.
 - **Command Center** with a personalized time-of-day greeting, product headline,
   descriptions, `Enter workspace` and `Create new project` actions, and the live
   Lattice-01 visual.
@@ -64,13 +93,13 @@ and does not call any model.
 
 ## What is deliberately not built yet
 
-AI Copilot bridge, Project Atlas, Execution Lab (code cannot be run in any language),
-Project Vault, Activity & Diagnostics, and Settings remain placeholders. The development
-panel's Terminal and Output views state plainly that no process has ever run and no
-output is simulated.
+Project Atlas, Execution Lab (code cannot be run in any language), Project Vault, and
+Activity & Diagnostics remain placeholders. The development panel's Terminal and Output
+views state plainly that no process has ever run and no output is simulated. The AI
+Copilot cannot run commands, tests or builds; that belongs to a later phase.
 
 No backend, account, API key, database service, or paid dependency is required to run
-this milestone.
+this milestone. A local model (for example Ollama) is optional.
 
 ## Run
 
@@ -104,6 +133,9 @@ src/
   features/
     editor/         Monaco integration layer: setup (workers, themes, TS service),
                     language registry, editor preferences, command context
+    copilot/        provider adapters, settings store, context builder, proposal
+                    parser, diff engine, markdown, dock dialogs, overview page
+    settings/       live provider and credential settings page
     workspace/      state (reducer/context), storage-backed pages, explorer, tabs,
                     Monaco workbench, dialogs, quick open, development panel
     command-center/ landing, quick actions, system status
@@ -125,10 +157,20 @@ src/
   policy and disclosed on import and in Diagnostics.
 - Deleting a project is explicit, confirmed, and cascades through the registry, tree and
   contents. Clearing site data for the origin removes everything stored.
+- AI provider settings are stored under the `settings` key `copilot.provider.v1`. The
+  base URL, model, provider kind and non-secret preferences persist; the API key is
+  written only when "remember in this browser" is checked. Otherwise it exists only in
+  the tab's memory. Context is assembled in the browser and sent only to the endpoint
+  you configured, only when you press Send.
 
 ## Verification
 
 - `npm run typecheck`, `npm run lint`, and `npm run build` pass.
+- Phase 5 verification covered: unconfigured-provider honesty and settings save/forget,
+  a real streamed Ollama request (start, stop, copy, clear), proposal parsing → diff →
+  accept → dirty buffer → undo/restore, the Problems "Ask Copilot" entry point, failing
+  endpoints and rate-limit copy, context toggles and exact-bundle preview, `/settings`
+  and `/copilot` pages, and regression checks over the editor and Command Center.
 - Phase 4 verification covered: Monaco mount and highlighting, multi-file tab switching
   with draft preservation, save/reload persistence through IndexedDB, create/rename/
   delete of files and folders, project rename/delete, quick open and content search,
@@ -145,4 +187,8 @@ src/
   resolution, tests and builds are not claimed as verified anywhere in the product.
 - The main bundle still ships the lazy 3D scene; Monaco loads as separate lazy chunks
   (workers + editor core) only when the editor is opened.
-- Execution, AI bridge, and editor→disk write-through remain scheduled for later phases.
+- The Copilot calls model providers directly from the browser. CORS can block a remote
+  provider; free tiers rate-limit and the UI reports the provider's status rather than
+  retrying. Proposals are complete files, so very large files hit the diff line cap.
+  Conversation history is per workspace session and is not archived to disk.
+- Execution and editor→disk write-through remain scheduled for later phases.

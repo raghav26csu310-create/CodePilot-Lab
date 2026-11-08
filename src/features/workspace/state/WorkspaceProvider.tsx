@@ -4,6 +4,7 @@ import type { ProjectRecord } from '../../../lib/db'
 import { loadFileContent } from '../../../lib/projectStorage'
 import { EditorCommandsProvider } from '../../editor/EditorCommandsContext'
 import { writeEditorPreferences } from '../../editor/editorPreferences'
+import { CopilotProvider } from '../../copilot/CopilotContext'
 import { getWorkspaceStats, type TreeEntry } from './fileTree'
 import { writeLayoutPreference } from './layoutPreference'
 import { WorkspaceContext } from './WorkspaceContext'
@@ -96,7 +97,9 @@ export function WorkspaceProvider({ project, entries, children }: WorkspaceProvi
 
   return (
     <EditorCommandsProvider>
-      <WorkspaceContext.Provider value={controller}>{children}</WorkspaceContext.Provider>
+      <WorkspaceContext.Provider value={controller}>
+        <CopilotProvider>{children}</CopilotProvider>
+      </WorkspaceContext.Provider>
     </EditorCommandsProvider>
   )
 }

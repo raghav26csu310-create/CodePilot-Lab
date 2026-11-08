@@ -6,6 +6,7 @@ import {
   Lock,
   PanelBottom,
   RotateCcw,
+  Sparkles,
   Terminal,
   TriangleAlert,
 } from 'lucide-react'
@@ -13,6 +14,9 @@ import type { ReactNode } from 'react'
 
 import { formatBytes } from '../../../lib/format'
 import { languageForPath } from '../../editor/languageRegistry'
+import { useCopilot } from '../../copilot/CopilotContext'
+import { providerLabel } from '../../copilot/providerPresets'
+import { useAiSettings } from '../../copilot/settingsStore'
 import { findNode } from '../state/fileTree'
 import type { BottomPanelTab } from '../state/types'
 import { useWorkspace } from '../state/useWorkspace'
@@ -216,7 +220,25 @@ function OutputView() {
 
 function ProblemsView() {
   const { state, dispatch } = useWorkspace()
+  const { seedComposer } = useCopilot()
   const markers = state.ui.markers
+
+  const askAboutMarker = (index: number) => {
+    const marker = markers[index]
+    if (!marker) {
+      return
+    }
+
+    seedComposer(
+      [
+        `${marker.severity.toUpperCase()} in ${marker.path}:${marker.line}:${marker.column}`,
+        marker.message,
+        '',
+        'Explain the root cause from the diagnostic and the shared code, then propose the complete corrected file if a change is needed.',
+      ].join('\n'),
+      'debug',
+    )
+  }
 
   if (markers.length === 0) {
     return (
@@ -257,7 +279,10 @@ function ProblemsView() {
       <div className={styles.problemsMain}>
         <ul className={styles.problemList} aria-label="Collected problems">
           {markers.map((marker, index) => (
-            <li key={`${marker.path}:${marker.line}:${marker.column}:${index}`}>
+            <li
+              key={`${marker.path}:${marker.line}:${marker.column}:${index}`}
+              className={styles.problemItem}
+            >
               <button
                 type="button"
                 className={styles.problemRow}
@@ -279,6 +304,15 @@ function ProblemsView() {
                   {marker.path}:{marker.line}:{marker.column}
                 </span>
                 <span className={styles.problemOwner}>{marker.source}</span>
+              </button>
+              <button
+                type="button"
+                className={styles.problemAsk}
+                onClick={() => askAboutMarker(index)}
+                title="Ask Copilot about this problem"
+                aria-label={`Ask Copilot about: ${marker.message}`}
+              >
+                <Sparkles size={11} />
               </button>
             </li>
           ))}
@@ -340,6 +374,15 @@ function DiagnosticsView({
         ? 'Language service active'
         : 'Syntax highlighting only'
 
+  const ai = useAiSettings()
+  const aiConfigured =
+    ai.settings.baseUrl.trim().length > 0 && ai.settings.model.trim().length > 0
+  const aiVerification = !aiConfigured
+    ? 'Not configured'
+    : ai.lastTest?.ok
+      ? 'Endpoint responded · session'
+      : 'Unverified'
+
   return (
     <div className={styles.diagnostics}>
       <div className={styles.diagHead}>
@@ -388,6 +431,23 @@ function DiagnosticsView({
         />
         <DiagRow label="Tree persistence" value="IndexedDB · survives reload" />
         <DiagRow label="Layout" value="localStorage preferences" />
+        <DiagRow
+          label="AI provider"
+          value={aiConfigured ? providerLabel(ai.settings) : 'Not configured'}
+        />
+        <DiagRow label="AI model" value={ai.settings.model || '—'} mono />
+        <DiagRow label="AI verification" value={aiVerification} />
+        <DiagRow
+          label="AI key"
+          value={
+            ai.settings.apiKey
+              ? ai.settings.rememberKey
+                ? 'Remembered in IndexedDB'
+                : 'Memory only · this tab'
+              : 'None'
+          }
+        />
+        <DiagRow label="AI requests" value="Only on explicit Send" />
       </dl>
 
       <div className={styles.diagFoot}>

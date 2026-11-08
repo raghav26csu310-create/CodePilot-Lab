@@ -85,33 +85,39 @@ export default function MonacoWorkbench() {
   })
   const [failed, setFailed] = useState(false)
 
-  const attach = useCallback((path: string) => {
-    const editor = editorRef.current
-    if (!editor) {
-      return
-    }
-
-    const record = modelsRef.current.get(path)
-    if (editor.getModel() === (record?.model ?? null)) {
-      return
-    }
-
-    const previous = previousActiveRef.current
-    if (previous && previous !== path) {
-      const previousRecord = modelsRef.current.get(previous)
-      if (previousRecord && editor.getModel() === previousRecord.model) {
-        viewStatesRef.current.set(previous, editor.saveViewState())
+  const attach = useCallback(
+    (path: string) => {
+      const editor = editorRef.current
+      if (!editor) {
+        return
       }
-    }
 
-    editor.setModel(record?.model ?? null)
-    const restored = record ? viewStatesRef.current.get(path) : undefined
-    if (restored) {
-      editor.restoreViewState(restored)
-    }
-    editor.focus()
-    previousActiveRef.current = path
-  }, [])
+      const record = modelsRef.current.get(path)
+      if (editor.getModel() === (record?.model ?? null)) {
+        return
+      }
+
+      const previous = previousActiveRef.current
+      if (previous && previous !== path) {
+        const previousRecord = modelsRef.current.get(previous)
+        if (previousRecord && editor.getModel() === previousRecord.model) {
+          viewStatesRef.current.set(previous, editor.saveViewState())
+        }
+      }
+
+      editor.setModel(record?.model ?? null)
+      const restored = record ? viewStatesRef.current.get(path) : undefined
+      if (restored) {
+        editor.restoreViewState(restored)
+      }
+      editor.focus()
+      previousActiveRef.current = path
+      // Selections belong to a model; the Copilot context must not keep a
+      // stale range from the tab the user just left.
+      dispatch({ type: 'editor/set-selection', selection: null })
+    },
+    [dispatch],
+  )
 
   const ensureModels = useCallback(
     (openPaths: Set<string>) => {
@@ -334,13 +340,42 @@ export default function MonacoWorkbench() {
         }
 
         const model = editor.getModel()
+        const selectedText =
+          model && !selection.isEmpty() ? model.getValueInRange(selection) : ''
         setCursor({
           line: position.lineNumber,
           column: position.column,
-          selected: selection.isEmpty() ? 0 : (model?.getValueInRange(selection).length ?? 0),
+          selected: selectedText.length,
           selectionLines: selection.isEmpty()
             ? 0
             : selection.endLineNumber - selection.startLineNumber + 1,
+        })
+
+        let selectionPath: string | null = null
+        if (model) {
+          for (const [path, record] of modelsRef.current) {
+            if (record.model === model) {
+              selectionPath = path
+              break
+            }
+          }
+        }
+
+        if (!model || !selectionPath || selection.isEmpty() || !selectedText) {
+          dispatch({ type: 'editor/set-selection', selection: null })
+          return
+        }
+
+        dispatch({
+          type: 'editor/set-selection',
+          selection: {
+            path: selectionPath,
+            text: selectedText.slice(0, 120000),
+            startLine: selection.startLineNumber,
+            startColumn: selection.startColumn,
+            endLine: selection.endLineNumber,
+            endColumn: selection.endColumn,
+          },
         })
       }
 
@@ -465,6 +500,79 @@ export default function MonacoWorkbench() {
   useEffect(() => {
     apiRef.current = {
       getDraft: (path) => modelsRef.current.get(path)?.model.getValue() ?? null,
+      getSelection: () => {
+        const editor = editorRef.current
+        const model = editor?.getModel()
+        const selection = editor?.getSelection()
+        if (!editor || !model || !selection || selection.isEmpty()) {
+          return null
+        }
+
+        let path: string | null = null
+        for (const [candidate, record] of modelsRef.current) {
+          if (record.model === model) {
+            path = candidate
+            break
+          }
+        }
+        if (!path) {
+          return null
+        }
+
+        return {
+          path,
+          text: model.getValueInRange(selection).slice(0, 120000),
+          startLine: selection.startLineNumber,
+          startColumn: selection.startColumn,
+          endLine: selection.endLineNumber,
+          endColumn: selection.endColumn,
+        }
+      },
+      applyContent: async (path, content) => {
+        const waitForModel = (attempt = 0): Promise<ModelRecord | null> => {
+          const record = modelsRef.current.get(path)
+          if (record) {
+            return Promise.resolve(record)
+          }
+          if (attempt >= 240) {
+            return Promise.resolve(null)
+          }
+          return new Promise((resolve) => {
+            window.setTimeout(() => {
+              void waitForModel(attempt + 1).then(resolve)
+            }, 25)
+          })
+        }
+
+        let record: ModelRecord | null | undefined = modelsRef.current.get(path)
+        if (!record) {
+          dispatch({ type: 'file/open', path })
+          record = await waitForModel()
+        }
+
+        if (!record) {
+          return {
+            ok: false,
+            message:
+              'The file could not be opened for editing. Its content may be unavailable, or the path no longer exists in the tree.',
+          }
+        }
+
+        const model = record.model
+        if (model.getValue() === content) {
+          attach(path)
+          return { ok: true }
+        }
+
+        model.pushStackElement()
+        model.pushEditOperations(
+          [],
+          [{ range: model.getFullModelRange(), text: content }],
+          () => null,
+        )
+        attach(path)
+        return { ok: true }
+      },
       save: (path) => persistPath(path),
       saveAll: () => saveAllRef.current?.() ?? Promise.resolve({ saved: 0, failed: 0 }),
       focusFind: () => {
@@ -505,7 +613,7 @@ export default function MonacoWorkbench() {
     return () => {
       apiRef.current = null
     }
-  }, [apiRef, dispatch, persistPath])
+  }, [apiRef, dispatch, persistPath, attach])
 
   useEffect(() => {
     if (!pendingReveal) {

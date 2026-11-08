@@ -281,13 +281,14 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
                     Session workspace live
                   </h2>
                 </div>
-                <Badge tone="live">Phase 4</Badge>
+                <Badge tone="live">Phase 5</Badge>
               </div>
               <div className={styles.panelBody}>
                 <p className={styles.panelCopy}>
                   The project explorer, tabs, Copilot dock and development panel are mounted and
-                  driven by this record, with a real Monaco editor that saves to IndexedDB. Disk
-                  write-through, the Copilot bridge and execution are still scheduled.
+                  driven by this record, with a real Monaco editor that saves to IndexedDB. The
+                  Copilot can now use a provider you configure; disk write-through and the
+                  execution lab remain scheduled.
                 </p>
                 <ol className={styles.planned}>
                   {workspaceRoute.planned.slice(0, 3).map((entry, index) => (

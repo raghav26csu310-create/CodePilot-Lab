@@ -38,7 +38,6 @@ export const ROUTES: RouteInfo[] = [
     tagline: 'A real Monaco editor over a persisted local project tree.',
     planned: [
       'Writing file changes through to a linked folder handle',
-      'A local model bridge for the Copilot dock',
       'Terminal, task and output channels',
     ],
   },
@@ -46,14 +45,9 @@ export const ROUTES: RouteInfo[] = [
     path: '/copilot',
     label: 'AI Copilot',
     icon: Sparkles,
-    status: 'scheduled',
-    tagline: 'A local model bridge with its limits on the table.',
-    planned: [
-      'Opt-in connection to a local model provider',
-      'Context assembled from files you explicitly select',
-      'Streamed responses with cancellation',
-      'No hidden provider calls and no simulated answers',
-    ],
+    status: 'live',
+    tagline: 'Provider-independent help grounded in the files you choose to share.',
+    planned: [],
   },
   {
     path: '/atlas',
@@ -108,13 +102,9 @@ export const ROUTES: RouteInfo[] = [
     path: '/settings',
     label: 'Settings',
     icon: Settings2,
-    status: 'scheduled',
-    tagline: 'Local preferences, provider and data controls.',
-    planned: [
-      'Opt-in connection to a local model provider',
-      'Motion and interface preferences',
-      'Export, import and clear local data',
-    ],
+    status: 'live',
+    tagline: 'Provider credentials, context budget and local data controls.',
+    planned: [],
   },
 ]
 

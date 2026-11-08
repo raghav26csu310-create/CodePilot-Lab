@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import {
   ArrowUpRight,
+  BookOpen,
   Check,
   ChevronRight,
   CircleSlash,
@@ -28,6 +29,7 @@ import { Link } from 'react-router-dom'
 
 import { clampFontSize } from '../../editor/editorPreferences'
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
+import { useCopilot } from '../../copilot/CopilotContext'
 import { languageForPath } from '../../editor/languageRegistry'
 import { findNode } from '../state/fileTree'
 import { useWorkspace } from '../state/useWorkspace'
@@ -315,7 +317,9 @@ export function EditorArea({
                 </span>
                 <span className={styles.startBody}>
                   <span className={styles.startName}>Open the Copilot dock</span>
-                  <span className={styles.startHint}>Interface ready · bridge scheduled</span>
+                  <span className={styles.startHint}>
+                    Provider-independent · configure inside the dock
+                  </span>
                 </span>
                 <ChevronRight size={13} className={styles.startArrow} aria-hidden="true" />
               </button>
@@ -462,6 +466,7 @@ function EditorSurface({
 }) {
   const { state, dispatch } = useWorkspace()
   const commands = useEditorCommands()
+  const { seedComposer } = useCopilot()
   const { editor: preferences } = state.ui
 
   const language = languageForPath(tab.path)
@@ -558,6 +563,24 @@ function EditorSurface({
             <span className={styles.buttonLabel}>
               {attached ? 'In Copilot context' : 'Attach to Copilot'}
             </span>
+          </button>
+
+          <button
+            type="button"
+            className={styles.surfaceButton}
+            onClick={() => {
+              seedComposer(
+                state.ui.selection
+                  ? 'Explain the selected code line by line.'
+                  : `Explain ${tab.name} line by line.`,
+                'explain',
+              )
+              onShowCopilot()
+            }}
+            title="Prepare an explanation request in the Copilot composer"
+          >
+            <BookOpen size={13} aria-hidden="true" />
+            <span className={styles.buttonLabel}>Explain</span>
           </button>
 
           <button type="button" className={styles.surfaceButton} onClick={copyPath}>

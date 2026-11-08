@@ -2,8 +2,10 @@ import { MotionConfig } from 'framer-motion'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import { CommandCenterPage } from '../features/command-center/CommandCenterPage'
+import { CopilotOverviewPage } from '../features/copilot/CopilotOverviewPage'
 import { NotFoundPage } from '../features/placeholder/NotFoundPage'
 import { PlaceholderPage } from '../features/placeholder/PlaceholderPage'
+import { AiSettingsPage } from '../features/settings/AiSettingsPage'
 import { ProjectOverviewRoute } from '../features/workspace/ProjectOverviewPage'
 import { ProjectPickerPage } from '../features/workspace/ProjectPickerPage'
 import { ProjectWorkspaceRoute } from '../features/workspace/ProjectWorkspacePage'
@@ -20,11 +22,11 @@ export function App() {
             <Route path="workspace" element={<ProjectPickerPage />} />
             <Route path="workspace/:projectId" element={<ProjectWorkspaceRoute />} />
             <Route path="workspace/:projectId/overview" element={<ProjectOverviewRoute />} />
-            <Route path="copilot" element={<PlaceholderPage path="/copilot" />} />
+            <Route path="copilot" element={<CopilotOverviewPage />} />
             <Route path="atlas" element={<PlaceholderPage path="/atlas" />} />
             <Route path="lab" element={<PlaceholderPage path="/lab" />} />
             <Route path="activity" element={<PlaceholderPage path="/activity" />} />
-            <Route path="settings" element={<PlaceholderPage path="/settings" />} />
+            <Route path="settings" element={<AiSettingsPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>
