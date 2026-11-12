@@ -30,7 +30,7 @@ export function StatusBar() {
         </div>
 
         <div className={styles.group}>
-          <span className={`${styles.item} ${styles.hideSm}`}>Milestone 05 · AI Copilot</span>
+          <span className={`${styles.item} ${styles.hideSm}`}>Milestone 07 · Public beta</span>
           <span className={`${styles.sep} ${styles.hideSm}`} aria-hidden="true" />
           <span className={styles.item}>v{__APP_VERSION__}</span>
         </div>

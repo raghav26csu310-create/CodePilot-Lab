@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — CodePilot Lab</title>
+    <meta name="description" content="What CodePilot Lab stores in your browser, what leaves it, and how to control or delete it." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/privacy.html" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Privacy Policy — CodePilot Lab" />
+    <meta property="og:description" content="Local-first data handling, plainly stated." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/command-center.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="block" style="padding-top: clamp(2.6rem, 7vh, 4.5rem)">
+        <div class="wrap prose">
+          <p class="kicker">Privacy · Last updated 10 November 2026</p>
+          <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">Privacy policy.</h1>
+          <p class="lead">
+            CodePilot Lab is local-first. It has no account system and no application backend of its
+            own. Most data never leaves your browser; the exceptions are listed explicitly below.
+          </p>
+
+          <h2>Data stored on your device</h2>
+          <p>Through IndexedDB and localStorage for this site's origin, the app may store:</p>
+          <ul>
+            <li>Project records: name, description, language, source type, timestamps, file counts, manifest, exclusions and an optional folder handle.</li>
+            <li>File tree entries and saved file contents you create, import or edit.</li>
+            <li>Conversion history, practice drafts, notes, bookmarks, progress and submissions.</li>
+            <li>AI provider settings: preset, base URL, model and non-secret preferences. An API key only if you opt into “remember in this browser”.</li>
+            <li>Feedback submissions and their delivery status.</li>
+            <li>Interface preferences such as the sidebar state and welcome-card dismissal.</li>
+          </ul>
+          <p>
+            This data stays in your browser profile for this origin. It is not synced by CodePilot
+            Lab. Clearing site data or using a private window removes or isolates it.
+          </p>
+
+          <h2>Data that can leave your device</h2>
+          <ul>
+            <li><strong>AI provider requests.</strong> When you press Send in the copilot or converter, the exact context shown in the context panel is sent to the endpoint you configured. That provider's privacy terms apply. CodePilot Lab does not proxy or retain it.</li>
+            <li><strong>Feedback.</strong> If the deployment configured <code>VITE_FEEDBACK_ENDPOINT</code>, the feedback payload is POSTed there without cookies or credentials. If not, it stays local.</li>
+            <li><strong>Local execution service.</strong> Code you run or trace is sent to the loopback service at <code>127.0.0.1</code> on the same machine. It is not sent to a remote server by CodePilot Lab.</li>
+          </ul>
+
+          <h2>Analytics</h2>
+          <p>
+            No analytics provider is configured in this release. The app does not set advertising
+            cookies, build cross-site profiles or transmit telemetry by default. If an operator adds
+            a privacy-conscious analytics endpoint, this policy and the deployment documentation must
+            be updated before launch.
+          </p>
+
+          <h2>Logs and error reporting</h2>
+          <p>
+            The browser console may contain local error details. The loopback service logs request
+            failures to its own terminal, including unexpected errors, but does not write a remote
+            log. Do not include secrets in feedback.
+          </p>
+
+          <h2>Your controls</h2>
+          <ul>
+            <li>Delete individual projects from the project picker; deletion cascades through stored entries and contents.</li>
+            <li>Clear conversations and conversions in the app, or clear all site data from your browser settings.</li>
+            <li>Forget a remembered API key in Settings.</li>
+            <li>Use the browser's storage controls to inspect or remove IndexedDB data for this origin.</li>
+          </ul>
+
+          <h2>Children and sensitive data</h2>
+          <p>
+            The beta is aimed at developers and learners. Do not submit sensitive personal data,
+            regulated data, credentials or third-party confidential code. There is no age-gated
+            account system because there are no accounts.
+          </p>
+
+          <h2>Changes and contact</h2>
+          <p>
+            Material changes will be reflected in this page and the repository. For privacy questions
+            or removal requests relating to a configured feedback endpoint, use the
+            <a href="/feedback.html">feedback page</a> and include only the minimum information needed.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

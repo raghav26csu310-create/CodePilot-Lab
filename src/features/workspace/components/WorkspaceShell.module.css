@@ -277,6 +277,61 @@
   overflow: hidden;
 }
 
+/* ------------------------------ Status bar ------------------------------- */
+
+.status {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding-inline: 12px;
+  border-top: 1px solid var(--hairline);
+  background: rgb(4 8 13 / 0.9);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.statusItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+}
+
+.statusItem[data-tone='ok'] {
+  color: var(--ok);
+}
+
+.statusItem[data-tone='warn'] {
+  color: var(--warn);
+}
+
+.statusDot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.statusSep {
+  width: 1px;
+  height: 9px;
+  flex: none;
+  background: var(--hairline);
+}
+
+.statusGrow {
+  flex: 1;
+}
+
 /* ------------------------------- Responsive ------------------------------ */
 
 @media (max-width: 900px) {

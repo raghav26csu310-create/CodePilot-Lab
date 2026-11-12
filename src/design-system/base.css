@@ -81,6 +81,42 @@ button {
   padding: 0;
 }
 
+/*
+ * Native selects still appear in a few secondary surfaces. Chromium inherits
+ * the page palette for the closed control but defaults the popup to a white
+ * list, which produced the white-on-white bug. These rules pin both the control
+ * and every option state to the dark surface palette.
+ */
+select {
+  color-scheme: dark;
+  background-color: var(--graphite);
+  color: var(--text);
+}
+
+select option,
+select optgroup {
+  background-color: var(--graphite);
+  color: var(--text);
+}
+
+select option:checked {
+  background-color: #173244;
+  color: var(--text);
+}
+
+select option:disabled {
+  color: var(--text-3);
+}
+
+/* Real tracer current-line decoration, applied through Monaco. */
+.codepilot-trace-line {
+  background: rgb(87 226 230 / 0.13);
+  outline: 1px solid rgb(87 226 230 / 0.36);
+  outline-offset: -1px;
+  border-radius: 2px;
+}
+
+
 img,
 svg {
   display: block;

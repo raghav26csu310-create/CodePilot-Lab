@@ -1,3 +1,31 @@
-# CodePilot Lab is a local-first tool, not a public site.
+# Public marketing pages are crawlable. The application routes are private,
+# client-rendered screens that also send X-Robots-Tag: noindex.
 User-agent: *
-Disallow: /
+Allow: /
+Allow: /home.html
+Allow: /features.html
+Allow: /workspace.html
+Allow: /copilot.html
+Allow: /tracer.html
+Allow: /practice.html
+Allow: /converter.html
+Allow: /docs.html
+Allow: /about.html
+Allow: /feedback.html
+Allow: /privacy.html
+Allow: /terms.html
+
+Disallow: /workspace/
+Disallow: /workspace
+Disallow: /settings
+Disallow: /feedback
+Disallow: /lab
+Disallow: /convert
+Disallow: /practice/
+Disallow: /practice
+Disallow: /copilot
+Disallow: /vault
+Disallow: /atlas
+Disallow: /activity
+
+Sitemap: __SITE_URL__/sitemap.xml

@@ -4,6 +4,13 @@ import {
   type ProjectRecord,
   type StoredEntry,
 } from './db'
+import {
+  assertStoredPath,
+  normalizeStoredPath,
+  storedPath,
+} from './storedPaths'
+
+export { StoredPathError, storedPath, validateEntryName, validateStoredPath } from './storedPaths'
 
 export type ContentSource = 'stored' | 'disk'
 
@@ -27,21 +34,11 @@ export type ContentSearchReport = {
 
 const SEARCH_HIT_LIMIT = 100
 
-function normalizePath(path: string): string {
-  return path
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '')
-}
+const normalizePath = normalizeStoredPath
 
 function getParentPath(path: string): string {
   const index = path.lastIndexOf('/')
   return index > 0 ? path.slice(0, index) : ''
-}
-
-function joinPath(parentPath: string, name: string): string {
-  return parentPath ? `${parentPath}/${name}` : name
 }
 
 function byteLength(value: string): number {
@@ -60,10 +57,6 @@ function remapPath(path: string, oldPath: string, newPath: string): string {
     return `${newPath}${path.slice(oldPath.length)}`
   }
   return path
-}
-
-export function storedPath(parentPath: string, name: string): string {
-  return joinPath(normalizePath(parentPath), name.trim())
 }
 
 export async function listStoredEntries(projectId: string): Promise<StoredEntry[]> {
@@ -184,7 +177,7 @@ export async function writeStoredContent(
   path: string,
   content: string,
 ): Promise<void> {
-  const normalized = normalizePath(path)
+  const normalized = assertStoredPath(path)
   const now = Date.now()
   const sizeBytes = byteLength(content)
 
@@ -258,8 +251,8 @@ export async function renameStoredEntry(
   path: string,
   name: string,
 ): Promise<string> {
-  const oldPath = normalizePath(path)
-  const newPath = joinPath(getParentPath(oldPath), name.trim())
+  const oldPath = assertStoredPath(path)
+  const newPath = storedPath(getParentPath(oldPath), name)
   const now = Date.now()
 
   if (newPath === oldPath) {
@@ -303,7 +296,7 @@ export async function deleteStoredEntry(
   projectId: string,
   path: string,
 ): Promise<string[]> {
-  const normalized = normalizePath(path)
+  const normalized = assertStoredPath(path)
 
   return db.transaction('rw', db.files, db.contents, db.projects, async () => {
     const entries = await db.files.where('projectId').equals(projectId).toArray()

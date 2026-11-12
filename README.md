@@ -2,14 +2,64 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Phase 5 — Intelligent AI Copilot.** The workspace now hosts a
-provider-independent assistant that reads the files you allow, streams answers, and
-proposes complete-file changes that you review in a diff before anything happens. It
-still does not execute code, and it makes no model call until you configure a provider
-and press Send.
+**Current milestone: Phase 7 — Public beta hardening.** The lab now includes a
+static public site with honest SEO, a real feedback pipeline, automated tests, centralized
+stored-path validation, route-level error boundaries and lazy modules, a hardened loopback
+execution service, and deployment/security documentation. The deployment default is
+frontend-only: execution remains a local companion process and is not offered as a public
+sandbox.
+
+## Public beta at a glance
+
+- **Public site:** `public/home.html`, `features.html`, `workspace.html`, `copilot.html`,
+  `tracer.html`, `practice.html`, `converter.html`, `docs.html`, `about.html`,
+  `feedback.html`, `privacy.html` and `terms.html`, with `robots.txt`, `sitemap.xml`,
+  canonicals, Open Graph metadata and structured data.
+- **Private app:** the React SPA is explicitly `noindex`; `vercel.json` also sends
+  `X-Robots-Tag` on app routes and rewrites direct navigation back to the shell.
+- **Tests:** `npm run test` runs Vitest suites for stored paths, feedback storage/delivery,
+  proposal parsing, diffs and executor request validation.
+- **Feedback:** written to IndexedDB first (`feedback` table, schema v4). If
+  `VITE_FEEDBACK_ENDPOINT` is set, the same JSON is POSTed and the UI reports local-only,
+  delivered, or failed with the HTTP status.
+- **Security:** loopback-only execution by default, bearer token required for an explicit
+  remote bind, CORS allow-list, concurrency cap/HTTP 429, sanitized 500s, stdin limits and
+  process cleanup. Still a resource-limited runner, not a sandbox.
+- **Docs:** `docs/architecture.md`, `docs/deployment.md`, `docs/security.md` and
+  `docs/production-readiness.md`.
 
 ## What actually works
 
+- **Execution Lab** (`/lab` and the workspace **Run** tab). Real compile/run through a
+  loopback Node service (`npm run exec`, `127.0.0.1:5310`) with temp directories,
+  timeouts, measured duration, real stdout/stderr/compile errors, stdin, Run/Stop and
+  clear. Six verified runtimes: Python 3.14, Node 24 (JavaScript and TypeScript via type
+  stripping), GCC/G++ 16 and JDK 26 (javac/java). Go is not offered by the runner. The
+  service is resource-limited and is explicitly **not** a security sandbox.
+- **Variable & execution tracer** for Python, instrumented with real `sys.settrace`
+  events: step forward/back, play/pause/restart, timeline scrubber and speed, current
+  line, locals with type/value/previous/changed/scope/declaration, call stack, and
+  branch/loop/call observation derived from actual events. Other languages are labelled
+  unsupported rather than simulated.
+- **Code Converter** (`/convert`). Nine languages (C, C++, Python, Java, JavaScript,
+  TypeScript, HTML, CSS, JSON), project/editor/paste sources, swap, instructions,
+  streamed provider conversion, a real LCS line diff, accept/reject, copy/download,
+  save-as-new, replace-with-confirmation, persisted history, honest warnings, and a real
+  validation run of the converted program.
+- **Practice Arena** (`/practice`, `/practice/:problemId`). Thirteen original
+  Easy/Medium/Hard problems across arrays, strings, hashing, sorting, binary search, two
+  pointers, sliding window, linked lists, stacks, queues, recursion, backtracking, trees,
+  graphs, DP, greedy, bit manipulation and math. Split statement/workspace, six
+  languages, persisted drafts and notes, progressive hints, gated explanation/solution,
+  visible-case Run, private-suite Submit, verdicts, hidden-case protection and stored
+  submission history.
+- **Shared editor and AI.** The same Monaco primitives, provider adapters and settings
+  are reused by the lab, converter and practice workspace. Inline streaming AI help
+  explains code, errors, the current trace step and practice approaches without a second
+  AI stack.
+- **Project language selector.** New projects choose from the nine real languages,
+  write a starter file to IndexedDB, and the workspace status bar shows the active file
+  language and whether it is runnable.
 - **AI Copilot** in the workspace dock (`/copilot` explains the model; `/settings`
   configures it). Provider-independent by design: a native **Ollama** adapter
   (`/api/chat`, NDJSON streaming) and an **OpenAI-compatible** adapter (SSE
@@ -51,9 +101,13 @@ and press Send.
 - **Project picker** (`/workspace`) lists stored records with live search, real
   timestamps, open counts, and honest empty/unavailable states. The registry is never
   seeded.
-- **Versioned storage schema (v2).** Tree entries (`files`) and file contents
-  (`contents`) are stored separately from project records. Opening a Phase-2/3 era
-  record transparently migrates its manifest into entries — no user data is reset.
+- **Versioned storage schema (v4).** Tree entries (`files`) and file contents (`contents`)
+  are stored separately from project records. Opening a Phase-2/3 era record transparently
+  migrates its manifest into entries — no user data is reset. Schema v4 adds the `feedback`
+  table.
+- **Stored-path validation.** Every write through `createStoredEntry`,
+  `renameStoredEntry`, `writeStoredContent` and `deleteStoredEntry` rejects `..`, absolute
+  paths, drive letters, control characters, empty segments and reserved Windows names.
 - **Workspace** at `/workspace/:projectId`: persisted explorer tree, elegant tabs,
   breadcrumbs, Copilot dock, and the bottom development panel.
 - **Monaco editor** (bundled locally, lazy-loaded; no CDN) with line numbers, bracket
@@ -67,8 +121,9 @@ and press Send.
   Kotlin, C#, Dockerfile and more, plus two custom themes that match the lab (Midnight
   and Graphite). TypeScript/JavaScript get the in-file language service; import
   resolution (codes 2307/2792/6133) is deliberately ignored because there is no module
-  graph yet, and the Problems panel says so. Syntax highlighting does not mean the
-  language can execute — runtime support is not built.
+  graph yet, and the Problems panel says so. Syntax highlighting is broader than runtime
+  support: Python, JavaScript, TypeScript, C, C++ and Java can run through the local
+  service; HTML, CSS and JSON are editor-only.
 - **File operations.** Create, rename and delete files/folders (persisted, with
   rename carrying over the unsaved draft), tab switching that preserves edits in Monaco
   models, dirty indicators, close-tab protection for unsaved buffers
@@ -93,29 +148,41 @@ and press Send.
 
 ## What is deliberately not built yet
 
-Project Atlas, Execution Lab (code cannot be run in any language), Project Vault, and
-Activity & Diagnostics remain placeholders. The development panel's Terminal and Output
-views state plainly that no process has ever run and no output is simulated. The AI
-Copilot cannot run commands, tests or builds; that belongs to a later phase.
+Project Atlas, Project Vault, and Activity & Diagnostics remain placeholders. The
+development panel's Terminal and Output views state plainly that no interactive shell
+exists; program execution happens through the Run tab and the loopback service. There is
+no hardened sandbox: the execution service is a resource-limited local runner, not a
+security boundary. HTML, CSS and JSON are editor languages with no runtime, and only
+Python has a real tracer in this phase.
 
-No backend, account, API key, database service, or paid dependency is required to run
-this milestone. A local model (for example Ollama) is optional.
+No backend, account, API key, database service, or paid dependency is required for the
+editor, execution, tracing, converter UI or practice grading. A local model (for example
+Ollama) is optional and is only used for AI conversion and explanations.
 
 ## Run
 
 ```bash
 npm install
-npm run dev
+npm run dev      # Vite on http://localhost:5173
+npm run exec     # local execution service on http://127.0.0.1:5310 (separate terminal)
 ```
 
-Open the URL printed by Vite (default `http://127.0.0.1:5173`).
+Open the URL printed by Vite (default `http://127.0.0.1:5173`). The editor, converter
+review and practice browsing work without the execution service; running, tracing and
+submitting show the explicit start command instead of fabricating a result.
 
 ```bash
 npm run typecheck
 npm run lint
+npm run test
 npm run build
 npm run preview
 ```
+
+Public pages are served directly by Vite from `public/` (for example
+`http://localhost:5173/home.html`). `npm run build` copies them into `dist/`. Set
+`SITE_URL` and run `npm run site:url` (or use the Vercel build command) to make
+canonical/Open Graph/sitemap URLs absolute.
 
 ## Stack
 
@@ -126,30 +193,48 @@ tokens, and locally bundled Inter / Space Grotesk / JetBrains Mono via Fontsourc
 ## Structure
 
 ```
+server/             loopback execution service: HTTP API, compile/run, grading,
+                    Python sys.settrace instrumentation, private problem suites
+scripts/            set-site-url.mjs build-time canonical/OG/sitemap rewrite
+docs/               architecture, deployment, security, production readiness
+public/             static marketing site, screenshots, robots.txt, sitemap.xml
 src/
-  app/              shell, sidebar, top bar, command palette, mobile menu, status bar, routes
+  app/              shell, sidebar, top bar, command palette, mobile menu, status bar,
+                    routes, route error boundary and lazy fallback
   brand/            logo mark and wordmark
-  design-system/    tokens, base styles, button / badge / kbd / skeleton primitives
+  design-system/    tokens, base styles, button / badge / kbd / skeleton / select primitives
   features/
     editor/         Monaco integration layer: setup (workers, themes, TS service),
-                    language registry, editor preferences, command context
+                    language registry, project languages, preferences, command context
     copilot/        provider adapters, settings store, context builder, proposal
-                    parser, diff engine, markdown, dock dialogs, overview page
+                    parser, diff engine, markdown, dock dialogs, overview, quick AI help
+    execution/      Execution Lab page, execution-service client, standalone Monaco editor
+    converter/      conversion prompt/parser, line diff, staging, storage, converter page
+    practice/       original problem catalog, persisted progress, library and workspace
+    feedback/       public beta feedback form
     settings/       live provider and credential settings page
     workspace/      state (reducer/context), storage-backed pages, explorer, tabs,
-                    Monaco workbench, dialogs, quick open, development panel
-    command-center/ landing, quick actions, system status
-  lib/              Dexie schema (v2) + storage services, folder scanning, formatting,
-                    focus trap, WebGL support, stage activity, sidebar preference
+                    Monaco workbench, dialogs, quick open, development panel, Run tab
+    command-center/ landing, welcome card, quick actions, system status
+  lib/              Dexie schema (v4) + storage services, stored-path validation,
+                    feedback delivery, folder scanning, formatting, focus trap, WebGL support
   three/            lazy-loaded R3F canvas and Lattice scene
 ```
 
 ## Local data and policy
 
-- The database (`codepilot-lab`) is versioned. Schema v2 keeps `projects`, adds `files`
+- The database (`codepilot-lab`) is versioned. Schema v4 keeps `projects`, `files`
   (tree entries, keyed `[projectId+path]`), `contents` (saved text, keyed
-  `[projectId+path]`), and `settings`. Migration backfills entries from old manifests
-  and fabricates no content.
+  `[projectId+path]`), and `settings`, adds `conversions`, `practiceProgress`,
+  `practiceSubmissions` and `feedback`. Migration backfills entries from old manifests and
+  fabricates no content.
+- Hidden practice tests exist only in `server/problems.mjs`. `/grade` returns case
+  indices, hidden flags, statuses and bounded visible stderr — never hidden inputs,
+  expected outputs or full hidden output. The same suites are not bundled into the
+  frontend.
+- Conversions, practice drafts, notes, bookmarks and submissions are stored in browser
+  IndexedDB only. Provider settings are stored under `settings` key
+  `copilot.provider.v1`; the API key is persisted only when opted in.
 - Stored content is authoritative after the first save. A linked `directoryHandle` is
   read only when no saved copy exists; permission prompts are disclosed.
 - `directoryHandle` is structured-clone data; re-permission may be requested on read.
@@ -165,7 +250,24 @@ src/
 
 ## Verification
 
-- `npm run typecheck`, `npm run lint`, and `npm run build` pass.
+- `npm run typecheck`, `npm run lint`, `npm run test` (35 tests) and `npm run build` pass.
+- Phase 7 verification covered: stored-path rejection for traversal/absolute/control
+  characters; feedback local persistence and endpoint success/failure; proposal parsing and
+  diffing; executor validation and hidden-data response shape; static public pages and SEO
+  assets; private-route noindex; lazy route fallback and error boundary; the New Project
+  language dropdown in its opened state; direct-route refresh; desktop and narrow layouts.
+- The Phase 7 production build was also served locally with the exact `vercel.json` CSP,
+  noindex headers and rewrites: direct routes survived refresh, Monaco rendered with zero
+  CSP violations, a real Python run and 9-event trace succeeded, feedback persisted to
+  IndexedDB, all 12 static pages passed metadata/link/image checks, and 390 px layouts had
+  no document overflow. `dist/` had no secret-like strings and `npm audit --omit=dev`
+  reported zero vulnerabilities after a `dompurify@3.4.17` override.
+- Phase 6 verification covered: health probes for all runtimes; real programs in Python,
+  JavaScript, TypeScript, C, C++ and Java; stdin, measured duration and
+  compile/runtime errors; Stop/cancel; Python trace events, variables, stack and
+  timeline controls; converter source modes, streamed conversion, diff, accept/reject,
+  save/replace and validation; practice Run and Submit, hidden-case protection, verdict
+  storage, hints and solution gating; persistence across reload.
 - Phase 5 verification covered: unconfigured-provider honesty and settings save/forget,
   a real streamed Ollama request (start, stop, copy, clear), proposal parsing → diff →
   accept → dirty buffer → undo/restore, the Problems "Ask Copilot" entry point, failing
@@ -175,20 +277,28 @@ src/
   with draft preservation, save/reload persistence through IndexedDB, create/rename/
   delete of files and folders, project rename/delete, quick open and content search,
   shortcut behaviour, storage failure disclosure, and regression checks over the Command
-  Center, dossier and responsive layouts. See the final phase report for details.
+  Center, dossier and responsive layouts.
 - The 3D lattice still requires WebGL; the static fallback is used otherwise.
 
 ## Known constraints
 
-- The registry is specific to this browser profile. It does not sync and is not exported
-  yet.
+- The registry is specific to this browser profile. It does not sync; export/import is
+  scheduled.
 - The folder picker is Chromium-only; other browsers store a manifest without a handle.
 - Monaco's TypeScript service understands the open file in isolation: project-wide
   resolution, tests and builds are not claimed as verified anywhere in the product.
-- The main bundle still ships the lazy 3D scene; Monaco loads as separate lazy chunks
-  (workers + editor core) only when the editor is opened.
+- Monaco and the 3D scene load as lazy chunks. Route-level lazy loading keeps the initial
+  bundle smaller, but Monaco workers still initialize on first editor use.
 - The Copilot calls model providers directly from the browser. CORS can block a remote
   provider; free tiers rate-limit and the UI reports the provider's status rather than
   retrying. Proposals are complete files, so very large files hit the diff line cap.
   Conversation history is per workspace session and is not archived to disk.
-- Execution and editor→disk write-through remain scheduled for later phases.
+- Execution is a resource-limited loopback Node runner, not a hardened sandbox. It is
+  bound to `127.0.0.1`, uses temporary directories, timers and tree-kill, but it must not
+  be exposed to untrusted networks. Only Python has a real tracer; other languages are
+  marked unsupported. HTML, CSS and JSON have no runtime. AI conversion quality depends
+  entirely on the configured provider and is never claimed to be behaviour-preserving.
+- Editor→disk write-through remains scheduled; writes go to the IndexedDB copy of a
+  project.
+- No analytics provider is configured. No user counts, ratings or testimonials are
+  published.

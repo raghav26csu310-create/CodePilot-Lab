@@ -12,6 +12,7 @@ import { ProjectDialog } from './ProjectDialog'
 import { QuickActions } from './QuickActions'
 import { RecentProjects } from './RecentProjects'
 import { SystemStatus } from './SystemStatus'
+import { WelcomeCard } from './WelcomeCard'
 import styles from './CommandCenter.module.css'
 
 type DialogMode = 'create' | 'import'
@@ -124,7 +125,7 @@ export function CommandCenterPage() {
               </span>
               <span className={styles.noteSep} aria-hidden="true" />
               <span className={`${styles.noteItem} ${styles.noteLive}`}>
-                Copilot live · milestone 05
+                Execution, tracing and practice · live
               </span>
             </motion.p>
           </div>
@@ -134,6 +135,8 @@ export function CommandCenterPage() {
           </motion.div>
         </motion.div>
       </section>
+
+      <WelcomeCard />
 
       <motion.div
         className={styles.dashboard}

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>About — CodePilot Lab</title>
+    <meta name="description" content="Why CodePilot Lab exists: a local-first instrument for learning software with real execution, honest instrumentation and reviewable AI." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/about.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="About — CodePilot Lab" />
+    <meta property="og:description" content="A local-first instrument, not another dashboard." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/command-center.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html">Docs</a><a href="/about.html" aria-current="page">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="block" style="padding-top: clamp(2.6rem, 7vh, 4.5rem)">
+        <div class="wrap prose">
+          <p class="kicker">About</p>
+          <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">Built to make the machine visible.</h1>
+          <p class="lead">
+            CodePilot Lab is a local-first coding laboratory. It exists because most “AI coding”
+            surfaces hide two things at once: the program that actually ran, and the evidence behind
+            the model's answer.
+          </p>
+
+          <h2>Principles</h2>
+          <ul>
+            <li><strong>No invented data.</strong> Projects, timestamps, execution output, trace events, metrics and health all come from real browser, IndexedDB, runtime or WebGL APIs.</li>
+            <li><strong>No silent writes.</strong> AI proposals are reviewed as diffs; saves stay manual; replacements require confirmation.</li>
+            <li><strong>No hidden network.</strong> The app runs no backend of its own. The only calls are the provider you configure, the optional feedback endpoint and the loopback runner.</li>
+            <li><strong>No pretended safety.</strong> The execution service is a resource-limited local runner, not a sandbox, and the product says so in the UI and documentation.</li>
+            <li><strong>No fake social proof.</strong> This site publishes no user counts, ratings or testimonials. The beta is real; the audience numbers are simply unknown.</li>
+          </ul>
+
+          <h2>What is honest to call “done”</h2>
+          <p>
+            The workspace, copilot, execution lab, Python tracer, practice arena, converter, settings
+            and feedback are live. Project Atlas, Project Vault and Activity &amp; Diagnostics remain
+            visible placeholders because their real implementations do not exist yet. Scheduled work
+            is labelled on the route itself.
+          </p>
+
+          <h2>Who builds it</h2>
+          <p>
+            CodePilot Lab is an independent project. There is no company, funding claim or implied
+            team page here. The repository, version and licence terms are the authoritative record.
+          </p>
+
+          <div class="actions">
+            <a class="btn btn-primary" href="/">Try the lab</a>
+            <a class="btn btn-secondary" href="/feedback.html">Send feedback</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

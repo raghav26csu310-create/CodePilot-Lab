@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Code Workspace — CodePilot Lab</title>
+    <meta name="description" content="A real Monaco workspace with a persisted file tree, tabs, dirty buffers, quick open, project search and IndexedDB saves." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/workspace.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Code Workspace — CodePilot Lab" />
+    <meta property="og:description" content="A real Monaco workspace over a persisted local project tree." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/workspace.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html" aria-current="page">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="kicker">Code Workspace · Live</p>
+            <h1>An editor that remembers <span>your</span> files.</h1>
+            <p class="lead">
+              Open a project and the real tree appears. Edit, rename, create and delete; every save
+              writes through to IndexedDB. Reopening the project restores the saved contents, not a
+              demo snapshot.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/">Open the app</a>
+              <a class="btn btn-secondary" href="/docs.html#workspace">Workspace guide</a>
+            </div>
+          </div>
+          <figure class="shot">
+            <img src="/screenshots/workspace.png" width="1440" height="1000" alt="CodePilot Lab workspace with the file explorer, Monaco editor, tabs and the Copilot dock." />
+            <figcaption>Workspace · stored project tree, Monaco and the copilot dock</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap">
+          <div class="grid">
+            <article class="card"><h3>Real file operations</h3><p>Create files and folders, rename with draft preservation, and delete with confirmation. Duplicate names and unsafe paths are rejected before a write.</p></article>
+            <article class="card"><h3>Dirty state you can trust</h3><p>Tabs use Monaco's alternative version id, so the dot means the buffer differs from the stored copy. Closing a dirty tab offers Save &amp; close, Discard or Cancel.</p></article>
+            <article class="card"><h3>Fast navigation</h3><p><code>Ctrl/⌘ P</code> quick open, project-wide content search with capped results, tab cycling, save all and find &amp; replace.</p></article>
+            <article class="card"><h3>Diagnostics from Monaco</h3><p>The Problems panel reads real markers from open buffers. It discloses that there is no project-wide module resolution yet.</p></article>
+            <article class="card"><h3>Linked folders are a fallback</h3><p>If a folder was imported with the File System Access API, its real bytes are read only when no saved copy exists. Permission prompts are shown.</p></article>
+            <article class="card"><h3>Run without leaving</h3><p>The Run tab reads the live draft and calls the local execution service. It never claims a run happened without a response.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap prose">
+          <h2>Storage model</h2>
+          <p>
+            Schema v4 keeps project records, tree entries and file contents separately. Contents are
+            loaded on demand, so a large project does not materialize every file at once. A stored
+            copy is authoritative after the first save; the folder handle is only a read fallback.
+          </p>
+          <div class="callout"><strong>Not cloud sync.</strong> The registry belongs to this browser profile. Clearing site data removes it. Export and archive are scheduled, not implemented.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

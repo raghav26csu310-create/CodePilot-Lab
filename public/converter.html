@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Code Converter — CodePilot Lab</title>
+    <meta name="description" content="Translate code between nine languages with streamed AI output, a real line diff, acceptance, download, save-as-new, confirmed replace and validation runs." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/converter.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Code Converter — CodePilot Lab" />
+    <meta property="og:description" content="Review-first conversion with a real diff." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/converter.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html" aria-current="page">Converter</a><a href="/docs.html">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="kicker">Code Converter · Live</p>
+            <h1>Translate code, then <span>review</span> it.</h1>
+            <p class="lead">
+              Convert between C, C++, Python, Java, JavaScript, TypeScript, HTML, CSS and JSON. The
+              result is not applied blindly: inspect a real LCS diff, accept or reject it, download
+              it, save it as a new file, or replace a stored file after confirmation.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/convert">Open the converter</a>
+              <a class="btn btn-secondary" href="/docs.html#converter">Converter guide</a>
+            </div>
+          </div>
+          <figure class="shot">
+            <img src="/screenshots/converter.png" width="1440" height="1000" alt="CodePilot Lab code converter with source and target language selectors, editor and an empty review panel before a conversion runs." />
+            <figcaption>Converter · language selection, instructions and review</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap">
+          <div class="grid">
+            <article class="card"><h3>Nine languages</h3><p>C, C++, Python, Java, JavaScript, TypeScript, HTML, CSS and JSON. HTML, CSS and JSON convert as text and cannot run here.</p></article>
+            <article class="card"><h3>Three source modes</h3><p>Paste directly, use the active workspace draft, or hand off a stored project file. The source origin is displayed.</p></article>
+            <article class="card"><h3>A real diff</h3><p>The review is a line-level LCS comparison of the two strings actually held, with added and removed counts and a size cap.</p></article>
+            <article class="card"><h3>Never silently saved</h3><p>Accept changes the review state. Save-as-new writes a new stored file; replace requires explicit confirmation and writes the IndexedDB copy.</p></article>
+            <article class="card"><h3>History</h3><p>Completed conversions store source, result, provider, model, warnings, status and duration so you can revisit them.</p></article>
+            <article class="card"><h3>Honest quality</h3><p>Conversion is model-generated. The UI warns that behaviour preservation is not guaranteed and offers a validation run where a runtime exists.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap prose">
+          <h2>Requirements</h2>
+          <p>
+            Conversion needs a configured AI provider. Without one, the converter explains that no
+            provider is configured and does not fabricate output. Saving and replacing need a local
+            project; validation runs need the execution service and a runnable target language.
+          </p>
+          <div class="callout"><strong>Review is not proof.</strong> A clean diff only means the text changed as shown. Run tests or the validation runner before trusting converted behaviour.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

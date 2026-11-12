@@ -31,7 +31,7 @@ export type WorkspaceTab = {
   error?: string
 }
 
-export type BottomPanelTab = 'terminal' | 'output' | 'problems' | 'diagnostics'
+export type BottomPanelTab = 'run' | 'terminal' | 'output' | 'problems' | 'diagnostics'
 
 export type WorkspaceDialog =
   | { kind: 'create-file'; parentPath: string }

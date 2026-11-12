@@ -22,4 +22,26 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    // TypeScript API files: keep the TS recommended rules from the block above
+    // and add Node globals. Do not re-enable the base no-unused-vars rule here;
+    // it flags parameters in type signatures.
+    files: ['server/**/*.ts'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      globals: globals.node,
+    },
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
+    // Plain Node ESM (the execution companion and scripts).
+    files: ['server/**/*.mjs'],
+    extends: [js.configs.recommended],
+    languageOptions: {
+      ecmaVersion: 2023,
+      globals: globals.node,
+    },
+  },
 )

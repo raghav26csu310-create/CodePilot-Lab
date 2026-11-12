@@ -10,8 +10,15 @@ import {
 } from 'react'
 
 import { Button } from '../../design-system/primitives/Button'
+import { Select } from '../../design-system/primitives/Select'
 import { createProjectRecord, findProjectByName, type ProjectRecord } from '../../lib/db'
 import { formatBytes, formatDate } from '../../lib/format'
+import {
+  PROJECT_LANGUAGES,
+  projectLanguage,
+  type ProjectLanguageId,
+} from '../editor/projectLanguages'
+import { createStoredEntry, writeStoredContent } from '../../lib/projectStorage'
 import {
   EXCLUDED_DIRECTORIES,
   MAX_IMPORT_DEPTH,
@@ -32,19 +39,11 @@ type ProjectDialogProps = {
   onCompleted: (project: ProjectRecord) => void
 }
 
-const LANGUAGES = [
-  'TypeScript',
-  'JavaScript',
-  'Python',
-  'Rust',
-  'Go',
-  'Java',
-  'C#',
-  'C++',
-  'Ruby',
-  'Swift',
-  'Other',
-]
+const LANGUAGE_OPTIONS = PROJECT_LANGUAGES.map((language) => ({
+  value: language.id,
+  label: language.label,
+  description: language.runtime ? 'Runs in the Execution Lab' : 'Editor only',
+}))
 
 function describeError(cause: unknown, fallback: string): string {
   if (cause instanceof Error && cause.message) {
@@ -123,7 +122,7 @@ function CreateProjectForm({
   onCompleted: (project: ProjectRecord) => void
 }) {
   const [name, setName] = useState('')
-  const [language, setLanguage] = useState('TypeScript')
+  const [language, setLanguage] = useState<ProjectLanguageId>('typescript')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -150,12 +149,25 @@ function CreateProjectForm({
         return
       }
 
+      const selected = projectLanguage(language)
       const project = await createProjectRecord({
         name: trimmed,
         description,
-        language,
+        language: selected.label,
         source: 'created',
       })
+
+      // Write a real starter file so the workspace opens on something runnable.
+      try {
+        await createStoredEntry(project.id, '', selected.fileName, 'file')
+        await writeStoredContent(project.id, selected.fileName, selected.starter)
+      } catch {
+        setError(
+          'The project record was created, but its starter file could not be written to IndexedDB. Create a file manually in the workspace.',
+        )
+        return
+      }
+
       onCompleted(project)
     } catch (cause) {
       setError(
@@ -195,18 +207,16 @@ function CreateProjectForm({
           <label className={styles.label} htmlFor="project-language">
             Primary language
           </label>
-          <select
+          <Select
             id="project-language"
-            className={styles.select}
             value={language}
-            onChange={(event) => setLanguage(event.target.value)}
-          >
-            {LANGUAGES.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => setLanguage(value as ProjectLanguageId)}
+            options={LANGUAGE_OPTIONS}
+            ariaLabel="Primary language"
+          />
+          <p className={styles.languageNote}>
+            {projectLanguage(language).note}
+          </p>
         </div>
 
         <div className={styles.field}>

@@ -1,8 +1,22 @@
-import { Check, ChevronDown, CircleAlert, FlaskConical, KeyRound, Loader2, Save, Trash2 } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  CircleAlert,
+  FlaskConical,
+  KeyRound,
+  Loader2,
+  RefreshCw,
+  Save,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react'
 import { useId, useState } from 'react'
 
 import { Button } from '../../design-system/primitives/Button'
 import { AiError, describeAiError } from './errors'
+import { refreshGateway, useGateway } from './gateway/store'
+import { saveGatewayConnection } from './gateway/client'
+import { describeGatewayAvailability } from './providers/gateway'
 import { DEFAULT_AI_SETTINGS, SETTINGS_LIMITS } from './providerPresets'
 import { testProviderConnection } from './providers'
 import {
@@ -23,6 +37,7 @@ type ProviderSettingsFormProps = {
 
 export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSettingsFormProps) {
   const snapshot = useAiSettings()
+  const gateway = useGateway()
   const [draft, setDraft] = useState<AiSettings>(() => snapshot.settings)
   const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -35,6 +50,12 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
   const id = useId()
   const presets = availablePresets()
   const preset = presets.find((entry) => entry.id === draft.preset) ?? presets[0]
+  const managed = draft.provider === 'gateway'
+  // Routing through the API requires a real session. Until the probe answers we
+  // do not guess: the control is disabled and saving is held, so a click can
+  // never silently fall back to a direct browser call.
+  const gatewayChecking = gateway.reachable === null || gateway.checking
+  const routed = gateway.user !== null && draft.route === 'gateway'
 
   const patch = (next: Partial<AiSettings>) => {
     setDraft((current) => ({ ...current, ...next }))
@@ -43,7 +64,14 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
   }
 
   const handlePreset = (presetId: string) => {
-    setDraft((current) => settingsForPreset(current, presetId))
+    setDraft((current) => {
+      const next = settingsForPreset(current, presetId)
+      // Without a session there is no gateway to route through, so a BYO preset
+      // must not inherit "gateway" and then fail on save.
+      return next.provider === 'gateway' || gateway.user !== null
+        ? next
+        : { ...next, route: 'direct' }
+    })
     setSaved(false)
     setReport(null)
   }
@@ -53,7 +81,10 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
     setProblem(null)
     setReport(null)
     try {
-      const result = await testProviderConnection(draft)
+      const result = await testProviderConnection({
+        ...draft,
+        route: managed ? 'gateway' : routed ? 'gateway' : 'direct',
+      })
       setReport(result)
       recordConnectionTest(result)
     } catch (cause) {
@@ -67,7 +98,31 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
     setSaving(true)
     setProblem(null)
     try {
-      const stored = await saveAiSettings(draft)
+      if (!managed && routed) {
+        await saveGatewayConnection({
+          provider: draft.provider === 'ollama' ? 'ollama' : 'openai-compatible',
+          baseUrl: draft.baseUrl.trim(),
+          model: draft.model.trim(),
+          apiKey: draft.apiKey.trim() || undefined,
+        })
+        const stored = await saveAiSettings({
+          ...draft,
+          route: 'gateway',
+          apiKey: '',
+          rememberKey: false,
+        })
+        setDraft(stored)
+        setSaved(true)
+        setReport(null)
+        await refreshGateway()
+        onSaved?.(stored)
+        return
+      }
+
+      const stored = await saveAiSettings({
+        ...draft,
+        route: managed ? 'gateway' : 'direct',
+      })
       setDraft(stored)
       setSaved(true)
       setReport(null)
@@ -96,8 +151,33 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
   }
 
   const keyNeedsAttention = (preset?.keyExpected ?? false) && draft.apiKey.trim().length === 0
-  const canTest = draft.baseUrl.trim().length > 0
-  const canSave = draft.baseUrl.trim().length > 0 && draft.model.trim().length > 0
+  const canTest = managed || draft.baseUrl.trim().length > 0
+  const canSave =
+    !gatewayChecking && (managed || (draft.baseUrl.trim().length > 0 && draft.model.trim().length > 0))
+
+  const gatewayState: 'checking' | 'offline' | 'signed-out' | 'ready' | 'no-provider' =
+    gateway.reachable === null || gateway.checking
+      ? 'checking'
+      : gateway.reachable === false
+        ? 'offline'
+        : !gateway.user
+          ? 'signed-out'
+          : gateway.status
+            ? 'ready'
+            : 'no-provider'
+
+  const gatewayDetail =
+    gatewayState === 'checking'
+      ? 'Asking the CodePilot API for its real status.'
+      : gatewayState === 'offline'
+        ? (gateway.error ?? 'The CodePilot API did not answer.')
+        : gatewayState === 'signed-out'
+          ? 'Sign in to CodePilot Cloud in Settings to use managed AI.'
+          : gatewayState === 'no-provider'
+            ? (gateway.error ?? 'The API answered, but it did not report AI availability.')
+            : gateway.status
+              ? describeGatewayAvailability(gateway.status).detail
+              : ''
 
   return (
     <div className={styles.form} data-compact={compact || undefined}>
@@ -107,9 +187,11 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
           <span>Provider &amp; model</span>
         </div>
         <p>
-          Nothing is sent until you ask. The workspace stays fully usable with no provider
-          configured. This build has no server: credentials live in this browser tab, and only
-          persist if you opt in below.
+          {managed
+            ? 'CodePilot AI runs through the CodePilot API. Requests are authenticated with your account and the provider key never reaches this browser.'
+            : routed
+              ? 'Requests are routed through the CodePilot API. The key is stored encrypted on the server, never persisted in this browser.'
+              : 'This is an advanced local/BYO connection. The browser calls the endpoint you enter directly, so that endpoint sees the request and any key you provide.'}
         </p>
       </div>
 
@@ -129,100 +211,168 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
         <span className={styles.hint}>{preset?.note}</span>
       </label>
 
-      <label className={styles.field} htmlFor={`${id}-url`}>
-        <span className={styles.label}>
-          Base URL
-          <span className={styles.kind}>{draft.provider === 'ollama' ? 'Ollama API' : 'OpenAI-compatible'}</span>
-        </span>
-        <input
-          id={`${id}-url`}
-          type="url"
-          spellCheck={false}
-          placeholder="http://localhost:11434"
-          value={draft.baseUrl}
-          onChange={(event) => patch({ baseUrl: event.target.value })}
-        />
-        <span className={styles.hint}>
-          {draft.provider === 'ollama'
-            ? 'Ollama serves this at http://localhost:11434. Browser calls need OLLAMA_ORIGINS to allow this origin.'
-            : 'Usually ends in /v1. A local proxy URL works if you keep keys server-side.'}
-        </span>
-      </label>
-
-      <div className={styles.field}>
-        <label className={styles.label} htmlFor={`${id}-model`}>
-          Model
-          <span className={styles.kind}>
-            {snapshot.models.length > 0 ? `${snapshot.models.length} advertised` : 'not listed yet'}
-          </span>
-        </label>
-        <input
-          id={`${id}-model`}
-          type="text"
-          spellCheck={false}
-          placeholder={preset?.defaultModel || 'e.g. qwen3:8b'}
-          list={`${id}-models`}
-          value={draft.model}
-          onChange={(event) => patch({ model: event.target.value })}
-        />
-        <datalist id={`${id}-models`}>
-          {snapshot.models.map((model) => (
-            <option key={model} value={model} />
-          ))}
-        </datalist>
-        <span className={styles.hint}>
-          Must match a model the provider actually has. Test the connection to list them.
-        </span>
-      </div>
-
-      <label className={styles.field} htmlFor={`${id}-key`}>
-        <span className={styles.label}>
-          API key
-          {preset?.keyExpected ? (
-            <span className={styles.kind} data-tone={keyNeedsAttention ? 'warn' : 'ok'}>
-              {keyNeedsAttention ? 'required by this provider' : 'present'}
-            </span>
-          ) : (
-            <span className={styles.kind}>optional</span>
-          )}
-        </span>
-        <div className={styles.keyRow}>
-          <KeyRound size={14} className={styles.keyIcon} />
-          <input
-            id={`${id}-key`}
-            type={showKey ? 'text' : 'password'}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="sk-… (never compiled into the app)"
-            value={draft.apiKey}
-            onChange={(event) => patch({ apiKey: event.target.value })}
-          />
-          <button
-            type="button"
-            className={styles.showKey}
-            onClick={() => setShowKey((current) => !current)}
-          >
-            {showKey ? 'Hide' : 'Show'}
-          </button>
+      {managed ? (
+        <div className={styles.managed} data-state={gatewayState}>
+          <div className={styles.managedHead}>
+            <ShieldCheck size={15} />
+            <strong>
+              {gatewayState === 'checking'
+                ? 'Checking CodePilot Cloud…'
+                : gatewayState === 'offline'
+                  ? 'CodePilot API unavailable'
+                  : gatewayState === 'signed-out'
+                    ? 'Not signed in'
+                    : gatewayState === 'no-provider'
+                      ? 'No AI provider available'
+                      : gateway.status
+                        ? describeGatewayAvailability(gateway.status).label
+                        : 'CodePilot Cloud'}
+            </strong>
+            <button
+              type="button"
+              className={styles.recheck}
+              onClick={() => void refreshGateway()}
+              disabled={gateway.checking}
+            >
+              <RefreshCw size={12} data-spinning={gateway.checking || undefined} />
+              Recheck
+            </button>
+          </div>
+          <p>{gatewayDetail}</p>
+          <small>
+            Provider keys are stored encrypted on the API. No platform key is ever shipped to the
+            browser.
+          </small>
         </div>
-        <span className={styles.hint}>
-          Kept in memory for this tab by default. Use a local proxy if a key must never reach the
-          browser.
-        </span>
-      </label>
+      ) : (
+        <>
+          <label className={styles.field} htmlFor={`${id}-url`}>
+            <span className={styles.label}>
+              Base URL
+              <span className={styles.kind}>{draft.provider === 'ollama' ? 'Ollama API' : 'OpenAI-compatible'}</span>
+            </span>
+            <input
+              id={`${id}-url`}
+              type="url"
+              spellCheck={false}
+              placeholder="http://localhost:11434"
+              value={draft.baseUrl}
+              onChange={(event) => patch({ baseUrl: event.target.value })}
+            />
+            <span className={styles.hint}>
+              {draft.provider === 'ollama'
+                ? 'Ollama serves this at http://localhost:11434. Browser calls need OLLAMA_ORIGINS to allow this origin.'
+                : 'Usually ends in /v1. A local proxy URL works if you keep keys server-side.'}
+            </span>
+          </label>
 
-      <label className={styles.check} htmlFor={`${id}-remember`}>
-        <input
-          id={`${id}-remember`}
-          type="checkbox"
-          checked={draft.rememberKey}
-          onChange={(event) => patch({ rememberKey: event.target.checked })}
-        />
-        <span>
-          Remember the key in this browser&apos;s IndexedDB
-          <small>Off by default. Clearing the key or forgetting settings removes it.</small>
-        </span>
-      </label>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor={`${id}-model`}>
+              Model
+              <span className={styles.kind}>
+                {snapshot.models.length > 0 ? `${snapshot.models.length} advertised` : 'not listed yet'}
+              </span>
+            </label>
+            <input
+              id={`${id}-model`}
+              type="text"
+              spellCheck={false}
+              placeholder={preset?.defaultModel || 'e.g. qwen3:8b'}
+              list={`${id}-models`}
+              value={draft.model}
+              onChange={(event) => patch({ model: event.target.value })}
+            />
+            <datalist id={`${id}-models`}>
+              {snapshot.models.map((model) => (
+                <option key={model} value={model} />
+              ))}
+            </datalist>
+            <span className={styles.hint}>
+              Must match a model the provider actually has. Test the connection to list them.
+            </span>
+          </div>
+
+          <label className={styles.field} htmlFor={`${id}-key`}>
+            <span className={styles.label}>
+              API key
+              {preset?.keyExpected ? (
+                <span className={styles.kind} data-tone={keyNeedsAttention ? 'warn' : 'ok'}>
+                  {keyNeedsAttention ? 'required by this provider' : 'present'}
+                </span>
+              ) : (
+                <span className={styles.kind}>optional</span>
+              )}
+            </span>
+            <div className={styles.keyRow}>
+              <KeyRound size={14} className={styles.keyIcon} />
+              <input
+                id={`${id}-key`}
+                type={showKey ? 'text' : 'password'}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="sk-… (never compiled into the app)"
+                value={draft.apiKey}
+                onChange={(event) => patch({ apiKey: event.target.value })}
+              />
+              <button
+                type="button"
+                className={styles.showKey}
+                onClick={() => setShowKey((current) => !current)}
+              >
+                {showKey ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <span className={styles.hint}>
+              {routed
+                ? 'Sent once to the CodePilot API when you save, stored encrypted, and never returned to this browser. Leave blank to keep the key already stored on the server.'
+                : 'Kept in memory for this tab by default. Use a local proxy if a key must never reach the browser.'}
+            </span>
+          </label>
+
+          <label className={styles.check} htmlFor={`${id}-route`}>
+            <input
+              id={`${id}-route`}
+              type="checkbox"
+              checked={routed}
+              disabled={gatewayChecking || gateway.user === null}
+              onChange={(event) =>
+                patch({
+                  route: event.target.checked ? 'gateway' : 'direct',
+                  rememberKey: event.target.checked ? false : draft.rememberKey,
+                })
+              }
+            />
+            <span>
+              Send through the CodePilot API
+              <small>
+                {gatewayChecking
+                  ? 'Checking your CodePilot session…'
+                  : gateway.user
+                    ? 'The key is sent once to your CodePilot account and stored encrypted (AES-256-GCM). It never returns to this browser. Off = direct browser call.'
+                    : 'Sign in above to enable this. Until then this browser calls the endpoint directly and the key stays in this tab.'}
+              </small>
+            </span>
+          </label>
+
+          {!routed ? (
+            <label className={styles.check} htmlFor={`${id}-remember`}>
+              <input
+                id={`${id}-remember`}
+                type="checkbox"
+                checked={draft.rememberKey}
+                onChange={(event) => patch({ rememberKey: event.target.checked })}
+              />
+              <span>
+                Remember the key in this browser&apos;s IndexedDB
+                <small>
+                  Off by default. This is plaintext, not encrypted. Clearing the key or forgetting
+                  settings removes it.
+                </small>
+              </span>
+            </label>
+          ) : null}
+        </>
+      )}
 
       <button
         type="button"
@@ -305,7 +455,7 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
           variant="ghost"
           size="sm"
           onClick={() => void runTest()}
-          disabled={testing || !canTest}
+          disabled={testing || !canTest || gatewayChecking}
         >
           {testing ? <Loader2 size={14} className={styles.spin} /> : <FlaskConical size={14} />}
           {testing ? 'Testing…' : 'Test connection'}
@@ -337,7 +487,15 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
         <div className={styles.report} data-ok={report.ok || undefined} role="status">
           <div className={styles.reportHead}>
             {report.ok ? <Check size={14} /> : <CircleAlert size={14} />}
-            <strong>{report.ok ? 'Endpoint responded' : 'Connection failed'}</strong>
+            <strong>
+              {report.ok
+                ? routed
+                  ? 'Gateway responded'
+                  : 'Endpoint responded'
+                : routed
+                  ? 'No provider available'
+                  : 'Connection failed'}
+            </strong>
             <span>{report.latencyMs} ms</span>
           </div>
           <p>{report.ok ? report.message : describeReport(report)}</p>
@@ -350,7 +508,11 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
           <small>
             {report.ok
               ? 'The endpoint answered. This does not prove the selected model will answer until you send a request.'
-              : 'Nothing is saved automatically. Check the URL, the key and whether the provider allows browser requests (CORS).'}
+              : routed
+                ? managed
+                  ? 'No provider is available for this account or server yet. Configure managed CodePilot AI on the server, or connect a personal provider below.'
+                  : 'The CodePilot API tried this endpoint from the server and it did not answer. Check the URL and model; the key never reached this browser.'
+                : 'Nothing is saved automatically. Check the URL, the key and whether the provider allows browser requests (CORS).'}
           </small>
         </div>
       ) : null}
@@ -358,8 +520,15 @@ export function ProviderSettingsForm({ compact = false, onSaved }: ProviderSetti
       {saved ? (
         <p className={styles.saved} role="status">
           <Check size={14} />
-          Saved{draft.rememberKey ? ' with the key remembered in this browser' : ' (key kept in memory only)'}.
-          The connection is unverified until a real request succeeds.
+          Saved
+          {managed
+            ? ' — managed mode uses your CodePilot account and stores no provider key in this browser.'
+            : routed
+              ? ' — the key is stored encrypted on the CodePilot API, not in this browser.'
+              : draft.rememberKey
+                ? ' with the key remembered in this browser (plaintext IndexedDB — not encrypted).'
+                : ' (key kept in memory only).'}
+          {' '}The connection is unverified until a real request succeeds.
         </p>
       ) : null}
 

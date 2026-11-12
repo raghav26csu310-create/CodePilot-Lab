@@ -54,6 +54,7 @@ export const ollamaProvider: ProviderAdapter = {
   id: 'ollama',
   label: 'Ollama',
   requiresKey: false,
+  requiresSession: false,
   listModels,
 
   async stream(request: ChatRequest): Promise<void> {

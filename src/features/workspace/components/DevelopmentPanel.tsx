@@ -5,6 +5,7 @@ import {
   CircleSlash,
   Lock,
   PanelBottom,
+  Play,
   RotateCcw,
   Sparkles,
   Terminal,
@@ -20,6 +21,7 @@ import { useAiSettings } from '../../copilot/settingsStore'
 import { findNode } from '../state/fileTree'
 import type { BottomPanelTab } from '../state/types'
 import { useWorkspace } from '../state/useWorkspace'
+import { WorkspaceRunPanel } from './WorkspaceRunPanel'
 import styles from './DevelopmentPanel.module.css'
 
 const TABS: {
@@ -27,6 +29,7 @@ const TABS: {
   label: string
   icon: typeof Terminal
 }[] = [
+  { id: 'run', label: 'Run', icon: Play },
   { id: 'terminal', label: 'Terminal', icon: Terminal },
   { id: 'output', label: 'Output', icon: PanelBottom },
   { id: 'problems', label: 'Problems', icon: TriangleAlert },
@@ -128,6 +131,7 @@ export function DevelopmentPanel({ height }: { height: number }) {
           role="tabpanel"
           aria-labelledby={`devtab-${ui.bottomTab}`}
         >
+          {ui.bottomTab === 'run' ? <WorkspaceRunPanel activePath={activeNode?.path ?? null} /> : null}
           {ui.bottomTab === 'terminal' ? <TerminalView /> : null}
           {ui.bottomTab === 'output' ? <OutputView /> : null}
           {ui.bottomTab === 'problems' ? <ProblemsView /> : null}
@@ -194,8 +198,8 @@ function TerminalView() {
       icon={<Terminal size={20} />}
       kicker="Terminal · not connected"
       title="No terminal session"
-      copy="Command execution belongs to a later phase. This surface is mounted and stateful, but no shell process exists in the browser — so there is no output to show and none is simulated."
-      chips={['Shell · not connected', 'Working dir · project root', 'Execution scheduled']}
+      copy="There is no interactive shell in this build. Program execution is real: use the Run tab, which sends the active file to the local execution service and shows its actual output. This terminal surface shows no shell because none exists."
+      chips={['Shell · not connected', 'Run tab · real execution', 'Working dir · project root']}
       action={
         <button type="button" className={styles.disabledAction} disabled>
           <Lock size={12} aria-hidden="true" />
@@ -375,13 +379,17 @@ function DiagnosticsView({
         : 'Syntax highlighting only'
 
   const ai = useAiSettings()
-  const aiConfigured =
-    ai.settings.baseUrl.trim().length > 0 && ai.settings.model.trim().length > 0
+  const aiManaged = ai.settings.provider === 'gateway'
+  const aiConfigured = aiManaged
+    ? true
+    : ai.settings.baseUrl.trim().length > 0 && ai.settings.model.trim().length > 0
   const aiVerification = !aiConfigured
     ? 'Not configured'
-    : ai.lastTest?.ok
-      ? 'Endpoint responded · session'
-      : 'Unverified'
+    : aiManaged
+      ? 'Checked by the API gateway'
+      : ai.lastTest?.ok
+        ? 'Endpoint responded · session'
+        : 'Unverified'
 
   return (
     <div className={styles.diagnostics}>
@@ -435,16 +443,18 @@ function DiagnosticsView({
           label="AI provider"
           value={aiConfigured ? providerLabel(ai.settings) : 'Not configured'}
         />
-        <DiagRow label="AI model" value={ai.settings.model || '—'} mono />
+        <DiagRow label="AI model" value={ai.settings.model || 'provider default'} mono />
         <DiagRow label="AI verification" value={aiVerification} />
         <DiagRow
           label="AI key"
           value={
-            ai.settings.apiKey
-              ? ai.settings.rememberKey
-                ? 'Remembered in IndexedDB'
-                : 'Memory only · this tab'
-              : 'None'
+            aiManaged
+              ? 'Server-side · none in this browser'
+              : ai.settings.apiKey
+                ? ai.settings.rememberKey
+                  ? 'Remembered in IndexedDB (plaintext)'
+                  : 'Memory only · this tab'
+                : 'None'
           }
         />
         <DiagRow label="AI requests" value="Only on explicit Send" />

@@ -11,6 +11,8 @@ import { useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useMediaQuery } from '../../../lib/useMediaQuery'
+import { languageForPath } from '../../editor/languageRegistry'
+import { projectLanguageForMonaco } from '../../editor/projectLanguages'
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { CopilotDock } from './CopilotDock'
 import { DevelopmentPanel } from './DevelopmentPanel'
@@ -198,6 +200,12 @@ export function WorkspaceShell() {
     state.tree.tabs,
   ])
 
+  const activePath = state.tree.activeTabPath
+  const activeTab = activePath ? state.tree.tabs.find((tab) => tab.path === activePath) : undefined
+  const activeLanguage = activePath ? languageForPath(activePath) : null
+  const activeProjectLanguage = activeLanguage ? projectLanguageForMonaco(activeLanguage.id) : null
+  const dirtyCount = state.tree.tabs.filter((tab) => tab.dirty).length
+
   return (
     <div
       className={styles.workspace}
@@ -372,6 +380,43 @@ export function WorkspaceShell() {
           ) : null}
         </AnimatePresence>
       </div>
+
+      <footer className={styles.status} aria-label="Workspace status">
+        <span className={styles.statusItem} data-tone={activeProjectLanguage?.runtime ? 'ok' : 'muted'}>
+          <span className={styles.statusDot} aria-hidden="true" />
+          {activeLanguage ? activeLanguage.label : 'No file open'}
+        </span>
+        <span className={styles.statusSep} aria-hidden="true" />
+        <span className={styles.statusItem}>
+          {activePath ?? 'Open a file from the explorer'}
+        </span>
+        {activeTab?.dirty ? (
+          <>
+            <span className={styles.statusSep} aria-hidden="true" />
+            <span className={styles.statusItem} data-tone="warn">
+              Unsaved changes
+            </span>
+          </>
+        ) : null}
+        <span className={styles.statusGrow} />
+        <span className={styles.statusItem}>
+          {activeProjectLanguage
+            ? activeProjectLanguage.runtime
+              ? 'Runnable in the Run tab'
+              : 'Editor only · no runtime'
+            : `${project.language} project`}
+        </span>
+        <span className={styles.statusSep} aria-hidden="true" />
+        <span className={styles.statusItem}>{state.tree.tabs.length} open</span>
+        {dirtyCount > 0 ? (
+          <>
+            <span className={styles.statusSep} aria-hidden="true" />
+            <span className={styles.statusItem} data-tone="warn">
+              {dirtyCount} unsaved
+            </span>
+          </>
+        ) : null}
+      </footer>
 
       <WorkspaceDialogs />
       <QuickOpenPalette />

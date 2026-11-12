@@ -79,6 +79,7 @@ export const openAiCompatibleProvider: ProviderAdapter = {
   id: 'openai-compatible',
   label: 'OpenAI-compatible',
   requiresKey: false,
+  requiresSession: false,
   listModels,
 
   async stream(request: ChatRequest): Promise<void> {

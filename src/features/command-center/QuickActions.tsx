@@ -88,9 +88,8 @@ export function QuickActions({ onCreate, onImport }: QuickActionsProps) {
             </span>
             <span className={styles.actionBody}>
               <span className={styles.actionTitle}>Open Execution Lab</span>
-              <span className={styles.actionHint}>Runtime scheduled · placeholder</span>
+              <span className={styles.actionHint}>Real local runs and Python traces</span>
             </span>
-            <span className={styles.actionChip}>Soon</span>
             <ArrowUpRight size={14} className={styles.actionArrow} aria-hidden="true" />
           </Link>
         </li>

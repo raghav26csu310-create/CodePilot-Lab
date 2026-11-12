@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Features — CodePilot Lab</title>
+    <meta name="description" content="Every CodePilot Lab module and its honest status: workspace, copilot, execution lab, tracer, practice arena, converter, vault, atlas and diagnostics." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/features.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Features — CodePilot Lab" />
+    <meta property="og:description" content="The real module map, including what is live and what is still scheduled." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/command-center.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home">
+          <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>
+          CodePilot Lab <small>Beta</small>
+        </a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a>
+          <a href="/features.html" aria-current="page">Features</a>
+          <a href="/workspace.html">Workspace</a>
+          <a href="/copilot.html">Copilot</a>
+          <a href="/tracer.html">Tracer</a>
+          <a href="/practice.html">Practice</a>
+          <a href="/converter.html">Converter</a>
+          <a href="/docs.html">Docs</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="block" style="padding-top: clamp(2.6rem, 7vh, 4.5rem)">
+        <div class="wrap">
+          <p class="kicker">Module map</p>
+          <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">Features, with the missing parts named.</h1>
+          <p class="lead">
+            CodePilot Lab is built in deliberate phases. A module is listed as live only when its
+            interactions, persistence and failure states work in this repository. Scheduled modules
+            say exactly what is not built yet.
+          </p>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap">
+          <div class="grid">
+            <article class="card">
+              <h3>Command Center <span class="status live">Live</span></h3>
+              <p>
+                Time-of-day greeting, real project registry, create/import dialogs, quick actions,
+                system status and the lazy Lattice-01 scene. Empty states are empty — no sample
+                projects are seeded.
+              </p>
+              <span class="meta">/</span>
+            </article>
+            <article class="card">
+              <h3>Code Workspace <span class="status live">Live</span></h3>
+              <p>
+                Persisted tree, create/rename/delete, tabs, dirty protection, save and save-all,
+                quick open, project search, Monaco diagnostics and a workspace Run tab.
+              </p>
+              <span class="meta">/workspace/:projectId</span>
+            </article>
+            <article class="card">
+              <h3>AI Copilot <span class="status live">Live</span></h3>
+              <p>
+                Seven modes, two provider adapters, explicit context toggles, exact bundle preview,
+                streamed responses, stop, proposal parsing and reviewable diffs. No provider is
+                configured by default.
+              </p>
+              <span class="meta">/copilot · /settings</span>
+            </article>
+            <article class="card">
+              <h3>Execution Lab <span class="status live">Live</span></h3>
+              <p>
+                Real compile/run through a loopback Node service, six advertised runtimes plus Go,
+                stdin, measured duration, output caps, Stop and honest unsupported states.
+              </p>
+              <span class="meta">/lab · npm run exec</span>
+            </article>
+            <article class="card">
+              <h3>Variable Tracer <span class="status live">Live · Python only</span></h3>
+              <p>
+                Real <code>sys.settrace</code> events, step forward/back, play/pause, timeline
+                scrubber, locals, call stack and branch observations. Other languages are marked
+                unsupported rather than simulated.
+              </p>
+              <span class="meta">/lab → Trace</span>
+            </article>
+            <article class="card">
+              <h3>Practice Arena <span class="status live">Live</span></h3>
+              <p>
+                Thirteen original problems, six languages, persisted drafts and notes, hints,
+                visible-case runs, private-suite submissions and hidden-test protection.
+              </p>
+              <span class="meta">/practice</span>
+            </article>
+            <article class="card">
+              <h3>Code Converter <span class="status live">Live</span></h3>
+              <p>
+                Nine languages, project/editor/paste sources, streamed conversion, LCS diff,
+                accept/reject, download, save-as-new, confirmed replace, history and validation
+                runs.
+              </p>
+              <span class="meta">/convert</span>
+            </article>
+            <article class="card">
+              <h3>Project Vault <span class="status scheduled">Scheduled</span></h3>
+              <p>
+                Archive moves, export/import and quota handling are not implemented. The route says
+                so and lists the planned work; no fake archive controls are shown.
+              </p>
+              <span class="meta">/vault</span>
+            </article>
+            <article class="card">
+              <h3>Project Atlas <span class="status scheduled">Scheduled</span></h3>
+              <p>
+                Import graphs need a real module analysis layer that does not exist yet. The route
+                is a labelled placeholder rather than a decorative fake graph.
+              </p>
+              <span class="meta">/atlas</span>
+            </article>
+            <article class="card">
+              <h3>Activity &amp; Diagnostics <span class="status scheduled">Scheduled</span></h3>
+              <p>
+                A persistent event log is not built. Diagnostics that already exist live inside the
+                workspace panel and System Status, fed by real Monaco and browser APIs.
+              </p>
+              <span class="meta">/activity</span>
+            </article>
+            <article class="card">
+              <h3>Settings <span class="status live">Live</span></h3>
+              <p>
+                Provider preset, base URL, model, optional key persistence, connection test and
+                context budget. Saving clears the “verified” claim until a real request succeeds.
+              </p>
+              <span class="meta">/settings</span>
+            </article>
+            <article class="card">
+              <h3>Feedback <span class="status live">Live</span></h3>
+              <p>
+                Writes to IndexedDB first, then optionally POSTs to a configured endpoint. The
+                result panel states which delivery actually happened.
+              </p>
+              <span class="meta">/feedback</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap prose">
+          <h2>Editor-only languages</h2>
+          <p>
+            HTML, CSS and JSON open with syntax highlighting, formatting and diagnostics, but they
+            have no runtime in the execution service. The UI labels them editor-only instead of
+            offering a Run button that cannot work.
+          </p>
+          <h2>What “local-first” means here</h2>
+          <p>
+            Projects, contents, conversions, practice progress and feedback are stored in this
+            origin's IndexedDB. There is no account and no application backend. The only network
+            calls are ones you configure: an AI provider, the optional feedback endpoint, and the
+            loopback execution service.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner">
+        <div><strong>CodePilot Lab</strong> · local-first beta</div>
+        <nav aria-label="Footer">
+          <a href="/features.html">Features</a>
+          <a href="/docs.html">Documentation</a>
+          <a href="/feedback.html">Feedback</a>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/terms.html">Terms</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

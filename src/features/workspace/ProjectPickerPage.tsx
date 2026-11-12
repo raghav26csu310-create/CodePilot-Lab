@@ -404,7 +404,7 @@ export function ProjectPickerPage() {
         <footer className={styles.foot}>
           <span className={styles.footNote}>
             <span className={styles.footDot} aria-hidden="true" />
-            Projects persist in IndexedDB · the Phase 05 Copilot reads only what you share
+            Projects persist in IndexedDB · run, convert and practise entirely on this machine
           </span>
           <Link to="/" className={styles.footLink}>
             <ArrowLeft size={12} aria-hidden="true" />

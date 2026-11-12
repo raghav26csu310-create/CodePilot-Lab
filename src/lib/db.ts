@@ -68,6 +68,72 @@ export type StoredSetting = {
   updatedAt: number
 }
 
+/** A completed AI conversion, persisted for the converter history. */
+export type ConversionRecord = {
+  id: string
+  projectId: string | null
+  sourceLanguage: string
+  targetLanguage: string
+  sourceCode: string
+  convertedCode: string
+  instructions: string
+  status: 'complete' | 'partial' | 'failed'
+  notes: string
+  warnings: string[]
+  providerLabel: string
+  model: string
+  createdAt: number
+  durationMs: number
+}
+
+/** Per-problem practice state. Drafts are kept per executable language. */
+export type PracticeProgress = {
+  problemId: string
+  attempted: number
+  solved: boolean
+  solvedAt: number | null
+  lastAttemptAt: number
+  lastLanguage: string
+  bookmarked: boolean
+  notes: string
+  codeByLanguage: Record<string, string>
+}
+
+export type PracticeSubmission = {
+  id: string
+  problemId: string
+  language: string
+  verdict: string
+  passed: number
+  total: number
+  hiddenCases: number
+  durationMs: number
+  createdAt: number
+}
+
+export type FeedbackCategory = 'general' | 'bug' | 'feature'
+
+export type FeedbackDelivery = 'local' | 'endpoint' | 'endpoint-failed'
+
+/**
+ * Feedback is always written to IndexedDB first. `delivery` records whether the
+ * optional configured endpoint also accepted it, so the UI can be honest.
+ */
+export type FeedbackRecord = {
+  id: string
+  category: FeedbackCategory
+  rating: number | null
+  feature: string
+  message: string
+  contact: string
+  page: string
+  appVersion: string
+  createdAt: number
+  delivery: FeedbackDelivery
+  endpointStatus: number | null
+  endpointError: string | null
+}
+
 export type StorageSnapshot = {
   indexedDB: boolean
   estimate: boolean
@@ -81,6 +147,10 @@ const database = new Dexie('codepilot-lab') as Dexie & {
   files: Table<StoredEntry, [string, string]>
   contents: Table<StoredContent, [string, string]>
   settings: EntityTable<StoredSetting, 'key'>
+  conversions: EntityTable<ConversionRecord, 'id'>
+  practiceProgress: EntityTable<PracticeProgress, 'problemId'>
+  practiceSubmissions: EntityTable<PracticeSubmission, 'id'>
+  feedback: EntityTable<FeedbackRecord, 'id'>
 }
 
 function normalizePath(path: string): string {
@@ -174,6 +244,20 @@ database.version(2)
       await files.bulkPut(rows)
     }
   })
+
+database.version(3).stores({
+  projects: 'id, name, lastOpenedAt',
+  files: '[projectId+path], projectId, kind, updatedAt',
+  contents: '[projectId+path], projectId, updatedAt',
+  settings: 'key',
+  conversions: 'id, projectId, createdAt',
+  practiceProgress: 'problemId, solved, lastAttemptAt',
+  practiceSubmissions: 'id, problemId, createdAt',
+})
+
+database.version(4).stores({
+  feedback: 'id, createdAt, category',
+})
 
 export const db = database
 
@@ -287,13 +371,21 @@ export async function renameProjectRecord(
   })
 }
 
-/** Removes the project, its tree entries and every stored content record. */
+/** Removes the project, its tree entries, stored contents and conversions. */
 export async function deleteProjectCascade(id: string): Promise<void> {
-  await db.transaction('rw', db.projects, db.files, db.contents, async () => {
-    await db.files.where('projectId').equals(id).delete()
-    await db.contents.where('projectId').equals(id).delete()
-    await db.projects.delete(id)
-  })
+  await db.transaction(
+    'rw',
+    db.projects,
+    db.files,
+    db.contents,
+    db.conversions,
+    async () => {
+      await db.files.where('projectId').equals(id).delete()
+      await db.contents.where('projectId').equals(id).delete()
+      await db.conversions.where('projectId').equals(id).delete()
+      await db.projects.delete(id)
+    },
+  )
 }
 
 export async function probeStorage(): Promise<StorageSnapshot> {

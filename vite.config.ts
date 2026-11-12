@@ -15,6 +15,14 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: false,
+    proxy: {
+      // Same-origin API during local development. The client uses a relative
+      // path by default, so no browser CORS or API URL configuration is needed.
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: false,
+      },
+    },
   },
   build: {
     target: 'es2022',

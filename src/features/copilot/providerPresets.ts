@@ -1,12 +1,23 @@
 import type { AiProviderPreset, AiSettings } from './types'
 
 /**
- * Provider presets cover genuinely available options: a local Ollama server,
- * OpenAI-compatible endpoints (DeepSeek, OpenAI, OpenRouter, Groq), and local
- * OpenAI-compatible servers (LM Studio, llama.cpp). Nothing here is a paid
- * requirement — the local options need no account at all.
+ * Provider presets. The default is managed CodePilot AI through the API
+ * gateway: the browser holds no provider key and ordinary users never see a
+ * base URL. The remaining presets are the explicit local/BYO fallback — a local
+ * Ollama server, OpenAI-compatible endpoints (DeepSeek, OpenAI, OpenRouter,
+ * Groq), and local OpenAI-compatible servers (LM Studio, llama.cpp).
  */
 export const PROVIDER_PRESETS: AiProviderPreset[] = [
+  {
+    id: 'codepilot',
+    label: 'CodePilot AI (managed)',
+    kind: 'gateway',
+    baseUrl: '',
+    defaultModel: '',
+    keyExpected: false,
+    managed: true,
+    note: 'Included with your CodePilot Cloud account. Requests go through the CodePilot API; no provider key is stored in this browser.',
+  },
   {
     id: 'ollama',
     label: 'Ollama (local)',
@@ -82,9 +93,10 @@ export const PROVIDER_PRESETS: AiProviderPreset[] = [
 ]
 
 export const DEFAULT_AI_SETTINGS: AiSettings = {
-  preset: 'ollama',
-  provider: 'ollama',
-  baseUrl: 'http://localhost:11434',
+  preset: 'codepilot',
+  provider: 'gateway',
+  route: 'gateway',
+  baseUrl: '',
   model: '',
   apiKey: '',
   rememberKey: false,
@@ -109,6 +121,24 @@ export function providerLabel(settings: AiSettings): string {
   return presetById(settings.preset)?.label ?? 'Custom endpoint'
 }
 
+/** True when the selected preset routes through the CodePilot API gateway. */
+export function isManagedPreset(settings: AiSettings): boolean {
+  return presetById(settings.preset)?.kind === 'gateway'
+}
+
+/** True when requests leave through the CodePilot API rather than this browser. */
+export function usesGateway(settings: AiSettings): boolean {
+  return settings.route === 'gateway'
+}
+
+/**
+ * A gateway route needs no client-side URL or model: availability is answered
+ * by the API. Direct providers still require both fields.
+ */
 export function isConfigured(settings: AiSettings): boolean {
+  if (usesGateway(settings)) {
+    return true
+  }
   return settings.baseUrl.trim().length > 0 && settings.model.trim().length > 0
 }
+

@@ -43,9 +43,10 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   reduced-motion / no-WebGL / WebGL failure.
 - `useStageActive` pauses the canvas offscreen/hidden; `useWebGLSupport` and
   `usePrefersReducedMotion` return synchronously. Do not add a second render loop.
-- Project records live in IndexedDB through Dexie (`src/lib/db.ts`) under schema v2:
-  `projects`, `files` (tree entries), `contents` (saved text) and `settings`. Storage
-  services belong in `src/lib/projectStorage.ts`, never in components. Stored content
+- Project records live in IndexedDB through Dexie (`src/lib/db.ts`) under schema v4:
+  `projects`, `files` (tree entries), `contents` (saved text), `settings`, `conversions`,
+  `practiceProgress`, `practiceSubmissions` and `feedback`. Storage services belong in
+  `src/lib/projectStorage.ts`, never in components. Stored content
   is authoritative after the first save; `directoryHandle` is only an honestly
   disclosed read fallback and is structured-clone data. Opening a legacy record
   migrates its manifest into entries without resetting user data.
@@ -54,7 +55,9 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   disposed with tabs. Dirty state comes from `getAlternativeVersionId`, and live drafts
   live only inside Monaco models — the reducer keeps snapshots. Cross-component
   editor actions (save, save-all, find, reveal) go through `EditorCommandsContext`,
-  not ad-hoc window globals.
+  not ad-hoc window globals. `monaco-editor@0.57.0` uses the exports-map worker paths and
+  `package.json` overrides its declared `dompurify@3.4.15` to `3.4.17`; re-check both on
+  every Monaco upgrade.
 - Shortcuts: `Ctrl/⌘ S / Shift S / P / Shift F / F / PageUp / PageDown` are implemented
   both inside Monaco (`monaco.addCommand`) and in `WorkspaceShell`'s global handler,
   which skips events originating inside `.monaco-editor` to avoid double handling.
@@ -89,6 +92,36 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   is mounted inside `EditorCommandsProvider` + the workspace provider. Keep the chat
   alive when the dock closes. `/copilot` is the live overview; `/settings` is the live
   credential page.
+
+## Execution, conversion and practice (Phase 6)
+
+- Execution is a loopback-only Node sidecar in `server/`. `server/index.mjs` exposes
+  `/health`, `/run`, `/trace`, `/grade`, `/cancel`, `/problems`; `server/executor.mjs`
+  owns runtime probes, compile/run with temp dirs and tree-kill timeouts;
+  `server/trace_python.py` is the real `sys.settrace` recorder. It is a resource-limited
+  local runner, not a hardened sandbox. Never move execution into the browser or claim
+  a run happened without a response.
+- Six runtimes are supported behind `src/features/editor/projectLanguages.ts`: Python,
+  JavaScript, TypeScript, C, C++, Java. Keep the editor language metadata in sync with what
+  the runner actually advertises; both currently expose those six and Go is not offered.
+  HTML, CSS and JSON are editor-only and must be labelled that way. Only Python has a real
+  tracer; other languages are explicitly unsupported rather than simulated.
+- Hidden practice tests live **only** in `server/problems.mjs`. `/grade` must never
+  return hidden inputs, expected outputs or full hidden output, and the frontend must
+  never bundle them. Visible tests may be shown and run locally.
+- The execution client is `src/features/execution/api.ts`; every failure is an
+  `ExecutionServiceError` with an honest start command. The shared Monaco surface for
+  non-workspace pages is `StandaloneEditor`; the workspace Run tab reads the live draft
+  through `EditorCommandsContext`.
+- Converter AI parsing is `src/features/converter/convert.ts`; review uses the real LCS
+  diff in `diff.ts`; handoff from the workspace uses `staging.ts`. Saves and replaces
+  write the IndexedDB copy, never a linked folder on disk.
+- Practice catalog content lives in `src/features/practice/catalog.ts`; progress,
+  drafts, notes, bookmarks and submissions are stored by `progressStorage.ts`.
+- Dropdowns in the app use the accessible `src/design-system/primitives/Select.tsx`
+  (portalled menu, explicit contrast, keyboard support). Native `<select>` options still
+  get a dark global fallback, but new UI should prefer `Select`. Verify the opened menu,
+  not only the closed control.
 
 ## TypeScript / React landmines
 

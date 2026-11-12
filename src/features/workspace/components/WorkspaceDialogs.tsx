@@ -23,6 +23,7 @@ import { createPortal } from 'react-dom'
 import { Button } from '../../../design-system/primitives/Button'
 import { useFocusTrap } from '../../../lib/useFocusTrap'
 import {
+  StoredPathError,
   createStoredEntry,
   deleteStoredEntry,
   listStoredEntries,
@@ -177,9 +178,11 @@ function DialogSurface({ dialog, onClose }: { dialog: DialogState; onClose: () =
           name: name.trim(),
           kind,
         })
-      } catch {
+      } catch (error) {
         fail(
-          'IndexedDB rejected this write. The entry was not created; storage may be full or unavailable.',
+          error instanceof StoredPathError
+            ? error.message
+            : 'IndexedDB rejected this write. The entry was not created; storage may be full or unavailable.',
         )
       }
       return
@@ -194,9 +197,11 @@ function DialogSurface({ dialog, onClose }: { dialog: DialogState; onClose: () =
       begin('Renaming and moving stored entries…')
       try {
         await renameStoredEntry(project.id, dialog.path, trimmed)
-      } catch {
+      } catch (error) {
         fail(
-          'IndexedDB rejected this rename. Nothing moved — the stored tree is unchanged.',
+          error instanceof StoredPathError
+            ? error.message
+            : 'IndexedDB rejected this rename. Nothing moved — the stored tree is unchanged.',
         )
         return
       }

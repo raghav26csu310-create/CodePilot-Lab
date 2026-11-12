@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CodePilot Lab — A local-first coding laboratory</title>
+    <meta
+      name="description"
+      content="CodePilot Lab is a local-first coding laboratory: a real Monaco workspace, a reviewable AI copilot, a Python tracer, private practice grading and a multi-language converter. No account, no seeded metrics."
+    />
+    <meta name="theme-color" content="#04060b" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="__SITE_URL__/home.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="CodePilot Lab" />
+    <meta property="og:title" content="CodePilot Lab — A local-first coding laboratory" />
+    <meta
+      property="og:description"
+      content="A real editor, honest instrumentation, and a copilot that shows its work. Projects, execution, tracing, practice and conversion stay on your machine."
+    />
+    <meta property="og:image" content="__SITE_URL__/screenshots/command-center.png" />
+    <meta property="og:image:alt" content="The CodePilot Lab Command Center with the Lattice-01 scene" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="CodePilot Lab — A local-first coding laboratory" />
+    <meta
+      name="twitter:description"
+      content="A real editor, honest instrumentation, and a copilot that shows its work."
+    />
+    <meta name="twitter:image" content="__SITE_URL__/screenshots/command-center.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "CodePilot Lab",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Any modern browser",
+        "description": "A local-first coding laboratory with a real editor, provider-independent AI help, local code execution and tracing, practice grading and code conversion.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home">
+          <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="7" fill="#04060b" />
+            <path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" />
+            <path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          CodePilot Lab <small>Beta</small>
+        </a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html" aria-current="page">Home</a>
+          <a href="/features.html">Features</a>
+          <a href="/workspace.html">Workspace</a>
+          <a href="/copilot.html">Copilot</a>
+          <a href="/tracer.html">Tracer</a>
+          <a href="/practice.html">Practice</a>
+          <a href="/converter.html">Converter</a>
+          <a href="/docs.html">Docs</a>
+          <a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="kicker">Local-first · Public beta</p>
+            <h1>A laboratory for software that <span>thinks</span> with you.</h1>
+            <p class="lead">
+              CodePilot Lab combines a real Monaco workspace, a provider-independent AI copilot,
+              local code execution, a Python variable tracer, private practice grading and a
+              review-first converter. It runs in your browser, stores projects in this device's
+              IndexedDB, and never invents activity you did not create.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/">Open the app</a>
+              <a class="btn btn-secondary" href="/docs.html">Read the walkthrough</a>
+            </div>
+            <p class="note">
+              <span>No account</span>
+              <span>No seeded projects</span>
+              <span>No telemetry by default</span>
+              <span>Bring your own model</span>
+            </p>
+          </div>
+          <figure class="shot">
+            <img
+              src="/screenshots/command-center.png"
+              width="1440"
+              height="1000"
+              alt="CodePilot Lab Command Center showing the Lattice-01 scene, create action, first-run orientation and recent project registry."
+            />
+            <figcaption>Command Center · real local registry and measured system status</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="what-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">What it is</p>
+            <h2 id="what-title">An instrument, not a dashboard.</h2>
+            <p>
+              Most learning tools hide the machine. CodePilot Lab exposes it: real compiler output,
+              real trace events, real diffs and real storage facts. When something is unavailable,
+              the screen says so and prints the command that starts it.
+            </p>
+          </div>
+          <div class="grid">
+            <article class="card">
+              <h3>Code Workspace</h3>
+              <p>
+                A persisted file tree, tabs, dirty buffers, quick open, project search and Monaco
+                language services — with saves written to IndexedDB, not to a pretend cloud.
+              </p>
+              <span class="meta">Live · /workspace</span>
+            </article>
+            <article class="card">
+              <h3>AI Copilot</h3>
+              <p>
+                Native Ollama or any OpenAI-compatible endpoint. You choose the context, preview the
+                exact bundle, and review complete-file proposals as diffs before anything changes.
+              </p>
+              <span class="meta">Live · /copilot</span>
+            </article>
+            <article class="card">
+              <h3>Execution &amp; tracing</h3>
+              <p>
+                A loopback Node sidecar compiles and runs Python, JavaScript, TypeScript, C, C++,
+                Java. Python tracing comes from real <code>sys.settrace</code> events.
+              </p>
+              <span class="meta">Live · /lab</span>
+            </article>
+            <article class="card">
+              <h3>Practice Arena</h3>
+              <p>
+                Thirteen original problems, visible cases you can run, and hidden suites that are
+                graded server-side. Expected hidden outputs never reach the browser.
+              </p>
+              <span class="meta">Live · /practice</span>
+            </article>
+            <article class="card">
+              <h3>Code Converter</h3>
+              <p>
+                Nine languages, streamed provider output, a real LCS diff, accept/reject, download,
+                save-as-new and explicit replace. Conversion quality is never overstated.
+              </p>
+              <span class="meta">Live · /convert</span>
+            </article>
+            <article class="card">
+              <h3>Project Vault &amp; Atlas</h3>
+              <p>
+                Archive, export and dependency graphs are scheduled, not simulated. The routes are
+                labelled “Scheduled” and list exactly what is missing.
+              </p>
+              <span class="meta">Scheduled · /vault · /atlas</span>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="who-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">Who it is for</p>
+            <h2 id="who-title">Learners who want to see the machinery.</h2>
+            <p>
+              It is designed for developers building fluency across languages, students who need to
+              understand why a loop behaves a certain way, and anyone who wants AI help without
+              surrendering their code or their judgement.
+            </p>
+          </div>
+          <div class="grid">
+            <article class="card">
+              <h3>See execution, not just output</h3>
+              <p>
+                Step through Python statements, inspect locals, walk the call stack and scrub a real
+                event timeline.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Keep the source of truth local</h3>
+              <p>
+                Projects, drafts, conversions and practice progress live in your browser profile.
+                Linked folders are read-only fallbacks and are disclosed as such.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Use the model you already run</h3>
+              <p>
+                Ollama, LM Studio, llama.cpp or a remote OpenAI-compatible provider. No key ships in
+                the bundle; persistence is opt-in.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="start-title">
+        <div class="wrap">
+          <div class="section-head">
+            <p class="kicker">Start in three minutes</p>
+            <h2 id="start-title">Create one file. Run it. Trace it.</h2>
+          </div>
+          <pre class="code"><code>npm install
+npm run dev      # http://localhost:5173
+npm run exec     # loopback execution service on 127.0.0.1:5310</code></pre>
+          <p class="lead">
+            The editor, conversion review and practice browsing work without the sidecar. Running,
+            tracing and submission print the exact start command instead of pretending.
+          </p>
+          <div class="actions">
+            <a class="btn btn-primary" href="/">Open the app</a>
+            <a class="btn btn-secondary" href="/features.html">See every module</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner">
+        <div>
+          <strong>CodePilot Lab</strong> · local-first beta
+          <div class="small">
+            Product claims on this site describe features that exist in this repository. No user
+            counts, ratings or testimonials are published.
+          </div>
+        </div>
+        <nav aria-label="Footer">
+          <a href="/features.html">Features</a>
+          <a href="/docs.html">Documentation</a>
+          <a href="/feedback.html">Feedback</a>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/terms.html">Terms</a>
+          <a href="/about.html">About</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

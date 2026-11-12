@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coding Practice Arena — CodePilot Lab</title>
+    <meta name="description" content="Thirteen original programming problems with visible cases, private hidden suites, persisted drafts and notes, hints and stored verdicts." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/practice.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Coding Practice Arena — CodePilot Lab" />
+    <meta property="og:description" content="Practise in six languages with honest private grading." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/practice.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html" aria-current="page">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="kicker">Practice Arena · Live</p>
+            <h1>Problems graded by <span>tests</span>, not vibes.</h1>
+            <p class="lead">
+              Thirteen original problems across arrays, strings, hashing, sorting, binary search,
+              two pointers, windows, linked lists, stacks, queues, recursion, backtracking, trees,
+              graphs, DP, greedy, bits and math. Visible cases run locally; submissions use a
+              private suite.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/practice">Browse problems</a>
+              <a class="btn btn-secondary" href="/docs.html#practice">How grading works</a>
+            </div>
+          </div>
+          <figure class="shot">
+            <img src="/screenshots/practice.png" width="1440" height="1000" alt="CodePilot Lab practice library with difficulty filters, progress and problem cards." />
+            <figcaption>Practice library · real progress from this browser profile</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap">
+          <div class="grid">
+            <article class="card"><h3>Visible cases</h3><p>Run the published cases without consuming a submission. Output and stderr are shown exactly as produced.</p></article>
+            <article class="card"><h3>Private suites</h3><p>Hidden inputs and expected outputs live only in <code>server/problems.mjs</code>. The browser never bundles them.</p></article>
+            <article class="card"><h3>Bounded feedback</h3><p><code>/grade</code> returns case indices, hidden flags, statuses and bounded visible stderr — never hidden inputs, expected outputs or full hidden output.</p></article>
+            <article class="card"><h3>Six languages</h3><p>Python, JavaScript, TypeScript, C, C++ and Java where the problem supports it. Drafts are stored per language.</p></article>
+            <article class="card"><h3>Progress that persists</h3><p>Attempts, solved state, bookmarks, notes and submission history are stored in IndexedDB with real timestamps.</p></article>
+            <article class="card"><h3>Hints before answers</h3><p>Progressive hints are open; explanations and full solutions are gated so the problem is not spoiled by default.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap prose">
+          <h2>Submission, plainly</h2>
+          <p>
+            Submit requires the local execution service. If it is not running, the page shows the
+            start command and keeps your work. A verdict is only recorded after the service answers.
+          </p>
+          <div class="callout"><strong>Local grading only.</strong> Hidden tests protect against overfitting, not against determined extraction. They are not cryptographic secrets; they live on the operator's machine.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

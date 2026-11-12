@@ -75,17 +75,26 @@ export function sanitizeSettings(input: Partial<AiSettings> | null | undefined):
     typeof input?.preset === 'string' && presetById(input.preset) ? input.preset : base.preset
   const presetInfo = presetById(preset)
   const provider: AiProviderKind =
-    input?.provider === 'ollama' || input?.provider === 'openai-compatible'
+    input?.provider === 'gateway' ||
+    input?.provider === 'ollama' ||
+    input?.provider === 'openai-compatible'
       ? input.provider
       : (presetInfo?.kind ?? base.provider)
   const rememberKey = input?.rememberKey === true
   const apiKey = rememberKey ? stringOr(input?.apiKey, '').trim() : ''
+  const route: AiSettings['route'] =
+    input?.route === 'gateway' || input?.route === 'direct'
+      ? input.route
+      : presetInfo?.kind === 'gateway'
+        ? 'gateway'
+        : 'direct'
 
   return {
     preset,
     provider,
-    baseUrl: stringOr(input?.baseUrl, base.baseUrl).trim(),
-    model: stringOr(input?.model, base.model).trim(),
+    route,
+    baseUrl: stringOr(input?.baseUrl, presetInfo?.baseUrl ?? base.baseUrl).trim(),
+    model: stringOr(input?.model, presetInfo?.defaultModel ?? base.model).trim(),
     apiKey,
     rememberKey,
     temperature: clamp(
@@ -138,7 +147,7 @@ export async function loadAiSettings(): Promise<void> {
       emit({
         settings,
         loaded: true,
-        keyRestored: settings.rememberKey && settings.apiKey.length > 0,
+        keyRestored: keyStored(settings),
         lastTest: null,
         models: [],
       })
@@ -154,19 +163,32 @@ export async function loadAiSettings(): Promise<void> {
 
 function serialize(settings: AiSettings): string {
   const safe = sanitizeSettings(settings)
+  // Managed mode never persists a provider key: there is no client-side key to
+  // keep, and a stale one must not survive a switch to the gateway.
+  const persistKey =
+    safe.rememberKey && safe.route === 'direct' && safe.provider !== 'gateway'
   return JSON.stringify({
     preset: safe.preset,
     provider: safe.provider,
+    route: safe.route,
     baseUrl: safe.baseUrl,
     model: safe.model,
-    // The key only reaches storage when the user explicitly opted in.
-    apiKey: safe.rememberKey ? safe.apiKey : '',
-    rememberKey: safe.rememberKey,
+    apiKey: persistKey ? safe.apiKey : '',
+    rememberKey: persistKey,
     temperature: safe.temperature,
     maxTokens: safe.maxTokens,
     contextChars: safe.contextChars,
     historyDepth: safe.historyDepth,
   })
+}
+
+function keyStored(settings: AiSettings): boolean {
+  return (
+    settings.route === 'direct' &&
+    settings.provider !== 'gateway' &&
+    settings.rememberKey &&
+    settings.apiKey.length > 0
+  )
 }
 
 export async function saveAiSettings(input: AiSettings): Promise<AiSettings> {
@@ -179,7 +201,7 @@ export async function saveAiSettings(input: AiSettings): Promise<AiSettings> {
   emit({
     settings,
     loaded: true,
-    keyRestored: settings.rememberKey && settings.apiKey.length > 0,
+    keyRestored: keyStored(settings),
     lastTest: null,
     models: [],
   })
@@ -226,8 +248,9 @@ export function settingsForPreset(current: AiSettings, presetId: string): AiSett
     ...current,
     preset: preset.id,
     provider: preset.kind,
-    baseUrl: preset.baseUrl || current.baseUrl,
+    route: preset.kind === 'gateway' ? 'gateway' : current.route,
+    baseUrl: switchingProvider ? preset.baseUrl : preset.baseUrl || current.baseUrl,
     model: preset.defaultModel || (switchingProvider ? '' : current.model),
-    apiKey: preset.keyExpected ? current.apiKey : current.apiKey,
+    apiKey: current.apiKey,
   })
 }

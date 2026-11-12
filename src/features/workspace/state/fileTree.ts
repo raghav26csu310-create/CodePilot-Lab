@@ -1,19 +1,9 @@
 import type { FileTreeNode, TreeNodeKind, WorkspaceStats } from './types'
+import { validateEntryName } from '../../../lib/storedPaths'
+
+export { validateEntryName }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-
-const INVALID_NAME_CHARS = /[<>:"/\\|?*]/
-const RESERVED_WINDOWS_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
-
-function hasControlCharacter(value: string): boolean {
-  for (const character of value) {
-    const code = character.charCodeAt(0)
-    if (code < 32 || code === 127) {
-      return true
-    }
-  }
-  return false
-}
 
 function compareNodes(a: FileTreeNode, b: FileTreeNode): number {
   if (a.kind !== b.kind) {
@@ -269,36 +259,6 @@ export function collectFolderPaths(nodes: FileTreeNode[]): string[] {
 
 export function defaultExpandedPaths(nodes: FileTreeNode[]): string[] {
   return nodes.filter((node) => node.kind === 'folder').map((node) => node.path)
-}
-
-export function validateEntryName(name: string): string | null {
-  const trimmed = name.trim()
-
-  if (!trimmed) {
-    return 'Enter a name.'
-  }
-
-  if (trimmed.length > 120) {
-    return 'Keep the name under 120 characters.'
-  }
-
-  if (trimmed === '.' || trimmed === '..') {
-    return 'This name is not allowed.'
-  }
-
-  if (INVALID_NAME_CHARS.test(trimmed) || hasControlCharacter(trimmed)) {
-    return 'Names cannot contain < > : " / \\ | ? * or control characters.'
-  }
-
-  if (/[. ]$/.test(trimmed)) {
-    return 'Names cannot end with a dot or a space.'
-  }
-
-  if (RESERVED_WINDOWS_NAMES.test(trimmed)) {
-    return 'This name is reserved by Windows.'
-  }
-
-  return null
 }
 
 export function siblingNameExists(

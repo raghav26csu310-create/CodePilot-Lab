@@ -1,8 +1,9 @@
 /** Shared types for the Phase 5 Copilot bridge. */
 
-export type AiProviderKind = 'ollama' | 'openai-compatible'
+export type AiProviderKind = 'gateway' | 'ollama' | 'openai-compatible'
 
 export type AiProviderPresetId =
+  | 'codepilot'
   | 'ollama'
   | 'deepseek'
   | 'openai'
@@ -20,12 +21,20 @@ export type AiProviderPreset = {
   defaultModel: string
   /** Whether the provider expects a bearer token for typical use. */
   keyExpected: boolean
+  /** True when the endpoint is the server gateway rather than a direct provider. */
+  managed?: boolean
   note: string
 }
 
 export type AiSettings = {
   preset: AiProviderPresetId
   provider: AiProviderKind
+  /**
+   * Where the request is sent. `gateway` means the CodePilot API holds the
+   * credential and performs the call; `direct` means this browser calls the
+   * provider endpoint itself (advanced/local mode).
+   */
+  route: 'gateway' | 'direct'
   baseUrl: string
   model: string
   apiKey: string
@@ -94,6 +103,8 @@ export type ProviderAdapter = {
   id: AiProviderKind
   label: string
   requiresKey: boolean
+  /** True when the adapter needs a signed-in CodePilot API session. */
+  requiresSession: boolean
   listModels(settings: AiSettings, signal?: AbortSignal): Promise<string[]>
   stream(request: ChatRequest): Promise<void>
 }

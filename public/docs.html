@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Documentation — CodePilot Lab</title>
+    <meta name="description" content="Install, configure providers, run supported languages, understand execution and tracer limits, use the converter, deploy and troubleshoot CodePilot Lab." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/docs.html" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Documentation — CodePilot Lab" />
+    <meta property="og:description" content="The honest operator manual for CodePilot Lab." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/command-center.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html" aria-current="page">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="block" style="padding-top: clamp(2.6rem, 7vh, 4.5rem)">
+        <div class="wrap prose">
+          <p class="kicker">Documentation</p>
+          <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">The operator manual.</h1>
+          <p class="lead">
+            Everything below describes this repository. Where a feature depends on a local service or
+            a model provider, the dependency is stated rather than assumed.
+          </p>
+
+          <h2 id="install">Install and run</h2>
+          <pre class="code"><code>npm install
+npm run dev      # Vite, http://localhost:5173
+npm run exec     # loopback runner, http://127.0.0.1:5310
+
+npm run typecheck
+npm run lint
+npm run test
+npm run build</code></pre>
+          <p>
+            Node.js 20 or newer is required for the toolchain. The frontend has no runtime secrets and
+            no server dependency. The execution service is a separate local process.
+          </p>
+
+          <h2 id="languages">Supported programming languages</h2>
+          <table>
+            <thead><tr><th>Language</th><th>Editor</th><th>Run / grade</th><th>Trace</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Python</strong></td><td>Yes</td><td>Yes</td><td>Yes, real <code>sys.settrace</code></td></tr>
+              <tr><td><strong>JavaScript</strong></td><td>Yes</td><td>Yes, Node.js</td><td>No</td></tr>
+              <tr><td><strong>TypeScript</strong></td><td>Yes</td><td>Yes, Node.js type stripping</td><td>No</td></tr>
+              <tr><td><strong>C</strong></td><td>Yes</td><td>Yes, GCC</td><td>No</td></tr>
+              <tr><td><strong>C++</strong></td><td>Yes</td><td>Yes, G++</td><td>No</td></tr>
+              <tr><td><strong>Java</strong></td><td>Yes</td><td>Yes, javac/java</td><td>No</td></tr>
+              <tr><td><strong>Go</strong></td><td>Highlighting</td><td>Not offered</td><td>No</td></tr>
+              <tr><td><strong>HTML / CSS / JSON</strong></td><td>Yes</td><td>Editor-only</td><td>No</td></tr>
+              <tr><td>Markdown, YAML, SQL, Shell, Rust, etc.</td><td>Highlighting</td><td>Not supported</td><td>No</td></tr>
+            </tbody>
+          </table>
+          <p>
+            Runtime availability is probed on the machine running the service. A missing compiler
+            produces an explicit unsupported state; it is never replaced with sample output.
+          </p>
+
+          <h2 id="providers">AI provider setup</h2>
+          <p>
+            Open <a href="/settings">Settings</a>. Choose a preset or “OpenAI-compatible”, enter the
+            base URL and model, then test the connection. Ollama's default is
+            <code>http://127.0.0.1:11434</code>; allow the app origin with
+            <code>OLLAMA_ORIGINS=http://localhost:5173</code> if the browser is blocked.
+          </p>
+          <p>
+            Keys are optional for local models and live in memory unless you opt into browser
+            persistence. A proxy can hold keys server-side. Remote providers must permit CORS from
+            the app origin.
+          </p>
+
+          <h2 id="workspace">Workspace</h2>
+          <p>
+            Create or import a project, then edit files on the left. Saves go to IndexedDB
+            (<code>contents</code>). <code>Ctrl/⌘ S</code> saves, <code>Shift S</code> saves all,
+            <code>P</code> opens quick open, <code>Shift F</code> searches stored contents.
+          </p>
+
+          <h2 id="tracer">Execution and tracer limits</h2>
+          <p>
+            The runner caps source at 200,000 characters, stdin at 64,000, stdout at 96,000, stderr
+            at 48,000, compile time at 20 seconds and run time at 8 seconds. Tracing caps at 2,500
+            events. Processes are tree-killed on timeout, Stop or shutdown.
+          </p>
+          <div class="callout"><strong>Resource limits are not a sandbox.</strong> Only run code you would run in your own terminal. The service binds to loopback by default; a remote bind is refused unless the operator explicitly opts in with a token.</div>
+
+          <h2 id="converter">Code Converter</h2>
+          <p>
+            Conversion requires a configured provider. Review the diff before accepting. Save-as-new
+            writes a new stored file; replace requires confirmation and never writes a linked folder
+            on disk. Validation runs use the local execution service.
+          </p>
+
+          <h2 id="practice">Practice grading</h2>
+          <p>
+            Visible cases are published in the UI and can be run repeatedly. Submissions use hidden
+            suites in <code>server/problems.mjs</code>. The API returns only case indices, hidden
+            flags, statuses and bounded visible stderr.
+          </p>
+
+          <h2 id="feedback">Feedback</h2>
+          <p>
+            Feedback is written to IndexedDB first. Set <code>VITE_FEEDBACK_ENDPOINT</code> to an
+            absolute HTTPS URL to also POST the payload. The result panel reports local-only,
+            delivered, or failed delivery with the HTTP status.
+          </p>
+
+          <h2 id="deploy">Deployment</h2>
+          <p>
+            The default public beta is frontend-only. Build with <code>npm run build</code> and serve
+            <code>dist/</code> with SPA rewrites. Execution is not available on static hosting; users
+            who want it run the sidecar locally. See the deployment guide in the repository.
+          </p>
+
+          <h2 id="troubleshooting">Troubleshooting</h2>
+          <ul>
+            <li><strong>“Execution service offline”</strong> — run <code>npm run exec</code> and confirm <code>http://127.0.0.1:5310/health</code>.</li>
+            <li><strong>Provider request fails</strong> — check the base URL, model name, key, CORS and the provider's own status. Nothing is retried automatically.</li>
+            <li><strong>Projects disappeared</strong> — IndexedDB is per origin and per profile. Private browsing or clearing site data removes it.</li>
+            <li><strong>Linked folder unreadable</strong> — re-grant permission or re-import. Saved IndexedDB content still opens.</li>
+            <li><strong>Blank screen after an update</strong> — hard reload to clear a stale service worker or optimized dependency cache.</li>
+          </ul>
+
+          <h2>Repository documents</h2>
+          <p>
+            The repository also contains <code>docs/architecture.md</code>,
+            <code>docs/deployment.md</code>, <code>docs/security.md</code> and
+            <code>docs/production-readiness.md</code>, plus the main <code>README.md</code>.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

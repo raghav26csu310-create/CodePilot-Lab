@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Copilot — CodePilot Lab</title>
+    <meta name="description" content="Provider-independent AI help: native Ollama or any OpenAI-compatible endpoint, explicit context controls, streamed answers and reviewable complete-file proposals." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/copilot.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="AI Copilot — CodePilot Lab" />
+    <meta property="og:description" content="A copilot that shows its work and never writes without review." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/copilot.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html" aria-current="page">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="kicker">AI Copilot · Live</p>
+            <h1>A copilot that <span>shows</span> its work.</h1>
+            <p class="lead">
+              Bring Ollama, LM Studio, llama.cpp or any OpenAI-compatible provider. Choose exactly
+              which files and diagnostics are eligible, inspect the assembled bundle, then review
+              complete-file proposals as diffs before accepting an undoable edit.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/settings">Configure a provider</a>
+              <a class="btn btn-secondary" href="/copilot">Open the live overview</a>
+            </div>
+          </div>
+          <figure class="shot">
+            <img src="/screenshots/copilot.png" width="1440" height="1000" alt="CodePilot Lab copilot overview describing provider-independent context, capabilities and provider status." />
+            <figcaption>Copilot overview · capabilities and real configuration state</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap">
+          <div class="grid">
+            <article class="card"><h3>No provider by default</h3><p>The app is fully usable without AI. The dock says no provider is configured instead of inventing an answer.</p></article>
+            <article class="card"><h3>Two adapters</h3><p>Native Ollama uses NDJSON <code>/api/chat</code> and <code>/api/tags</code>. The OpenAI-compatible adapter uses SSE <code>/chat/completions</code> and <code>/models</code>.</p></article>
+            <article class="card"><h3>Context you can inspect</h3><p>Active file, selection, tree names and Monaco markers are toggles. Other files are attached explicitly, and a character budget caps the bundle.</p></article>
+            <article class="card"><h3>Seven modes</h3><p>Chat, explain at three depths, debug, generate, review, tests and a learning mode that starts with hints.</p></article>
+            <article class="card"><h3>Review before write</h3><p>Proposals are complete files in <code>codepilot</code> fences. Unsafe paths are rejected; accepting applies one undoable edit and never saves automatically.</p></article>
+            <article class="card"><h3>Honest failures</h3><p>Auth, network, provider, CORS and rate-limit errors are distinct. Nothing is retried silently or replaced with a fake success.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap prose">
+          <h2>Credentials</h2>
+          <p>
+            No key is compiled into the bundle. A typed key lives in memory by default and only
+            reaches IndexedDB when “remember in this browser” is checked. A local proxy can hold keys
+            server-side: point the base URL at it and leave the key field empty.
+          </p>
+          <h2>Privacy boundary</h2>
+          <p>
+            Context is assembled in your browser and sent only to the endpoint you configured, only
+            when you press Send. CodePilot Lab operates no model proxy and receives no conversation
+            content. Your provider's own retention policy still applies.
+          </p>
+          <div class="callout"><strong>Cross-origin reality.</strong> Remote providers must allow browser requests (CORS). Free tiers rate-limit; the UI reports the provider's status rather than retrying on your behalf.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

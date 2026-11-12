@@ -15,7 +15,7 @@ import { buildContextBundle, DEFAULT_CONTEXT_OPTIONS, summarizeContext } from '.
 import { AiError, describeAiError, toAiError } from './errors'
 import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { isConfigured, providerLabel } from './providerPresets'
-import { adapterFor } from './providers'
+import { adapterForSettings } from './providers'
 import { useAiSettings } from './settingsStore'
 import { attachProposalIds, parseProposals } from './proposals'
 import type {
@@ -333,7 +333,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          await adapterFor(settings.provider).stream({
+          await adapterForSettings(settings).stream({
             settings,
             turns,
             signal: controller.signal,

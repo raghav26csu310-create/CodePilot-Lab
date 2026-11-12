@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 
 import { readSidebarPreference, writeSidebarPreference } from '../lib/sidebarPreference'
 import { CommandPalette } from './CommandPalette'
 import { MobileMenu } from './MobileMenu'
 import { PageTransition } from './PageTransition'
+import { RouteErrorBoundary, RouteFallback } from './RouteBoundary'
 import { Sidebar } from './Sidebar'
 import { StatusBar } from './StatusBar'
 import { TopBar } from './TopBar'
@@ -64,9 +65,13 @@ export function AppShell() {
         <TopBar onOpenPalette={openPalette} onOpenMenu={openMenu} menuOpen={menuOpen} />
 
         <main id="main" className={styles.main}>
-          <PageTransition key={location.pathname}>
-            <Outlet />
-          </PageTransition>
+          <RouteErrorBoundary key={location.pathname}>
+            <Suspense fallback={<RouteFallback />}>
+              <PageTransition key={location.pathname}>
+                <Outlet />
+              </PageTransition>
+            </Suspense>
+          </RouteErrorBoundary>
         </main>
       </div>
 

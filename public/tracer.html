@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Variable Tracer — CodePilot Lab</title>
+    <meta name="description" content="A real Python variable and execution tracer built on sys.settrace: step, scrub, inspect locals and the call stack, and see which branches actually ran." />
+    <meta name="theme-color" content="#04060b" />
+    <link rel="canonical" href="__SITE_URL__/tracer.html" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Variable Tracer — CodePilot Lab" />
+    <meta property="og:description" content="Real sys.settrace events, not simulated variables." />
+    <meta property="og:image" content="__SITE_URL__/screenshots/tracer.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="inner">
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <nav class="site-nav" aria-label="Public">
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html" aria-current="page">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html">Docs</a><a href="/about.html">About</a>
+        </nav>
+        <a class="header-cta" href="/">Open the app</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap">
+          <div>
+            <p class="kicker">Execution Lab · Live</p>
+            <h1>Watch a program <span>actually</span> run.</h1>
+            <p class="lead">
+              The tracer instruments Python with <code>sys.settrace</code>, records real line, call
+              and return events, and reconstructs locals at each stop. Step forward and back, scrub
+              the timeline, and inspect the call stack. Values you see came from the interpreter.
+            </p>
+            <div class="actions">
+              <a class="btn btn-primary" href="/lab">Open the Execution Lab</a>
+              <a class="btn btn-secondary" href="/docs.html#tracer">Tracer limits</a>
+            </div>
+          </div>
+          <figure class="shot">
+            <img src="/screenshots/tracer.png" width="1440" height="1000" alt="CodePilot Lab tracer showing source, execution controls, locals and the event timeline." />
+            <figcaption>Tracer · real events, locals and call stack</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap">
+          <div class="grid">
+            <article class="card"><h3>Real instrumentation</h3><p><code>server/trace_python.py</code> is the recorder. It emits line, call, return and exception events with a bounded event count.</p></article>
+            <article class="card"><h3>Time travel over events</h3><p>Step, play, pause and scrub across recorded stops. Back-stepping is a replay of recorded events, not a guess about state.</p></article>
+            <article class="card"><h3>Locals with provenance</h3><p>Type, value, scope, declaration and changed markers are derived from successive recorded frames.</p></article>
+            <article class="card"><h3>Call stack</h3><p>Each stop carries the real frame stack, so recursion and helper calls are visible.</p></article>
+            <article class="card"><h3>Branch and loop observations</h3><p>Observation cards are computed from event transitions that occurred, not from static analysis.</p></article>
+            <article class="card"><h3>Other languages refused</h3><p>Only Python has a real tracer. JavaScript, TypeScript, C, C++ and Java show an explicit unsupported message; Go is not offered by the runner.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="block">
+        <div class="wrap prose">
+          <h2>Execution limits</h2>
+          <p>
+            The runner applies a compile timeout, an 8-second run cap, code/stdin/output character
+            caps, a test-count cap and a trace-event cap. Jobs run in fresh temp directories and are
+            tree-killed on timeout or Stop.
+          </p>
+          <div class="callout"><strong>Not a sandbox.</strong> The execution service is a resource-limited loopback Node process. It is not a hardened security boundary and must not be exposed to untrusted networks. Public hosted execution is not offered as safe.</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+    </footer>
+  </body>
+</html>

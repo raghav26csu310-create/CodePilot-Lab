@@ -140,6 +140,12 @@
   background: rgb(87 226 230 / 0.035);
 }
 
+.languageNote {
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .split {
   display: grid;
   grid-template-columns: 168px minmax(0, 1fr);

@@ -16,8 +16,9 @@ import { Link } from 'react-router-dom'
 
 import { Badge } from '../../design-system/primitives/Badge'
 import { Button } from '../../design-system/primitives/Button'
-import { useAiSettings } from '../copilot/settingsStore'
-import { providerLabel } from '../copilot/providerPresets'
+import { useGateway } from './gateway/store'
+import { useAiSettings } from './settingsStore'
+import { providerLabel, usesGateway } from './providerPresets'
 import styles from './CopilotOverviewPage.module.css'
 
 const CAPABILITIES = [
@@ -60,12 +61,26 @@ const CAPABILITIES = [
 
 export function CopilotOverviewPage() {
   const snapshot = useAiSettings()
-  const configured = snapshot.settings.baseUrl.trim() !== '' && snapshot.settings.model.trim() !== ''
+  const gateway = useGateway()
+  const routed = usesGateway(snapshot.settings)
+  const configured = routed
+    ? gateway.status !== null
+    : snapshot.settings.baseUrl.trim() !== '' && snapshot.settings.model.trim() !== ''
   const status = !configured
     ? 'unconfigured'
-    : snapshot.lastTest?.ok
-      ? 'verified'
-      : 'configured'
+    : routed
+      ? gateway.status?.managed.available === true ||
+        (gateway.status?.connection?.verifiedAt ?? null) !== null
+        ? 'verified'
+        : 'configured'
+      : snapshot.lastTest?.ok
+        ? 'verified'
+        : 'configured'
+  const model =
+    snapshot.settings.model ||
+    gateway.status?.managed.model ||
+    gateway.status?.connection?.model ||
+    '—'
 
   return (
     <section className={styles.page} aria-labelledby="copilot-title">
@@ -110,20 +125,22 @@ export function CopilotOverviewPage() {
             </div>
             <div>
               <dt>Model</dt>
-              <dd>{snapshot.settings.model || '—'}</dd>
+              <dd>{model}</dd>
             </div>
             <div>
               <dt>Endpoint</dt>
-              <dd>{snapshot.settings.baseUrl || '—'}</dd>
+              <dd>{routed ? 'CodePilot API · server-side request' : snapshot.settings.baseUrl || '—'}</dd>
             </div>
             <div>
-              <dt>Key</dt>
+              <dt>Key in this browser</dt>
               <dd>
-                {snapshot.settings.apiKey
-                  ? snapshot.settings.rememberKey
-                    ? 'remembered in this browser'
-                    : 'memory only'
-                  : 'none'}
+                {routed
+                  ? 'none'
+                  : snapshot.settings.apiKey
+                    ? snapshot.settings.rememberKey
+                      ? 'remembered in this browser (plaintext)'
+                      : 'memory only'
+                    : 'none'}
               </dd>
             </div>
           </dl>
@@ -199,12 +216,13 @@ export function CopilotOverviewPage() {
         <article className={styles.panel}>
           <h2>
             <KeyRound size={16} />
-            Credentials in an honest local-first app
+            Where credentials live
           </h2>
           <p>
-            CodePilot Lab is a static SPA with no backend. Keys are entered at runtime, never
-            compiled into source, and stay in memory unless you opt into IndexedDB persistence. For
-            server-side secrets, run a local proxy and point the base URL at it.
+            The default route is CodePilot AI through the CodePilot API: your session authenticates
+            the request and the platform provider key never leaves the server. A bring-your-own key
+            can be saved encrypted on the API, or used directly from this tab in advanced mode
+            where the key stays in memory unless you opt into plaintext IndexedDB persistence.
           </p>
         </article>
 

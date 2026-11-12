@@ -1,41 +1,66 @@
-import { KeyRound, Laptop, Radio, ShieldCheck } from 'lucide-react'
+import { KeyRound, Laptop, Radio, ShieldCheck, UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Badge } from '../../design-system/primitives/Badge'
 import { Button } from '../../design-system/primitives/Button'
+import { GatewayAccountPanel } from '../copilot/gateway/AccountPanel'
+import { useGateway } from '../copilot/gateway/store'
 import { ProviderSettingsForm } from '../copilot/ProviderSettingsForm'
+import { providerLabel, usesGateway } from '../copilot/providerPresets'
 import { useAiSettings } from '../copilot/settingsStore'
 import styles from './AiSettingsPage.module.css'
 
 export function AiSettingsPage() {
   const snapshot = useAiSettings()
-  const status = !snapshot.settings.baseUrl.trim() || !snapshot.settings.model.trim()
-    ? 'unconfigured'
-    : snapshot.lastTest?.ok
+  const gateway = useGateway()
+  const routed = usesGateway(snapshot.settings)
+
+  const gatewayManaged = gateway.status?.managed.available === true
+  const gatewayVerified =
+    gatewayManaged || (gateway.status?.connection?.verifiedAt ?? null) !== null
+  const gatewayReady =
+    gatewayManaged || gateway.status?.connection !== null && gateway.status !== null
+
+  const status: 'unconfigured' | 'configured' | 'verified' = routed
+    ? gatewayVerified
       ? 'verified'
-      : 'configured'
+      : gatewayReady
+        ? 'configured'
+        : 'unconfigured'
+    : !snapshot.settings.baseUrl.trim() || !snapshot.settings.model.trim()
+      ? 'unconfigured'
+      : snapshot.lastTest?.ok
+        ? 'verified'
+        : 'configured'
+
+  const badge =
+    status === 'verified'
+      ? routed
+        ? 'Gateway available'
+        : 'Endpoint responded'
+      : status === 'configured'
+        ? routed
+          ? 'Connection saved · unverified'
+          : 'Configured · unverified'
+        : routed
+          ? 'Gateway not available'
+          : 'No provider'
 
   return (
     <section className={styles.page} aria-labelledby="settings-title">
       <header className={styles.head}>
         <div>
-          <p className={styles.kicker}>Settings · AI bridge</p>
+          <p className={styles.kicker}>Settings · AI</p>
           <h1 id="settings-title" className={styles.title}>
-            Provider &amp; credentials
+            AI &amp; credentials
           </h1>
           <p className={styles.lead}>
-            CodePilot Lab has no backend. Model calls go directly from this tab to the endpoint you
-            configure, which is why the default is a local Ollama server. Nothing is sent unless
-            you press Send in a workspace.
+            CodePilot AI runs through the CodePilot API: your account authenticates the request and
+            provider keys stay on the server. A local or bring-your-own endpoint remains available
+            as an explicitly labelled advanced mode.
           </p>
         </div>
-        <Badge tone={status === 'verified' ? 'live' : 'planned'}>
-          {status === 'verified'
-            ? 'Endpoint responded'
-            : status === 'configured'
-              ? 'Configured · unverified'
-              : 'No provider'}
-        </Badge>
+        <Badge tone={status === 'verified' ? 'live' : 'planned'}>{badge}</Badge>
       </header>
 
       <div className={styles.grid}>
@@ -46,24 +71,34 @@ export function AiSettingsPage() {
         <aside className={styles.side}>
           <div className={styles.panel}>
             <h2>
+              <UserRound size={15} />
+              CodePilot Cloud account
+            </h2>
+            <GatewayAccountPanel />
+          </div>
+
+          <div className={styles.panel}>
+            <h2>
               <ShieldCheck size={15} />
               How credentials are handled
             </h2>
             <ul>
               <li>
-                Keys are typed at runtime and never compiled into the bundle. There is no key in
-                the repository or in build output.
+                Managed mode: the API holds the platform provider key. It is never sent to the
+                browser, bundled into the app, or returned by an endpoint.
               </li>
               <li>
-                By default a key lives only in this tab&apos;s memory. It disappears on reload.
+                Bring-your-own mode: a saved key is encrypted with AES-256-GCM on the API and only
+                the last four characters are returned.
               </li>
               <li>
-                Opting into “remember” stores the key in this browser&apos;s IndexedDB. Anyone with
-                access to this profile can read it; that trade-off is explicit.
+                Direct browser mode still exists as an advanced fallback. In that mode the key lives
+                in tab memory by default, and “remember” writes it in plaintext to this
+                browser&apos;s IndexedDB.
               </li>
               <li>
-                A local proxy can hold keys server-side: point the base URL at it and leave the key
-                field empty here.
+                No key is present in the repository or the production bundle. Nothing is sent until
+                you ask for a completion.
               </li>
             </ul>
           </div>
@@ -74,13 +109,13 @@ export function AiSettingsPage() {
               What “verified” means
             </h2>
             <p>
-              A provider is only marked verified after a real request succeeded in this session —
-              either a connection test that listed models or a completed chat response. Saving
-              settings clears that claim.
+              The gateway is only shown as available after a real status request succeeded in this
+              session. A direct provider is only marked verified after a real request listed models
+              or a completed chat response. Saving settings clears that claim.
             </p>
             <p>
-              Free tiers are not unlimited. Rate limits surface as errors with the provider&apos;s
-              own HTTP status; nothing is retried automatically.
+              Quotas are enforced by the API. When the managed daily or monthly limit is reached the
+              request fails with the real reason; nothing is retried automatically.
             </p>
           </div>
 
@@ -90,9 +125,10 @@ export function AiSettingsPage() {
               Local-first options
             </h2>
             <p>
-              Ollama, LM Studio and llama.cpp all run on this machine and need no account. Remote
-              OpenAI-compatible providers work too, but the browser will make a cross-origin
-              request, so the provider or a proxy must allow it.
+              Ollama, LM Studio and llama.cpp run on this machine and need no account. They remain
+              supported as the advanced direct mode; remote OpenAI-compatible providers work too,
+              but the browser makes a cross-origin request, so the provider or a proxy must allow
+              it.
             </p>
             <Button to="/workspace" variant="secondary" size="sm">
               Open a workspace
@@ -106,20 +142,33 @@ export function AiSettingsPage() {
             </h2>
             <dl className={styles.slot}>
               <div>
-                <dt>Provider</dt>
-                <dd>{snapshot.settings.preset}</dd>
+                <dt>Route</dt>
+                <dd>{routed ? 'CodePilot API gateway' : 'Direct browser provider'}</dd>
+              </div>
+              <div>
+                <dt>Preset</dt>
+                <dd>{providerLabel(snapshot.settings)}</dd>
               </div>
               <div>
                 <dt>Model</dt>
-                <dd>{snapshot.settings.model || '—'}</dd>
+                <dd>
+                  {snapshot.settings.model ||
+                    gateway.status?.managed.model ||
+                    gateway.status?.connection?.model ||
+                    'provider default'}
+                </dd>
               </div>
               <div>
-                <dt>Key in memory</dt>
-                <dd>{snapshot.settings.apiKey ? 'yes' : 'no'}</dd>
-              </div>
-              <div>
-                <dt>Key persisted</dt>
-                <dd>{snapshot.settings.rememberKey && snapshot.settings.apiKey ? 'yes' : 'no'}</dd>
+                <dt>Key in this browser</dt>
+                <dd>
+                  {routed
+                    ? 'none'
+                    : snapshot.settings.apiKey
+                      ? snapshot.settings.rememberKey
+                        ? 'saved (plaintext IndexedDB)'
+                        : 'memory only'
+                      : 'none'}
+                </dd>
               </div>
             </dl>
             <p className={styles.footNote}>
