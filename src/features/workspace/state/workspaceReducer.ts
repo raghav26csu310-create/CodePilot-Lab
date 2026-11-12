@@ -151,6 +151,7 @@ export function createInitialWorkspaceState(entries: TreeEntry[] = []): Workspac
       selection: null,
       palette: null,
       pendingReveal: null,
+      pendingJob: null,
       toast: null,
     },
   }
@@ -630,6 +631,9 @@ export function workspaceReducer(
 
     case 'ui/set-pending-reveal':
       return { tree, ui: { ...ui, pendingReveal: action.reveal } }
+
+    case 'ui/set-pending-job':
+      return { tree, ui: { ...ui, pendingJob: action.job } }
 
     case 'ui/show-toast':
       return {

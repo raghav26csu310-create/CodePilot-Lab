@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  Bug,
   ExternalLink,
   LoaderCircle,
   Play,
@@ -8,7 +9,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
@@ -24,10 +25,13 @@ import {
   fetchExecutionHealth,
   newJobId,
   runCode,
+  traceCode,
   type HealthResponse,
   type RunResponse,
+  type TraceResponse,
 } from '../../execution/api'
 import { stageConversionSource } from '../../converter/staging'
+import type { PendingWorkspaceJob } from '../state/types'
 import { useWorkspace } from '../state/useWorkspace'
 import styles from './WorkspaceRunPanel.module.css'
 
@@ -40,6 +44,14 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Stopped',
 }
 
+const TRACE_STATUS_LABEL: Record<string, string> = {
+  ok: 'Trace complete',
+  unsupported: 'Tracing unavailable',
+  error: 'Trace failed',
+  timeout: 'Trace timed out',
+  cancelled: 'Trace stopped',
+}
+
 /**
  * Real execution for the file that is open in the workspace.
  *
@@ -48,7 +60,7 @@ const STATUS_LABEL: Record<string, string> = {
  * no runtime here and say so instead of pretending to run.
  */
 export function WorkspaceRunPanel({ activePath }: { activePath: string | null }) {
-  const { project, state } = useWorkspace()
+  const { project, state, dispatch } = useWorkspace()
   const commands = useEditorCommands()
   const navigate = useNavigate()
 
@@ -56,10 +68,14 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
   const [healthChecked, setHealthChecked] = useState(false)
   const [stdin, setStdin] = useState('')
   const [running, setRunning] = useState(false)
+  const [activeKind, setActiveKind] = useState<'run' | 'trace' | null>(null)
   const [jobId, setJobId] = useState<string | null>(null)
   const [result, setResult] = useState<RunResponse | null>(null)
+  const [traceResult, setTraceResult] = useState<TraceResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [codeNote, setCodeNote] = useState<string | null>(null)
+
+  const pendingJob = state.ui.pendingJob
 
   const language = activePath
     ? projectLanguageForMonaco(languageForPath(activePath).id) ??
@@ -70,6 +86,8 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
   const support = runtime ? health?.languages.find((entry) => entry.id === runtime) : null
   const online = Boolean(health?.ok)
   const runnable = Boolean(runtime) && online && support?.executable !== false
+  const tracerAvailable =
+    runtime !== null && Boolean(health?.tracing.languages.includes(runtime))
 
   const refreshHealth = useCallback(async () => {
     try {
@@ -122,8 +140,10 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
     const job = newJobId()
     setJobId(job)
     setRunning(true)
+    setActiveKind('run')
     setError(null)
     setResult(null)
+    setTraceResult(null)
     try {
       setResult(
         await runCode({
@@ -142,6 +162,60 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
       )
     } finally {
       setRunning(false)
+      setActiveKind(null)
+      setJobId(null)
+    }
+  }
+
+  /**
+   * Trace is a real `sys.settrace` recording for Python only. Every other
+   * runtime is rejected by the service and says so here, never simulated.
+   */
+  const trace = async () => {
+    if (!activePath || !language || !runtime || running) {
+      return
+    }
+    if (!tracerAvailable) {
+      setError(
+        `${language.label} has no tracer in this build — only Python is traced line by line.`,
+      )
+      return
+    }
+    const code = readDraft()
+    if (code === null) {
+      setError('This file has no loaded content to trace. Open it in the editor first.')
+      return
+    }
+    if (!code.trim()) {
+      setError('The buffer is empty, so there is nothing to trace.')
+      return
+    }
+    const job = newJobId()
+    setJobId(job)
+    setRunning(true)
+    setActiveKind('trace')
+    setError(null)
+    setResult(null)
+    setTraceResult(null)
+    try {
+      setTraceResult(
+        await traceCode({
+          language: runtime,
+          code,
+          stdin,
+          timeoutMs: 5000,
+          jobId: job,
+        }),
+      )
+    } catch (cause) {
+      setError(
+        cause instanceof ExecutionServiceError
+          ? cause.message
+          : 'The trace request failed before a result was returned.',
+      )
+    } finally {
+      setRunning(false)
+      setActiveKind(null)
       setJobId(null)
     }
   }
@@ -163,6 +237,55 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
       )
     }
   }
+
+  const runRef = useRef(run)
+  const traceRef = useRef(trace)
+  const pendingRef = useRef<PendingWorkspaceJob | null>(null)
+
+  useEffect(() => {
+    runRef.current = run
+    traceRef.current = trace
+  })
+
+  /**
+   * The editor action bar hands over a Run/Trace request. It is consumed once,
+   * here, so a click never claims a result the panel did not produce.
+   */
+  useEffect(() => {
+    if (!pendingJob) {
+      return
+    }
+
+    pendingRef.current = pendingJob
+    if (pendingJob.path !== activePath) {
+      pendingRef.current = null
+      dispatch({ type: 'ui/set-pending-job', job: null })
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      pendingRef.current = null
+      dispatch({ type: 'ui/set-pending-job', job: null })
+      if (pendingJob.kind === 'trace') {
+        void traceRef.current()
+      } else {
+        void runRef.current()
+      }
+    }, 0)
+
+    return () => window.clearTimeout(timer)
+  }, [pendingJob, activePath, dispatch])
+
+  // A request that was never consumed must not fire when the panel is opened
+  // again much later.
+  useEffect(() => {
+    return () => {
+      if (pendingRef.current) {
+        pendingRef.current = null
+        dispatch({ type: 'ui/set-pending-job', job: null })
+      }
+    }
+  }, [dispatch])
 
   if (!activePath) {
     return (
@@ -263,30 +386,47 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
                   Stop
                 </button>
               ) : (
-                <button
-                  type="button"
-                  className={styles.runButton}
-                  onClick={() => void run()}
-                  disabled={!runnable}
-                  title={
-                    online
-                      ? 'Run the live editor buffer'
-                      : 'Start the local execution service with npm run exec'
-                  }
-                >
-                  <Play size={12} aria-hidden="true" />
-                  Run file
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className={styles.runButton}
+                    onClick={() => void run()}
+                    disabled={!runnable}
+                    title={
+                      online
+                        ? 'Run the live editor buffer'
+                        : 'Start the local execution service with npm run exec'
+                    }
+                  >
+                    <Play size={12} aria-hidden="true" />
+                    Run file
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.ghostButton}
+                    onClick={() => void trace()}
+                    disabled={!tracerAvailable || !online}
+                    title={
+                      tracerAvailable
+                        ? 'Record a real Python sys.settrace run of the live buffer'
+                        : `${language?.label ?? 'This language'} has no tracer — only Python is traced`
+                    }
+                  >
+                    <Bug size={11} aria-hidden="true" />
+                    Trace
+                  </button>
+                </>
               )}
               <button
                 type="button"
                 className={styles.ghostButton}
                 onClick={() => {
                   setResult(null)
+                  setTraceResult(null)
                   setError(null)
                   setCodeNote(null)
                 }}
-                disabled={!result && !error}
+                disabled={!result && !traceResult && !error}
               >
                 <Trash2 size={11} aria-hidden="true" />
                 Clear
@@ -308,10 +448,10 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
             </p>
           ) : null}
 
-          {running && !result ? (
+          {running && !result && !traceResult ? (
             <p className={styles.pending}>
               <LoaderCircle size={12} className={styles.spin} aria-hidden="true" />
-              Waiting for the local process…
+              {activeKind === 'trace' ? 'Recording the Python trace…' : 'Waiting for the local process…'}
             </p>
           ) : null}
 
@@ -351,6 +491,80 @@ export function WorkspaceRunPanel({ activePath }: { activePath: string | null })
                     <p className={styles.error}>{result.results[0].message}</p>
                   ) : null}
                 </>
+              )}
+            </div>
+          ) : null}
+
+          {traceResult ? (
+            <div className={styles.result}>
+              <div className={styles.resultHead}>
+                <span
+                  className={styles.status}
+                  data-status={traceResult.status === 'ok' ? 'ok' : 'runtime_error'}
+                >
+                  {TRACE_STATUS_LABEL[traceResult.status] ?? traceResult.status}
+                </span>
+                <span className={styles.duration}>
+                  {traceResult.events.length} recorded event
+                  {traceResult.events.length === 1 ? '' : 's'}
+                  {traceResult.truncated ? ' · truncated' : ''}
+                </span>
+                <span className={styles.duration}>
+                  {traceResult.durationMs ?? 0} ms · exit {traceResult.exitCode ?? '—'}
+                </span>
+              </div>
+              {traceResult.message ? <p className={styles.error}>{traceResult.message}</p> : null}
+              <div className={styles.streamBlock}>
+                <span className={styles.streamLabel}>stdout</span>
+                <pre className={styles.stream} data-stream="stdout">
+                  {traceResult.stdout || '(no stdout)'}
+                </pre>
+              </div>
+              {traceResult.stderr ? (
+                <div className={styles.streamBlock}>
+                  <span className={styles.streamLabel}>stderr</span>
+                  <pre className={styles.stream} data-stream="stderr">
+                    {traceResult.stderr}
+                  </pre>
+                </div>
+              ) : null}
+              {traceResult.events.length > 0 ? (
+                <>
+                  <ol className={styles.traceList} aria-label="Recorded trace events">
+                    {traceResult.events.slice(0, 80).map((event) => {
+                      const changed = event.variables.filter((variable) => variable.changed).slice(0, 3)
+                      return (
+                        <li key={event.index} className={styles.traceEvent}>
+                          <span className={styles.traceKind} data-kind={event.event}>
+                            {event.event}
+                          </span>
+                          <span className={styles.traceLine}>line {event.line}</span>
+                          <span className={styles.traceFn}>{event.function}</span>
+                          {changed.length > 0 ? (
+                            <span className={styles.traceVars}>
+                              {changed.map((variable) => `${variable.name}=${variable.value}`).join(' · ')}
+                            </span>
+                          ) : null}
+                          {event.output ? (
+                            <span className={styles.traceOutput} title={event.output}>
+                              {event.output.trim()}
+                            </span>
+                          ) : null}
+                        </li>
+                      )
+                    })}
+                  </ol>
+                  {traceResult.events.length > 80 ? (
+                    <p className={styles.meta}>
+                      Showing the first 80 of {traceResult.events.length} recorded events.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className={styles.meta}>
+                  The tracer recorded no events. That is the service's real result, not a rendering
+                  placeholder.
+                </p>
               )}
             </div>
           ) : null}

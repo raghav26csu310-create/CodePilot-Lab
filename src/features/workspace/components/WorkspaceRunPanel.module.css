@@ -293,6 +293,78 @@
   color: #ffb3bb;
 }
 
+.traceList {
+  display: flex;
+  flex-direction: column;
+  max-height: 150px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--hairline);
+}
+
+.traceEvent {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  min-width: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.03);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.traceKind {
+  flex: none;
+  width: 46px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.traceKind[data-kind='call'] {
+  color: var(--cyan-dim);
+}
+
+.traceKind[data-kind='return'] {
+  color: rgb(125 219 163 / 0.9);
+}
+
+.traceKind[data-kind='exception'] {
+  color: var(--danger);
+}
+
+.traceLine {
+  flex: none;
+  color: var(--text-3);
+}
+
+.traceFn {
+  flex: 0 1 auto;
+  max-width: 14ch;
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.traceVars {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(183 226 168 / 0.9);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.traceOutput {
+  flex: 0 1 22ch;
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .empty {
   display: flex;
   flex-direction: column;

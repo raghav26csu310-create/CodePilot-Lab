@@ -129,8 +129,34 @@ export function Select({
       close(false)
     }
 
-    const onScroll = () => close(false)
-    const onResize = () => close(false)
+    /**
+     * Scrolling the menu itself is normal use — the list is the scroll
+     * container, and closing on its own scroll made long option lists
+     * unusable. Scrolling an ancestor moves the trigger, so the menu is
+     * repositioned to follow it instead of being dismissed. Only when the
+     * trigger leaves the viewport does the menu close.
+     */
+    const onScroll = (event: Event) => {
+      const target = event.target
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return
+      }
+
+      const button = buttonRef.current
+      if (!button) {
+        return
+      }
+
+      const rect = button.getBoundingClientRect()
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        close(false)
+        return
+      }
+
+      measure()
+    }
+
+    const onResize = () => measure()
 
     document.addEventListener('pointerdown', onPointerDown, true)
     window.addEventListener('scroll', onScroll, true)
@@ -140,7 +166,19 @@ export function Select({
       window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', onResize)
     }
-  }, [close, open])
+  }, [close, measure, open])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    // Keyboard navigation must keep the active option inside the list's
+    // scroll viewport without moving the page.
+    menuRef.current
+      ?.querySelector<HTMLElement>('[data-active="true"]')
+      ?.scrollIntoView({ block: 'nearest' })
+  }, [open, activeIndex])
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) {
@@ -223,6 +261,7 @@ export function Select({
                   <button
                     type="button"
                     role="option"
+                    id={`${listboxId}-option-${index}`}
                     aria-selected={isSelected}
                     aria-disabled={option.disabled || undefined}
                     disabled={option.disabled}
@@ -248,7 +287,6 @@ export function Select({
         document.body,
       )
     : null
-
   return (
     <div className={[styles.root, className].filter(Boolean).join(' ')}>
       <button
@@ -262,6 +300,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={open ? `${listboxId}-option-${activeIndex}` : undefined}
         aria-label={ariaLabel}
         title={title ?? ariaLabel}
         disabled={disabled}

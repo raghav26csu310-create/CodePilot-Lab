@@ -19,9 +19,9 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | # | Scope | State |
 | --- | --- | --- |
 | 0 | Audit (`docs/technical-audit.md`) | Done |
-| 1 | AI gateway + conversion hardening | **Done and verified (see below)** |
-| 2 | `Select` scroll-close root cause, New Project dialog viewport, editor action bar | Not started — next |
-| 3 | Real terminal (local companion **and** cloud, user chose both) | Not started |
+| 1 | AI gateway + conversion hardening | **Done and verified (§11)** |
+| 2 | `Select` scroll-close root cause, New Project dialog viewport, editor action bar | **Done and verified (§12)** |
+| 3 | Real terminal (local companion **and** cloud, user chose both) | Not started — next |
 | 4 | Device file access (open/import/save/save-as/export/reconnect) | Not started |
 | 5 | GitHub integration (GitHub App, server-side key) | Not started |
 | 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | Not started |
@@ -30,11 +30,14 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 ## Environment state at wrap-up
 
 - Node.js `v24.19.0`, npm project `codepilot-lab@0.7.0`.
-- Dev servers are **stopped**. Restart with two terminals:
+- Dev servers are **stopped**. Restart with three terminals:
   - `npm run api:dev` → API on `127.0.0.1:8787` (in-memory store, ephemeral credential key)
   - `npm run dev` → Vite on `http://localhost:5173`, proxies `/api` to the API
+  - `npm run exec` → execution sidecar on `127.0.0.1:5310` (required for Run/Trace)
 - The in-memory store means **all accounts and saved connections from today are gone** on
   restart. Recreate one account on `/settings` when testing.
+- Projects created during verification live in this browser's IndexedDB (`fn`, `py-lab`);
+  they are local test records, not seeded demo data.
 - No `.env` file is present. `.env.example` lists every variable and contains no secrets.
 - Nothing has been deployed. No provider credential exists in this environment, so no real
   model completion has ever run here.
@@ -101,7 +104,7 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - No unexpected console errors; the only ones were the known execution-sidecar CORS
   preflight failures.
 
-### Gates (last run, all after the final code change)
+### Gates (Milestone 1)
 
 | Gate | Result |
 | --- | --- |
@@ -113,6 +116,62 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | `npm audit --omit=dev` | 0 vulnerabilities |
 | Secret scan of `dist/` and of tracked files | 0 hits |
 
+## What Milestone 2 delivered
+
+### `Select` — root cause fixed (`src/design-system/primitives/Select.tsx`)
+
+- Scroll events originating inside the menu's own list are ignored.
+- Ancestor scrolls reposition the portal; the menu closes only when the trigger leaves the
+  viewport.
+- `aria-activedescendant`, stable option ids and `scrollIntoView({ block: 'nearest' })` keep the
+  keyboard-active option visible without moving the page.
+- The trigger is a real `button`, so Enter/Space open it.
+
+### Editor action bar (`EditorArea.tsx`, `EditorMoreMenu.tsx`, `MonacoWorkbench.tsx`)
+
+- Order: **Run · Trace · Save · Save all · Format · Find · More**, then the language and
+  dirty chips. Terminal / Output / Problems / Diagnostics stay in the bottom panel.
+- Run and Trace dispatch `ui/set-pending-job` and open the Run panel, which consumes the
+  request once and makes the real `/run` or `/trace` call. Nothing is fabricated from a click.
+- Trace is enabled for Python only; the other runtimes say so in the title.
+- Format runs `editor.action.formatDocument` on the live model and reports whether the buffer
+  changed. `supportsDocumentFormatting()` covers TS, JS, JSON, CSS, SCSS, Less and HTML;
+  every other language reports "has no document formatter in this build". Shift+Alt+F is bound
+  inside Monaco and shares the command.
+- More is a portalled non-modal menu: word wrap, minimap, theme, font size, copy path, Copilot
+  context, Explain. Escape/outside/Tab close it (Tab moves on to the next tabbable instead of
+  trapping focus) and focus returns to the trigger.
+- Toolbar density now follows the **editor pane** via a container query. Before the fix, a
+  1440 px window with the explorer and Copilot dock open left a 554 px pane and a 649 px
+  toolbar: the file identity collapsed to 0 px and More slipped under the dock. After:
+  `scrollWidth === clientWidth`, identity 159 px, labels restored at pane ≥ 800 px.
+
+### Browser evidence (in-app 912×766, harness measured at 1440×1000)
+
+- New Project dialog: 415 px tall at 1000×700; menu 290 px tall with a 251 px list viewport for
+  9 options; list `scrollTop = 200` keeps `aria-expanded="true"`; ArrowDown moves the active
+  option TypeScript → C and scrolls it into view; choosing CSS closes the menu and updates the
+  note.
+- Python project `py-lab` / `main.py`: **Run** → `COMPLETED · 143 ms · exit 0 · "Hello from
+  CodePilot Lab"`; **Trace** → `TRACE COMPLETE · 9 recorded events · 208 ms` with real
+  call/line/return rows and captured stdout.
+- TypeScript: Trace disabled ("no tracer in this build — only Python is traced"). HTML: Run and
+  Trace disabled ("no runtime in this build"), status bar "Editor only · no runtime".
+- Find opened Monaco's widget (`1 of 1`); Replace All produced `const   greeting :string='Hi'`
+  (Unsaved, Save all enabled); **Format** produced `const greeting: string = 'Hi'` + toast
+  "Formatted main.ts."; **Save** produced "Saved main.ts" and disabled Save all.
+- More menu checkmarks/toggles/keyboard/outside-close all behaved as described above.
+
+### Gates (Milestone 2)
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` (frontend + API) | pass |
+| `npm run lint` | pass, same 2 pre-existing `react-refresh` warnings |
+| `npm test` | 61/61, 6 files |
+| `npm run test:api` | 12/12 |
+| `npm run build` | pass (pre-existing large-chunk warning) |
+
 ## Not verified — do not present as done
 
 - Any real model completion (managed or BYO). Routing, storage, quotas, error propagation
@@ -123,17 +182,18 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - GitHub App, terminal, device write-through, cloud storage, multi-user frontend.
 - Email verification, password reset, MFA, account export UI.
 
-## Known issues to fix next (Milestone 2)
+## Known issues to fix next (Milestone 3 — real terminal)
 
-1. `src/design-system/primitives/Select.tsx` closes on **any** captured `scroll` event,
-   including its own menu. This is the recorded root cause of the New Project language
-   dropdown closing when the list scrolls. Fix: ignore scroll events originating inside the
-   menu, or listen only on scrollable ancestors.
-2. New Project dialog at `src/features/command-center/ProjectDialog.tsx`: verify scrolling,
-   contrast, keyboard navigation and viewport fit at 912×766 and 1440×1000.
-3. Editor action bar (`src/features/workspace/components/WorkspaceShell.tsx` and
-   `EditorArea.tsx`) lacks Run, Debug/Trace, Save, Save All, Format, Find and More. Wire it
-   through `EditorCommandsContext`; keep terminal/output/problems in the bottom panel.
+1. There is no terminal. The bottom Terminal tab states "No terminal session" and explains
+   that execution lives in the Run tab. Milestone 3 must ship the local PTY companion **and**
+   the cloud PTY behind one UI with an explicit mode badge; neither is the existing `/run`
+   endpoint.
+2. `/run` has no streaming output, interactive stdin or reuse of a working directory; it is a
+   one-shot compile/run with temp dirs and tree-kill timeouts.
+3. `Format` covers only Monaco's bundled formatters. If the product wants Prettier, it must be
+   bundled locally (no CDN) and added to `supportsDocumentFormatting()` honestly.
+4. Trace is Python-only (`server/trace_python.py`). Adding a JS/TS tracer would need a real
+   recorder, not a simulated event list.
 
 ## Resume checklist
 
@@ -142,10 +202,15 @@ git status                  # should be clean after the checkpoint commit
 npm install                 # only if node_modules is missing
 npm run api:dev             # terminal 1
 npm run dev                 # terminal 2
+npm run exec                # terminal 3 — loopback runner for Run/Trace (127.0.0.1:5310)
 ```
 
 Then open `http://localhost:5173/settings`, create an account, and confirm the managed
 panel reports “No AI provider available” with the real reason (expected without a provider).
+For the action bar, create a Python project and use Run / Trace from the editor toolbar; both
+need `npm run exec` running or they will report the service as offline.
+
+Local runtimes present on this machine: Python 3.14.5, Node v24.19.0, gcc (MSYS2), Java.
 
 ## Documentation map
 

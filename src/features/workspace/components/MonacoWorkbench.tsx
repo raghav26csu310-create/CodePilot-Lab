@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorMarker, TabContentSource } from '../state/types'
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { clampFontSize } from '../../editor/editorPreferences'
-import { languageForPath, monacoLanguageId } from '../../editor/languageRegistry'
+import { languageForPath, monacoLanguageId, supportsDocumentFormatting } from '../../editor/languageRegistry'
 import { MONACO_THEMES, ensureMonacoSetup, monaco } from '../../editor/monacoSetup'
 import { writeStoredContent } from '../../../lib/projectStorage'
 import { useWorkspace } from '../state/useWorkspace'
@@ -331,6 +331,22 @@ export default function MonacoWorkbench() {
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.PageDown, () => {
         cycleTabRef.current?.(1)
       })
+      editor.addCommand(
+        monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
+        () => {
+          const path = activeRef.current
+          const formatting = path ? apiRef.current?.format(path) : undefined
+          if (formatting) {
+            void formatting.then((outcome) => {
+              dispatch({
+                type: 'ui/show-toast',
+                tone: outcome.ok ? 'ok' : 'warn',
+                message: outcome.message,
+              })
+            })
+          }
+        },
+      )
 
       const updateCursor = () => {
         const selection = editor.getSelection()
@@ -575,6 +591,48 @@ export default function MonacoWorkbench() {
       },
       save: (path) => persistPath(path),
       saveAll: () => saveAllRef.current?.() ?? Promise.resolve({ saved: 0, failed: 0 }),
+      format: async (path) => {
+        const record = modelsRef.current.get(path)
+        const editor = editorRef.current
+        if (!record || !editor) {
+          return {
+            ok: false,
+            changed: false,
+            message: 'This file is not mounted in the editor yet. Open it, then run Format again.',
+          }
+        }
+
+        const name = path.slice(path.lastIndexOf('/') + 1)
+        const label = languageForPath(path).label
+        if (!supportsDocumentFormatting(record.model.getLanguageId())) {
+          return {
+            ok: false,
+            changed: false,
+            message: `${label} has no document formatter in this build. The buffer is unchanged.`,
+          }
+        }
+
+        attach(path)
+        const before = record.model.getAlternativeVersionId()
+        const action = editor.getAction('editor.action.formatDocument')
+        if (!action) {
+          return {
+            ok: false,
+            changed: false,
+            message: 'The editor did not expose a formatting action for this file.',
+          }
+        }
+
+        await action.run()
+        const changed = record.model.getAlternativeVersionId() !== before
+        return {
+          ok: true,
+          changed,
+          message: changed
+            ? `Formatted ${name}.`
+            : `The formatter made no changes to ${name}.`,
+        }
+      },
       focusFind: () => {
         const editor = editorRef.current
         if (!editor) {

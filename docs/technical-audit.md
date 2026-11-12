@@ -349,6 +349,8 @@ viewports need measurement. The language selector must remain keyboard reachable
 **Remediation.** Milestone 2. Ignore scroll events originating inside the menu, close only on
 an ancestor scroll that actually moves the trigger, and add viewport tests at short heights.
 
+**Resolved** in Milestone 2 — see §12.
+
 ### M2 — Editor action bar is incomplete (Medium)
 
 **Current state.** `EditorArea` shows tabs, file identity, language, Saved/Unsaved and
@@ -364,6 +366,8 @@ command (Monaco's formatting providers are not the same as a product “Format�
 to the action bar, keep terminal/output/problems/diagnostics in the bottom panel, wire Run to
 the current draft through `EditorCommandsContext`, and disable actions honestly when a
 runtime or formatter is unavailable.
+
+**Resolved** in Milestone 2 — see §12.
 
 ### M3 — CSP allows any connect target (Medium)
 
@@ -734,4 +738,96 @@ Still unverified at the end of Milestone 1 (must not be presented as done):
 - Cloud-hosted deployment, CSP tightening and cookie/redirect behaviour on a real domain.
 - Account lifecycle beyond sign-in/create/sign-out: no email verification, password reset,
   MFA, export, or full account UI yet (Milestone 6).
+
+---
+
+## 12. Milestone 2 status (editor UX, dropdown root cause, action bar)
+
+Implemented and executed on 2026-11-12.
+
+### M1 root cause — fixed
+
+`Select.tsx` no longer closes on every captured `scroll` event:
+
+- Scrolls that originate inside the menu's own list are ignored, so a long option list can be
+  scrolled normally.
+- Scrolls on ancestors reposition the portal instead of dismissing it; the menu closes only
+  when the trigger itself leaves the viewport.
+- `aria-activedescendant`, stable option ids, and `scrollIntoView({ block: 'nearest' })` keep
+  the keyboard-active option visible without moving the page.
+- The trigger is a `button` (not a styled span), so Enter/Space open it as expected.
+
+### M2 root cause — fixed
+
+`EditorArea` now owns a real action bar: **Run · Trace · Save · Save all · Format · Find ·
+More**, in that order, before the language/dirty chips. Terminal, Output, Problems and
+Diagnostics remain bottom-panel surfaces.
+
+- `Run` / `Trace` dispatch `ui/set-pending-job` and open the Run panel; the panel consumes the
+  request exactly once and performs the real call. Nothing is rendered from a click alone.
+- `Trace` is enabled only when the runtime is `python`; the other five runtimes state
+  "no tracer in this build — only Python is traced".
+- `Format` runs `editor.action.formatDocument` on the live Monaco model and reports whether
+  the buffer actually changed. `supportsDocumentFormatting()` limits it to the languages
+  Monaco bundles formatters for (TS, JS, JSON, CSS, SCSS, Less, HTML); other languages answer
+  "has no document formatter in this build. The buffer is unchanged." Shift+Alt+F is bound
+  inside Monaco and routes through the same command.
+- `More` is a portalled, non-modal menu (`EditorMoreMenu`) with word wrap, minimap, theme,
+  font size, copy path, Copilot context and Explain. It repositions on ancestor scroll, closes
+  on Escape / outside pointer-down / Tab (moving focus to the next tabbable, never trapping
+  it), and restores focus to the trigger.
+- Toolbar density is now measured against the **editor pane** with a container query
+  (`container: editor-surface`). Previously the label-collapse breakpoint keyed off the
+  viewport, so a 1440 px window with the explorer and Copilot dock open left the editor
+  ~554 px wide while the toolbar needed 649 px — the file identity collapsed to 0 px and the
+  More button overflowed beneath the dock. Measured after the fix: toolbar
+  `scrollWidth === clientWidth` (554/554), identity 159 px, and with the dock closed
+  (pane 895 px) all labels return with no overflow.
+
+### Browser evidence (in-app browser 912×766, harness measured at 1440×1000)
+
+- New Project dialog: panel 415 px tall at 1000×700, no scroll; language menu 290 px tall with
+  a 251 px scroll viewport over 9 options.
+- Setting the language list `scrollTop = 200` leaves the menu open (`aria-expanded="true"`).
+- ArrowDown moves the active option from TypeScript to C and scrolls it into view
+  (`scrollTop` 200 → 168); choosing CSS closes the menu and updates the note to
+  "Editor and language services only. There is no rendering runtime in this build."
+- Python project `py-lab`, file `main.py`, action bar: Run enabled, Trace enabled.
+  Clicking **Run** produced `COMPLETED · 143 ms measured · exit 0 · stdout "Hello from
+  CodePilot Lab"`. Clicking **Trace** produced `TRACE COMPLETE · 9 recorded events · 208 ms`
+  with real `call / line / return` rows, `main=<function main …>` and the captured stdout on
+  the `print` line.
+- TypeScript project: Trace disabled with "TypeScript has no tracer in this build — only
+  Python is traced"; Run and Format enabled.
+- HTML file: Run **and** Trace disabled with "HTML has no runtime in this build"; status bar
+  reads "Editor only · no runtime".
+- **Find** opened Monaco's widget, found `1 of 1`, and a Replace All changed the buffer to
+  `const   greeting :string='Hi'` (tab → Unsaved, Save all enabled). **Format** then produced
+  `const greeting: string = 'Hi'` and the toast "Formatted main.ts." **Save** produced
+  "Saved main.ts" and disabled Save all.
+- The More menu opened with correct checkmarks (Minimap checked, Word wrap unchecked),
+  toggled Word wrap to checked, closed on selection with focus restored, closed on Escape
+  with focus restored, moved focus with ArrowDown/Home, and closed on outside pointer-down.
+
+Executed results at the end of Milestone 2:
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Typecheck (frontend + API) | `npm run typecheck` | Pass |
+| Lint | `npm run lint` | Pass with the same 2 pre-existing `react-refresh` warnings |
+| Tests | `npm test` | Pass — 6 files, 61 tests |
+| API tests | `npm run test:api` | Pass — 12 tests |
+| Build | `npm run build` | Pass with the pre-existing large-chunk warning |
+
+Known limits recorded at the end of Milestone 2:
+
+- The action bar's Run path sends the live Monaco draft, which is the same code the Run panel
+  uses; the panel's own "Run file" button and the bar therefore share one code path.
+- Format is a no-op without a bundled provider. There is no configurable formatter (Prettier
+  is not bundled), so C, C++, Java, Python and other languages report the truth instead of
+  reformatting.
+- Trace coverage is Python-only because `server/trace_python.py` is the only real tracer.
+- The 1440×1000 layout was measured through a same-origin iframe harness inside the in-app
+  browser (the pane is 912×766); it is not a headless Edge screenshot.
+
 

@@ -92,6 +92,17 @@ export type EditorSelection = {
   endColumn: number
 }
 
+export type WorkspaceJobKind = 'run' | 'trace'
+
+/**
+ * A Run/Trace request from the editor action bar. The Run panel consumes it,
+ * so the toolbar never fakes a result without a mounted panel.
+ */
+export type PendingWorkspaceJob = {
+  kind: WorkspaceJobKind
+  path: string
+}
+
 export type WorkspaceUiState = WorkspaceLayout & {
   explorerOpen: boolean
   copilotOpen: boolean
@@ -108,6 +119,7 @@ export type WorkspaceUiState = WorkspaceLayout & {
   selection: EditorSelection | null
   palette: 'files' | 'search' | null
   pendingReveal: PendingReveal | null
+  pendingJob: PendingWorkspaceJob | null
   toast: WorkspaceToast | null
 }
 
@@ -176,5 +188,6 @@ export type WorkspaceAction =
   | { type: 'ui/open-palette'; palette: 'files' | 'search' }
   | { type: 'ui/close-palette' }
   | { type: 'ui/set-pending-reveal'; reveal: PendingReveal | null }
+  | { type: 'ui/set-pending-job'; job: PendingWorkspaceJob | null }
   | { type: 'ui/show-toast'; message: string; tone: WorkspaceToastTone }
   | { type: 'ui/clear-toast' }

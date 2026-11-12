@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion'
 import {
+  AlignLeft,
   ArrowUpRight,
   BookOpen,
-  Check,
+  Bug,
   ChevronRight,
   CircleSlash,
   Copy,
@@ -10,6 +11,7 @@ import {
   FolderGit2,
   FolderTree,
   Minus,
+  Play,
   Plus,
   Save,
   ScrollText,
@@ -30,10 +32,12 @@ import { Link } from 'react-router-dom'
 import { clampFontSize } from '../../editor/editorPreferences'
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { useCopilot } from '../../copilot/CopilotContext'
-import { languageForPath } from '../../editor/languageRegistry'
+import { languageForPath, supportsDocumentFormatting } from '../../editor/languageRegistry'
+import { projectLanguageForMonaco } from '../../editor/projectLanguages'
 import { findNode } from '../state/fileTree'
 import { useWorkspace } from '../state/useWorkspace'
-import type { FileTreeNode, WorkspaceTab } from '../state/types'
+import type { FileTreeNode, WorkspaceJobKind, WorkspaceTab } from '../state/types'
+import { EditorMoreMenu, type EditorMenuItem } from './EditorMoreMenu'
 import { FileGlyph } from './FileGlyph'
 import styles from './EditorArea.module.css'
 
@@ -477,6 +481,10 @@ function EditorSurface({
   const fontCanDecrease = preferences.fontSize > 11
   const fontCanIncrease = preferences.fontSize < 22
   const attached = state.ui.copilotContext.includes(tab.path)
+  const runtime = projectLanguageForMonaco(language.id)?.runtime ?? null
+  const canRun = tab.status === 'ready' && runtime !== null
+  const canTrace = tab.status === 'ready' && runtime === 'python'
+  const canFormat = supportsDocumentFormatting(language.id)
 
   const setPreference = (patch: { fontSize?: number; minimap?: boolean; wordWrap?: boolean }) => {
     dispatch({ type: 'ui/set-editor-preference', patch })
@@ -492,6 +500,48 @@ function EditorSurface({
 
   const focusFind = () => {
     commands.current?.focusFind()
+  }
+
+  /**
+   * Run/Trace open the Run panel and hand it an explicit request. The panel
+   * performs the real call; the toolbar never produces or fakes output.
+   */
+  const requestJob = (kind: WorkspaceJobKind) => {
+    dispatch({ type: 'ui/set-bottom-open', open: true })
+    dispatch({ type: 'ui/set-bottom-tab', tab: 'run' })
+    dispatch({ type: 'ui/set-pending-job', job: { kind, path: tab.path } })
+  }
+
+  const formatActive = () => {
+    void (async () => {
+      const outcome = await commands.current?.format(tab.path)
+      if (!outcome) {
+        dispatch({
+          type: 'ui/show-toast',
+          tone: 'warn',
+          message: 'The editor is not ready yet. Try Format again in a moment.',
+        })
+        return
+      }
+      dispatch({ type: 'ui/show-toast', tone: outcome.ok ? 'ok' : 'warn', message: outcome.message })
+    })()
+  }
+
+  const toggleAttached = () => {
+    dispatch({ type: 'ui/toggle-copilot-context', path: tab.path })
+    if (!attached) {
+      onShowCopilot()
+    }
+  }
+
+  const explainActive = () => {
+    seedComposer(
+      state.ui.selection
+        ? 'Explain the selected code line by line.'
+        : `Explain ${tab.name} line by line.`,
+      'explain',
+    )
+    onShowCopilot()
   }
 
   const cycleTheme = () => {
@@ -510,6 +560,67 @@ function EditorSurface({
     }
   }
 
+  const moreItems: EditorMenuItem[] = [
+    {
+      id: 'wrap',
+      label: 'Word wrap',
+      icon: <ScrollText size={13} aria-hidden="true" />,
+      checked: preferences.wordWrap,
+      onSelect: () => setPreference({ wordWrap: !preferences.wordWrap }),
+    },
+    {
+      id: 'minimap',
+      label: 'Minimap',
+      checked: preferences.minimap,
+      onSelect: () => setPreference({ minimap: !preferences.minimap }),
+    },
+    {
+      id: 'theme',
+      label: `Theme · ${preferences.theme === 'midnight' ? 'Midnight' : 'Graphite'}`,
+      onSelect: cycleTheme,
+    },
+    {
+      id: 'font-decrease',
+      label: 'Decrease font size',
+      icon: <Minus size={13} aria-hidden="true" />,
+      shortcut: `${preferences.fontSize}px`,
+      disabled: !fontCanDecrease,
+      onSelect: () => setPreference({ fontSize: clampFontSize(preferences.fontSize - 1) }),
+    },
+    {
+      id: 'font-increase',
+      label: 'Increase font size',
+      icon: <Plus size={13} aria-hidden="true" />,
+      disabled: !fontCanIncrease,
+      onSelect: () => setPreference({ fontSize: clampFontSize(preferences.fontSize + 1) }),
+    },
+    {
+      id: 'copy-path',
+      label:
+        copyState === 'copied'
+          ? 'Path copied'
+          : copyState === 'failed'
+            ? 'Clipboard unavailable'
+            : 'Copy path',
+      icon: <Copy size={13} aria-hidden="true" />,
+      onSelect: () => void copyPath(),
+    },
+    {
+      id: 'copilot-attach',
+      label: 'Copilot context',
+      icon: <Sparkles size={13} aria-hidden="true" />,
+      checked: attached,
+      onSelect: toggleAttached,
+    },
+    {
+      id: 'copilot-explain',
+      label: 'Explain with Copilot',
+      icon: <BookOpen size={13} aria-hidden="true" />,
+      onSelect: explainActive,
+    },
+  ]
+
+
   return (
     <motion.div
       className={styles.surface}
@@ -525,18 +636,16 @@ function EditorSurface({
         </div>
 
         <div className={styles.toolbarMeta}>
-          <button
-            type="button"
+          <span
             className={styles.langChip}
             title={
               language.validation === 'syntax-only'
                 ? `${language.label} — highlighting and syntax edits in Monaco; no language service, so diagnostics and symbols are not available`
                 : `${language.label} — Monaco language service active`
             }
-            onClick={cycleTheme}
           >
             {language.label}
-          </button>
+          </span>
           <span
             className={styles.dirtyChip}
             data-dirty={tab.dirty}
@@ -546,58 +655,42 @@ function EditorSurface({
           </span>
         </div>
 
-        <div className={styles.surfaceActions}>
+        <div className={styles.actionBar} role="toolbar" aria-label="Editor actions">
           <button
             type="button"
             className={styles.surfaceButton}
-            aria-pressed={attached}
-            data-active={attached}
-            onClick={() => {
-              dispatch({ type: 'ui/toggle-copilot-context', path: tab.path })
-              if (!attached) {
-                onShowCopilot()
-              }
-            }}
+            data-variant="primary"
+            disabled={!canRun}
+            onClick={() => requestJob('run')}
+            title={
+              canRun
+                ? `Run ${node.name} through the local execution service (opens the Run panel)`
+                : tab.status !== 'ready'
+                  ? 'The file must finish loading before it can run'
+                  : `${language.label} has no runtime in this build`
+            }
           >
-            <Sparkles size={13} aria-hidden="true" />
-            <span className={styles.buttonLabel}>
-              {attached ? 'In Copilot context' : 'Attach to Copilot'}
-            </span>
+            <Play size={13} aria-hidden="true" />
+            <span className={styles.buttonLabel}>Run</span>
           </button>
 
           <button
             type="button"
             className={styles.surfaceButton}
-            onClick={() => {
-              seedComposer(
-                state.ui.selection
-                  ? 'Explain the selected code line by line.'
-                  : `Explain ${tab.name} line by line.`,
-                'explain',
-              )
-              onShowCopilot()
-            }}
-            title="Prepare an explanation request in the Copilot composer"
+            disabled={!canTrace}
+            onClick={() => requestJob('trace')}
+            title={
+              canTrace
+                ? `Trace ${node.name} line by line in local Python (opens the Run panel)`
+                : tab.status !== 'ready'
+                  ? 'The file must finish loading before it can be traced'
+                  : runtime
+                    ? `${language.label} has no tracer in this build — only Python is traced`
+                    : `${language.label} has no runtime in this build`
+            }
           >
-            <BookOpen size={13} aria-hidden="true" />
-            <span className={styles.buttonLabel}>Explain</span>
-          </button>
-
-          <button type="button" className={styles.surfaceButton} onClick={copyPath}>
-            {copyState === 'copied' ? (
-              <Check size={13} aria-hidden="true" />
-            ) : copyState === 'failed' ? (
-              <CircleSlash size={13} aria-hidden="true" />
-            ) : (
-              <Copy size={13} aria-hidden="true" />
-            )}
-            <span className={styles.buttonLabel}>
-              {copyState === 'copied'
-                ? 'Path copied'
-                : copyState === 'failed'
-                  ? 'Clipboard unavailable'
-                  : 'Copy path'}
-            </span>
+            <Bug size={13} aria-hidden="true" />
+            <span className={styles.buttonLabel}>Trace</span>
           </button>
 
           <span className={styles.toolbarSep} aria-hidden="true" />
@@ -628,6 +721,18 @@ function EditorSurface({
             type="button"
             className={styles.surfaceButton}
             disabled={tab.status !== 'ready'}
+            onClick={formatActive}
+            title={`Format the live buffer · Shift+Alt+F${
+              canFormat ? '' : ` — ${language.label} has no document formatter in this build`
+            }`}
+          >
+            <AlignLeft size={13} aria-hidden="true" />
+            <span className={styles.buttonLabel}>Format</span>
+          </button>
+          <button
+            type="button"
+            className={styles.surfaceButton}
+            disabled={tab.status !== 'ready'}
             onClick={focusFind}
             title="Find and replace in file · Ctrl/Cmd+F"
           >
@@ -637,57 +742,11 @@ function EditorSurface({
 
           <span className={styles.toolbarSep} aria-hidden="true" />
 
-          <button
-            type="button"
-            className={styles.surfaceButton}
-            aria-pressed={preferences.wordWrap}
-            data-active={preferences.wordWrap}
-            onClick={() => setPreference({ wordWrap: !preferences.wordWrap })}
-            title="Toggle word wrapping"
-          >
-            <ScrollText size={13} aria-hidden="true" />
-            <span className={styles.buttonLabel}>Wrap</span>
-          </button>
-          <button
-            type="button"
-            className={styles.surfaceButton}
-            aria-pressed={preferences.minimap}
-            data-active={preferences.minimap}
-            onClick={() => setPreference({ minimap: !preferences.minimap })}
-            title="Toggle minimap"
-          >
-            <span className={styles.buttonLabel}>Minimap</span>
-          </button>
-          <button
-            type="button"
-            className={styles.surfaceButton}
-            onClick={cycleTheme}
-            title={`Switch editor theme (currently ${preferences.theme === 'midnight' ? 'Midnight' : 'Graphite'})`}
-          >
-            <span className={styles.buttonLabel}>
-              {preferences.theme === 'midnight' ? 'Midnight' : 'Graphite'}
-            </span>
-          </button>
-          <button
-            type="button"
-            className={styles.surfaceButton}
-            disabled={!fontCanDecrease}
-            onClick={() => setPreference({ fontSize: clampFontSize(preferences.fontSize - 1) })}
-            title="Decrease font size"
-          >
-            <Minus size={13} aria-hidden="true" />
-            <span className={`${styles.buttonLabel} ${styles.a11yOnly}`}>Decrease font size</span>
-          </button>
-          <button
-            type="button"
-            className={styles.surfaceButton}
-            disabled={!fontCanIncrease}
-            onClick={() => setPreference({ fontSize: clampFontSize(preferences.fontSize + 1) })}
-            title="Increase font size"
-          >
-            <Plus size={13} aria-hidden="true" />
-            <span className={`${styles.buttonLabel} ${styles.a11yOnly}`}>Increase font size</span>
-          </button>
+          <EditorMoreMenu
+            items={moreItems}
+            triggerClassName={styles.surfaceButton}
+            labelClassName={styles.buttonLabel}
+          />
         </div>
       </div>
 

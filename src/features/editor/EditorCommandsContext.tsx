@@ -6,6 +6,14 @@ export type SaveOutcome = {
   message?: string
 }
 
+export type FormatOutcome = {
+  /** The request reached a formatter that could act on this file. */
+  ok: boolean
+  /** The formatter actually changed the buffer. */
+  changed: boolean
+  message: string
+}
+
 export type EditorCommandApi = {
   /** Live Monaco draft, or null when no model is mounted for the path. */
   getDraft(path: string): string | null
@@ -22,6 +30,7 @@ export type EditorCommandApi = {
   applyContent(path: string, content: string): Promise<{ ok: boolean; message?: string }>
   save(path: string): Promise<boolean>
   saveAll(): Promise<{ saved: number; failed: number }>
+  format(path: string): Promise<FormatOutcome>
   focusFind(): void
   reveal(path: string, line?: number, column?: number): void
 }

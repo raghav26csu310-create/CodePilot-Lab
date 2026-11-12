@@ -85,3 +85,22 @@ export function languageForPath(path: string): EditorLanguage {
 export function monacoLanguageId(path: string): string {
   return languageForPath(path).id
 }
+
+/**
+ * Monaco ships document formatters for its bundled language services only.
+ * Every other language is highlighted without a formatter, so the Format
+ * action must say so instead of claiming it reformatted the buffer.
+ */
+const FORMATTER_LANGUAGES = new Set([
+  'typescript',
+  'javascript',
+  'json',
+  'css',
+  'scss',
+  'less',
+  'html',
+])
+
+export function supportsDocumentFormatting(languageId: string): boolean {
+  return FORMATTER_LANGUAGES.has(languageId)
+}

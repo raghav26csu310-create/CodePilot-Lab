@@ -294,6 +294,10 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
+  /* Toolbar density follows the pane, not the window: at 1440 px the explorer
+     and the Copilot dock can leave the editor ~550 px wide. */
+  container-type: inline-size;
+  container-name: editor-surface;
 }
 
 .editorToolbar {
@@ -338,7 +342,7 @@
 }
 
 .toolbarMeta,
-.surfaceActions {
+.actionBar {
   display: flex;
   flex: none;
   align-items: center;
@@ -355,20 +359,6 @@
   font-size: 7.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  cursor: pointer;
-  transition:
-    color var(--d-2) var(--ease-state),
-    border-color var(--d-2) var(--ease-state);
-}
-
-.langChip:hover {
-  color: var(--cyan);
-  border-color: var(--hairline-accent);
-}
-
-.langChip:focus-visible {
-  outline: 1px solid var(--hairline-accent);
-  outline-offset: 1px;
 }
 
 .dirtyChip {
@@ -445,6 +435,17 @@
   color: var(--cyan);
   border-color: var(--hairline-accent);
   background: var(--cyan-wash);
+}
+
+.surfaceButton[data-variant='primary']:not(:disabled) {
+  color: var(--text);
+  border-color: rgb(87 226 230 / 0.42);
+  background: rgb(87 226 230 / 0.08);
+}
+
+.surfaceButton[data-variant='primary']:hover:not(:disabled) {
+  border-color: var(--cyan);
+  background: rgb(87 226 230 / 0.14);
 }
 
 .surfaceButton:disabled {
@@ -921,7 +922,12 @@
 
 /* ------------------------------- Responsive ------------------------------ */
 
-@media (max-width: 980px) {
+/*
+ * The action bar measures itself against the editor pane. A 1440 px window with
+ * the explorer and Copilot dock open leaves only ~550 px for the editor, so a
+ * viewport breakpoint never fired and the bar overflowed its own toolbar.
+ */
+@container editor-surface (max-width: 800px) {
   .buttonLabel {
     display: none;
   }
@@ -942,7 +948,19 @@
   .langChip {
     height: 27px;
   }
+}
 
+@container editor-surface (max-width: 470px) {
+  .surfacePath {
+    display: none;
+  }
+
+  .toolbarSep {
+    display: none;
+  }
+}
+
+@media (max-width: 980px) {
   .welcomeGrid {
     grid-template-columns: 1fr;
   }
