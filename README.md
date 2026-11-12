@@ -2,7 +2,14 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Phase 7 — Public beta hardening.** The lab now includes a
+**Current milestone: Milestone 1 of the AI gateway plan — managed CodePilot AI, accounts and
+conversion hardening.** The default AI route is now the CodePilot API (`server/api`), which
+holds provider credentials server-side, enforces per-user quotas and streams SSE; a direct
+browser provider remains as an explicitly labelled advanced/local mode. Milestone 0
+(`docs/technical-audit.md`) recorded the gaps, and `docs/session-handoff.md` is the current
+resume point. No deployment, PostgreSQL run or live model completion has happened yet.
+
+**Previous milestone: Phase 7 — Public beta hardening.** The lab includes a
 static public site with honest SEO, a real feedback pipeline, automated tests, centralized
 stored-path validation, route-level error boundaries and lazy modules, a hardened loopback
 execution service, and deployment/security documentation. The deployment default is
@@ -61,9 +68,10 @@ sandbox.
   write a starter file to IndexedDB, and the workspace status bar shows the active file
   language and whether it is runnable.
 - **AI Copilot** in the workspace dock (`/copilot` explains the model; `/settings`
-  configures it). Provider-independent by design: a native **Ollama** adapter
-  (`/api/chat`, NDJSON streaming) and an **OpenAI-compatible** adapter (SSE
-  `/chat/completions`) that covers DeepSeek, OpenAI, OpenRouter, Groq, LM Studio,
+  configures it). Three routes, one interface: managed **CodePilot AI** through the API
+  (no provider key in the browser, server-side quotas), a native **Ollama** adapter
+  (`/api/chat`, NDJSON streaming, direct or via the API) and an **OpenAI-compatible**
+  adapter (SSE `/chat/completions`) covering DeepSeek, OpenAI, OpenRouter, Groq, LM Studio,
   llama.cpp and user-run proxies. The app is fully usable with no provider configured;
   the dock states that plainly instead of inventing an answer.
 - **Seven AI modes** — free-form chat, explain (beginner/intermediate/advanced),
@@ -155,26 +163,32 @@ no hardened sandbox: the execution service is a resource-limited local runner, n
 security boundary. HTML, CSS and JSON are editor languages with no runtime, and only
 Python has a real tracer in this phase.
 
-No backend, account, API key, database service, or paid dependency is required for the
-editor, execution, tracing, converter UI or practice grading. A local model (for example
-Ollama) is optional and is only used for AI conversion and explanations.
+No paid dependency is required for the editor, execution, tracing, converter UI or practice
+grading, and the editor keeps working with no account and no AI provider. Managed CodePilot
+AI needs the API (`server/api`) running with a server-side provider configured; a local
+model (for example Ollama) or any OpenAI-compatible endpoint can instead be connected
+directly from Settings as the advanced mode.
 
 ## Run
 
 ```bash
 npm install
-npm run dev      # Vite on http://localhost:5173
+npm run api:dev  # CodePilot API on http://127.0.0.1:8787 (separate terminal)
+npm run dev      # Vite on http://localhost:5173, proxies /api
 npm run exec     # local execution service on http://127.0.0.1:5310 (separate terminal)
 ```
 
 Open the URL printed by Vite (default `http://127.0.0.1:5173`). The editor, converter
 review and practice browsing work without the execution service; running, tracing and
-submitting show the explicit start command instead of fabricating a result.
+submitting show the explicit start command instead of fabricating a result. Without the API
+or a configured provider, `/settings` reports “No AI provider is available” and no AI
+request is attempted.
 
 ```bash
-npm run typecheck
+npm run typecheck    # frontend + API
 npm run lint
-npm run test
+npm test             # frontend (61 tests)
+npm run test:api     # API (12 tests)
 npm run build
 npm run preview
 ```
@@ -195,8 +209,11 @@ tokens, and locally bundled Inter / Space Grotesk / JetBrains Mono via Fontsourc
 ```
 server/             loopback execution service: HTTP API, compile/run, grading,
                     Python sys.settrace instrumentation, private problem suites
+server/api/         CodePilot API: accounts, sessions, PostgreSQL/memory stores,
+                    AI gateway (managed + encrypted BYO), quotas, SSE chat
 scripts/            set-site-url.mjs build-time canonical/OG/sitemap rewrite
-docs/               architecture, deployment, security, production readiness
+docs/               audit, AI gateway, architecture, deployment, security,
+                    production readiness, session handoff
 public/             static marketing site, screenshots, robots.txt, sitemap.xml
 src/
   app/              shell, sidebar, top bar, command palette, mobile menu, status bar,
@@ -206,13 +223,14 @@ src/
   features/
     editor/         Monaco integration layer: setup (workers, themes, TS service),
                     language registry, project languages, preferences, command context
-    copilot/        provider adapters, settings store, context builder, proposal
-                    parser, diff engine, markdown, dock dialogs, overview, quick AI help
+    copilot/        provider adapters, gateway client/store, settings store, context
+                    builder, proposal parser, diff engine, markdown, dock dialogs,
+                    overview, quick AI help
     execution/      Execution Lab page, execution-service client, standalone Monaco editor
     converter/      conversion prompt/parser, line diff, staging, storage, converter page
     practice/       original problem catalog, persisted progress, library and workspace
     feedback/       public beta feedback form
-    settings/       live provider and credential settings page
+    settings/       live provider, credential and account settings page
     workspace/      state (reducer/context), storage-backed pages, explorer, tabs,
                     Monaco workbench, dialogs, quick open, development panel, Run tab
     command-center/ landing, welcome card, quick actions, system status
@@ -233,8 +251,14 @@ src/
   expected outputs or full hidden output. The same suites are not bundled into the
   frontend.
 - Conversions, practice drafts, notes, bookmarks and submissions are stored in browser
-  IndexedDB only. Provider settings are stored under `settings` key
-  `copilot.provider.v1`; the API key is persisted only when opted in.
+  IndexedDB only.
+- AI settings are stored under the `settings` key `copilot.provider.v1`. With the default
+  managed route, no provider key exists in the browser at all: the API holds it. A
+  BYO connection routed through the API stores the key encrypted on the server and the
+  browser keeps `apiKey: ""`. Only in the advanced `direct` route can a key be written to
+  IndexedDB, and only when "remember" is checked; the UI labels that as plaintext.
+- Context is assembled in the browser and sent only to the configured route (the CodePilot
+  API or the endpoint you entered), only when you press Send.
 - Stored content is authoritative after the first save. A linked `directoryHandle` is
   read only when no saved copy exists; permission prompts are disclosed.
 - `directoryHandle` is structured-clone data; re-permission may be requested on read.
@@ -242,15 +266,16 @@ src/
   policy and disclosed on import and in Diagnostics.
 - Deleting a project is explicit, confirmed, and cascades through the registry, tree and
   contents. Clearing site data for the origin removes everything stored.
-- AI provider settings are stored under the `settings` key `copilot.provider.v1`. The
-  base URL, model, provider kind and non-secret preferences persist; the API key is
-  written only when "remember in this browser" is checked. Otherwise it exists only in
-  the tab's memory. Context is assembled in the browser and sent only to the endpoint
-  you configured, only when you press Send.
 
 ## Verification
 
-- `npm run typecheck`, `npm run lint`, `npm run test` (35 tests) and `npm run build` pass.
+- `npm run typecheck`, `npm run lint`, `npm test` (61 frontend tests), `npm run test:api`
+  (12 tests) and `npm run build` pass.
+- Milestone 1 verification covered: gateway health honesty, session isolation, CSRF,
+  managed SSE, quota; BYO credentials stored encrypted on the API with no key in the
+  browser; honest failure when no provider is available; gateway-routed conversion failure
+  recorded in history; conversion parser cases (multi-fence, truncated, empty, comments-only,
+  unbalanced delimiters); partial-output retention.
 - Phase 7 verification covered: stored-path rejection for traversal/absolute/control
   characters; feedback local persistence and endpoint success/failure; proposal parsing and
   diffing; executor validation and hidden-data response shape; static public pages and SEO

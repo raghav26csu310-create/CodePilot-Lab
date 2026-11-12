@@ -1,30 +1,40 @@
 # CodePilot Lab — agent guide
 
-Local-first, AI-native coding laboratory. React 19 + TypeScript + Vite SPA; no backend,
-no paid APIs, no secrets. Milestones are sequenced deliberately — implement only the
-requested phase (see README) and do not jump ahead to execution or the remaining
-placeholder modules unless asked.
+Local-first, AI-native coding laboratory. React 19 + TypeScript + Vite SPA with an optional
+local API (`server/api`) that owns accounts and AI credentials. Milestones are sequenced
+deliberately — implement only the requested phase (see README) and do not jump ahead to
+execution or the remaining placeholder modules unless asked.
+
+Read `docs/session-handoff.md` first: it is the current resume point, and
+`docs/technical-audit.md` §10–11 record the confirmed architecture decisions.
 
 ## Non-negotiable product rules
 
 - Never invent project data, timestamps, terminal output, AI responses, metrics, or
-  health. Every readout must come from a real browser/IndexedDB/WebGL/file API.
+  health. Every readout must come from a real browser/IndexedDB/WebGL/file/API response.
 - Every visible control must work or be visibly marked unavailable ("Scheduled" /
   disabled). Placeholder screens must say so plainly.
-- Local-only: dependencies and fonts are bundled. Do not add CDN fonts, remote API
-  calls, telemetry, or a server.
+- Local-first by default: dependencies and fonts are bundled. Do not add CDN fonts,
+  telemetry or third-party scripts. The API is loopback-only in development; nothing may
+  be deployed or called publicly without the deployment work in the audit.
+- Never ship, log or commit a provider key. Platform keys live only in the API environment.
 
 ## Commands
 
 ```bash
-npm run dev        # Vite, port 5173
-npm run typecheck  # tsc -b
+npm run dev        # Vite, port 5173 (proxies /api to 127.0.0.1:8787)
+npm run api:dev    # API with tsx watch, port 8787, in-memory store
+npm run api:start  # API without watch
+npm run api:migrate# apply PostgreSQL migrations
+npm run typecheck  # tsc -b + API tsconfig
 npm run lint       # eslint .
+npm test           # vitest (frontend)
+npm run test:api   # vitest (server/api/test)
 npm run build      # tsc -b && vite build
 ```
 
-There is no test runner. Verification = typecheck + lint + build + manual browser
-checks. ESLint ignores `dist/` and `node_modules/`.
+Verification = typecheck + lint + both test suites + build + manual browser checks.
+ESLint ignores `dist/` and `node_modules/`.
 
 ## Architecture facts
 
@@ -68,17 +78,25 @@ checks. ESLint ignores `dist/` and `node_modules/`.
 - App version is injected as `__APP_VERSION__` from `package.json` in
   `vite.config.ts`. Never hardcode a version string.
 
-## AI Copilot (Phase 5)
+## AI Copilot (Phase 5) and the AI gateway (Milestone 1)
 
 - Provider code lives in `src/features/copilot/providers/*` behind the `AiProvider`
-  interface. Two adapters exist: native `ollama` (NDJSON `/api/chat`, `/api/tags`) and
-  `openai-compatible` (SSE `/chat/completions`, `/models`). Add a provider by adding an
-  adapter and a preset, not by branching inside the dock.
+  interface. Three adapters exist: the managed `gateway`, native `ollama` (NDJSON
+  `/api/chat`, `/api/tags`) and `openai-compatible` (SSE `/chat/completions`, `/models`).
+  Add a provider by adding an adapter and a preset, not by branching inside the dock.
+- **Always call `adapterForSettings(settings)`**, never `adapterFor(kind)`: the `route`
+  setting decides whether the CodePilot API or the browser performs the call.
+  - `preset: 'codepilot'` is managed: no URL, model or key reaches the browser.
+  - `route: 'gateway'` with a BYO preset stores the key encrypted on the API
+    (`PUT /api/ai/connection`); the browser keeps `apiKey: ''`.
+  - `route: 'direct'` is the advanced/local fallback; the browser calls the endpoint and a
+    remembered key is plaintext IndexedDB. The UI says so.
 - Settings are an external store (`settingsStore.ts`) consumed through
   `useSyncExternalStore` so the dock and `/settings` stay in sync. Persisted under the
-  Dexie `settings` key `copilot.provider.v1`; the API key is persisted only when the user
-  opts into "remember". Never ship, log or hardcode a key. `verified` means a real
-  request succeeded in this session — saving settings clears it.
+  Dexie `settings` key `copilot.provider.v1`. Gateway state is a separate external store
+  (`gateway/store.ts`) that probes `/api/health` + `/api/auth/session` and never seeds
+  values. `verified` means `managed.available` or a real `connection.verifiedAt` — a saved
+  connection is `unverified`, and saving settings clears the claim.
 - `context.ts` is the only place that assembles request content. Toggles gate the
   active file, selection, tree names and Monaco markers; other files are attached
   explicitly and the exact bundle is previewable. Apply the character budget rather than
@@ -92,6 +110,28 @@ checks. ESLint ignores `dist/` and `node_modules/`.
   is mounted inside `EditorCommandsProvider` + the workspace provider. Keep the chat
   alive when the dock closes. `/copilot` is the live overview; `/settings` is the live
   credential page.
+
+## CodePilot API (Milestone 1)
+
+- The API is `server/api` (Fastify-free, plain `node:http` router). `src/app.ts` is the
+  composition root, `src/index.ts` the entry. Stores: `memoryStore` (development default
+  when `DATABASE_URL` is empty) and `pgStore` (PostgreSQL). `/api/health` must always report
+  the truth about `engine`, `durable`, managed-AI availability and whether the credential
+  key is ephemeral.
+- Auth is session-cookie based (scrypt hashes, HttpOnly, SameSite, CSRF via Origin check).
+  Every AI route requires a session and scopes all reads/writes to `ctx.user.id`.
+- Provider keys are AES-256-GCM encrypted at rest and only `hasKey`/`keyLast4` are ever
+  returned. `CREDENTIAL_ENCRYPTION_KEY` is required in production; in development an
+  ephemeral key is used and the API says so on startup.
+- `/api/ai/chat` streams SSE `meta`, `delta`, `done` and `error` events. A failure must be
+  an `error` event with the server's real code — never a silent empty answer.
+- Tests live in `server/api/test/app.test.ts` and must keep covering honesty, isolation,
+  CSRF and quota.
+
+## Session wrap-up
+
+- At the end of a session, update `docs/session-handoff.md` (state, gates, unresolved
+  items, next task) and commit. Do not leave verified work uncommitted.
 
 ## Execution, conversion and practice (Phase 6)
 
