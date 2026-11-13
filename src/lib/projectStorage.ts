@@ -5,9 +5,25 @@ import {
   type StoredEntry,
 } from './db'
 import {
+  ensureHandlePermission,
+  pickDirectory,
+  queryHandlePermission,
+  readTextFromDirectory,
+  writeTextToDirectory,
+  type DiskAccessStatus,
+  type DiskWriteOutcome,
+} from './diskAccess'
+import {
+  MAX_IMPORT_CONTENT_BYTES,
+  MAX_IMPORT_FILE_BYTES,
+  isProbablyBinary,
+  type ImportFileCandidate,
+} from './projectImport'
+import {
   assertStoredPath,
   normalizeStoredPath,
   storedPath,
+  validateEntryName,
 } from './storedPaths'
 
 export { StoredPathError, storedPath, validateEntryName, validateStoredPath } from './storedPaths'
@@ -17,6 +33,35 @@ export type ContentSource = 'stored' | 'disk'
 export type LoadedContent =
   | { status: 'ready'; content: string; source: ContentSource }
   | { status: 'unavailable'; reason: string }
+
+export type SaveContentResult = {
+  stored: true
+  disk: DiskWriteOutcome
+}
+
+export type ImportedContentsResult = {
+  stored: number
+  bytes: number
+  skipped: { path: string; reason: string }[]
+}
+
+export type ProjectFileBundle = {
+  files: { path: string; content: string }[]
+  unavailable: { path: string; reason: string }[]
+  storedCount: number
+  diskCount: number
+}
+
+export type LinkedFolderProbe =
+  | { status: 'none' }
+  | { status: 'unsupported'; reason: string }
+  | { status: 'linked'; read: DiskAccessStatus; write: DiskAccessStatus }
+
+export type ReconnectFolderResult =
+  | { status: 'linked'; project: ProjectRecord; writeAccess: boolean; reason?: string }
+  | { status: 'cancelled' }
+  | { status: 'unsupported'; reason: string }
+  | { status: 'failed'; reason: string }
 
 export type SearchHit = {
   path: string
@@ -75,61 +120,35 @@ export async function readStoredContent(
   return row ? row.content : null
 }
 
-type PermittedDirectoryHandle = FileSystemDirectoryHandle & {
-  queryPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>
-  requestPermission?: (descriptor: { mode: 'read' | 'readwrite' }) => Promise<PermissionState>
-}
-
 /** Reads the real bytes behind a linked folder handle, if it is readable. */
-async function readLinkedFile(
+export async function readLinkedFileContent(
   project: ProjectRecord,
   path: string,
 ): Promise<LoadedContent> {
-  const root = project.directoryHandle as PermittedDirectoryHandle | undefined
+  const root = project.directoryHandle
   if (!root) {
     return {
       status: 'unavailable',
       reason:
-        'This manifest-only record has no folder handle. Re-import the folder to read its real contents.',
+        'This manifest-only record has no folder handle. Import the folder or open the file to read its real contents.',
     }
   }
 
-  try {
-    if (typeof root.queryPermission === 'function') {
-      const permission = await root.queryPermission({ mode: 'read' })
-      if (permission !== 'granted' && typeof root.requestPermission === 'function') {
-        const requested = await root.requestPermission({ mode: 'read' })
-        if (requested !== 'granted') {
-          return {
-            status: 'unavailable',
-            reason:
-              'Read permission for the linked folder was not granted. Open the file again and allow access.',
-          }
-        }
+  const result = await readTextFromDirectory(root, path)
+  if (result.status === 'ready') {
+    if (isProbablyBinary(new TextEncoder().encode(result.content))) {
+      return {
+        status: 'unavailable',
+        reason:
+          'This device file looks binary. The text editor does not open binary files, so no content is shown.',
       }
     }
+    return { status: 'ready', content: result.content, source: 'disk' }
+  }
 
-    const segments = normalizePath(path).split('/').filter(Boolean)
-    const fileName = segments.pop()
-    if (!fileName) {
-      return { status: 'unavailable', reason: 'The stored path is empty.' }
-    }
-
-    let directory = root
-    for (const segment of segments) {
-      directory = await directory.getDirectoryHandle(segment)
-    }
-
-    const handle = await directory.getFileHandle(fileName)
-    const file = await handle.getFile()
-    const content = await file.text()
-    return { status: 'ready', content, source: 'disk' }
-  } catch {
-    return {
-      status: 'unavailable',
-      reason:
-        'The linked folder could not be read. The handle may have moved, lost permission, or the file no longer exists.',
-    }
+  return {
+    status: 'unavailable',
+    reason: `${result.reason} Use “Reconnect folder” on the project dossier to choose the folder again.`,
   }
 }
 
@@ -146,7 +165,7 @@ export async function loadFileContent(
     return { status: 'ready', content: stored, source: 'stored' }
   }
 
-  return readLinkedFile(project, path)
+  return readLinkedFileContent(project, path)
 }
 
 async function syncProjectFileMetadata(
@@ -210,6 +229,392 @@ export async function writeStoredContent(
       await db.projects.put({ ...project, modifiedAt: now })
     }
   })
+}
+
+/**
+ * Attempts a real write to the linked device folder. Never throws: the caller
+ * keeps the IndexedDB save and reports the disk outcome separately.
+ */
+export async function writeContentToLinkedFolder(
+  project: ProjectRecord,
+  path: string,
+  content: string,
+): Promise<DiskWriteOutcome> {
+  if (!project.directoryHandle) {
+    return {
+      status: 'skipped',
+      reason:
+        'This project has no linked device folder. The save updated the browser copy only.',
+    }
+  }
+
+  const normalized = assertStoredPath(path)
+  return writeTextToDirectory(project.directoryHandle, normalized, content)
+}
+
+/**
+ * Saves to IndexedDB, then tries the linked folder. The IndexedDB write is the
+ * durable browser copy; the disk result is returned so the UI can be exact.
+ */
+export async function saveFileContent(
+  project: ProjectRecord,
+  path: string,
+  content: string,
+): Promise<SaveContentResult> {
+  await writeStoredContent(project.id, path, content)
+  const disk = await writeContentToLinkedFolder(project, path, content)
+  return { stored: true, disk }
+}
+
+/** Current read/write permission of the linked folder, without prompting. */
+export async function probeLinkedFolder(project: ProjectRecord): Promise<LinkedFolderProbe> {
+  const root = project.directoryHandle
+  if (!root) {
+    return { status: 'none' }
+  }
+
+  if (typeof root.queryPermission !== 'function') {
+    return {
+      status: 'unsupported',
+      reason: 'This browser does not expose folder permissions to the page.',
+    }
+  }
+
+  const [read, write] = await Promise.all([
+    queryHandlePermission(root, 'read'),
+    queryHandlePermission(root, 'readwrite'),
+  ])
+
+  return { status: 'linked', read: read.status, write: write.status }
+}
+
+/** Re-picks a device folder for an existing record and stores the new handle. */
+export async function reconnectLinkedFolder(
+  project: ProjectRecord,
+): Promise<ReconnectFolderResult> {
+  const picked = await pickDirectory('readwrite')
+  if (picked.status === 'cancelled') {
+    return { status: 'cancelled' }
+  }
+  if (picked.status === 'unsupported') {
+    return { status: 'unsupported', reason: picked.reason }
+  }
+  if (picked.status === 'failed') {
+    return { status: 'failed', reason: picked.reason }
+  }
+
+  const permission = await ensureHandlePermission(picked.handle, 'readwrite', true)
+
+  const updated = await db.transaction('rw', db.projects, async () => {
+    const current = await db.projects.get(project.id)
+    if (!current) {
+      return undefined
+    }
+    const next: ProjectRecord = { ...current, directoryHandle: picked.handle }
+    await db.projects.put(next)
+    return next
+  })
+
+  if (!updated) {
+    return {
+      status: 'failed',
+      reason: 'The project record disappeared while the folder was being linked.',
+    }
+  }
+
+  return {
+    status: 'linked',
+    project: updated,
+    writeAccess: permission.status === 'granted',
+    reason: permission.reason,
+  }
+}
+
+/**
+ * Stores real text contents for a freshly imported folder. Files above the
+ * per-file or total cap, binary files and unreadable files are reported.
+ */
+export async function storeScannedContents(
+  projectId: string,
+  candidates: ImportFileCandidate[],
+): Promise<ImportedContentsResult> {
+  const skipped: { path: string; reason: string }[] = []
+  const pending: { path: string; content: string; sizeBytes: number }[] = []
+  let totalBytes = 0
+
+  for (const candidate of candidates) {
+    if (candidate.file.size > MAX_IMPORT_FILE_BYTES) {
+      skipped.push({
+        path: candidate.path,
+        reason: `Larger than the ${Math.round(MAX_IMPORT_FILE_BYTES / (1024 * 1024))} MiB browser-copy limit.`,
+      })
+      continue
+    }
+
+    if (totalBytes + candidate.file.size > MAX_IMPORT_CONTENT_BYTES) {
+      skipped.push({
+        path: candidate.path,
+        reason: `The folder exceeded the ${Math.round(MAX_IMPORT_CONTENT_BYTES / (1024 * 1024))} MiB browser-copy budget.`,
+      })
+      continue
+    }
+
+    let path: string
+    try {
+      path = assertStoredPath(candidate.path)
+    } catch (cause) {
+      skipped.push({
+        path: candidate.path,
+        reason: cause instanceof Error ? cause.message : 'The path is not safe to store.',
+      })
+      continue
+    }
+
+    try {
+      const bytes = new Uint8Array(await candidate.file.arrayBuffer())
+      if (isProbablyBinary(bytes)) {
+        skipped.push({ path, reason: 'Binary file. Only text is stored in the browser copy.' })
+        continue
+      }
+
+      const content = new TextDecoder('utf-8').decode(bytes)
+      pending.push({ path, content, sizeBytes: bytes.length })
+      totalBytes += bytes.length
+    } catch (cause) {
+      skipped.push({
+        path,
+        reason: cause instanceof Error ? cause.message : 'The file could not be read from the folder.',
+      })
+    }
+  }
+
+  if (pending.length > 0) {
+    const now = Date.now()
+    await db.transaction('rw', db.contents, db.files, db.projects, async () => {
+      for (const record of pending) {
+        await db.contents.put({
+          projectId,
+          path: record.path,
+          content: record.content,
+          updatedAt: now,
+        })
+
+        const entry = await db.files.get([projectId, record.path])
+        if (entry) {
+          await db.files.put({ ...entry, sizeBytes: record.sizeBytes, updatedAt: now })
+        } else {
+          await db.files.put({
+            projectId,
+            path: record.path,
+            kind: 'file',
+            sizeBytes: record.sizeBytes,
+            createdAt: now,
+            updatedAt: now,
+          })
+        }
+      }
+
+      await syncProjectFileMetadata(projectId, { touchModifiedAt: false })
+    })
+  }
+
+  return { stored: pending.length, bytes: totalBytes, skipped }
+}
+
+/** Stores already-decoded archive contents in one transaction. */
+export async function storeProjectContents(
+  projectId: string,
+  files: { path: string; content: string }[],
+): Promise<ImportedContentsResult> {
+  const skipped: { path: string; reason: string }[] = []
+  const pending: { path: string; content: string; sizeBytes: number }[] = []
+  let totalBytes = 0
+
+  for (const file of files) {
+    let path: string
+    try {
+      path = assertStoredPath(file.path)
+    } catch (cause) {
+      skipped.push({
+        path: file.path,
+        reason: cause instanceof Error ? cause.message : 'The path is not safe to store.',
+      })
+      continue
+    }
+
+    const sizeBytes = byteLength(file.content)
+    pending.push({ path, content: file.content, sizeBytes })
+    totalBytes += sizeBytes
+  }
+
+  if (pending.length > 0) {
+    const now = Date.now()
+    await db.transaction('rw', db.contents, db.files, db.projects, async () => {
+      for (const record of pending) {
+        await db.contents.put({
+          projectId,
+          path: record.path,
+          content: record.content,
+          updatedAt: now,
+        })
+
+        const entry = await db.files.get([projectId, record.path])
+        if (entry) {
+          await db.files.put({ ...entry, sizeBytes: record.sizeBytes, updatedAt: now })
+        } else {
+          await db.files.put({
+            projectId,
+            path: record.path,
+            kind: 'file',
+            sizeBytes: record.sizeBytes,
+            createdAt: now,
+            updatedAt: now,
+          })
+        }
+      }
+
+      await syncProjectFileMetadata(projectId, { touchModifiedAt: false })
+    })
+  }
+
+  return { stored: pending.length, bytes: totalBytes, skipped }
+}
+
+/**
+ * Adds dropped or picked files to a project folder. Names are validated and
+ * collisions are reported instead of overwritten.
+ */
+export async function importFilesIntoProject(
+  projectId: string,
+  parentPath: string,
+  files: File[],
+): Promise<{ stored: string[]; skipped: { name: string; reason: string }[] }> {
+  const stored: string[] = []
+  const skipped: { name: string; reason: string }[] = []
+
+  let parent: string
+  try {
+    parent = parentPath.trim() ? assertStoredPath(parentPath) : ''
+  } catch (cause) {
+    const reason = cause instanceof Error ? cause.message : 'The destination folder is not valid.'
+    return { stored, skipped: files.map((file) => ({ name: file.name, reason })) }
+  }
+
+  const existing = await db.files.where('projectId').equals(projectId).toArray()
+  const taken = new Set(
+    existing
+      .filter((entry) => {
+        const index = entry.path.lastIndexOf('/')
+        const directory = index > 0 ? entry.path.slice(0, index) : ''
+        return directory === parent
+      })
+      .map((entry) => entry.path.slice(entry.path.lastIndexOf('/') + 1).toLocaleLowerCase()),
+  )
+
+  for (const file of files) {
+    const nameProblem = validateEntryName(file.name)
+    if (nameProblem) {
+      skipped.push({ name: file.name, reason: nameProblem })
+      continue
+    }
+
+    if (taken.has(file.name.toLocaleLowerCase())) {
+      skipped.push({
+        name: file.name,
+        reason: 'A file or folder with this name already exists in that folder.',
+      })
+      continue
+    }
+
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      skipped.push({
+        name: file.name,
+        reason: `Larger than the ${Math.round(MAX_IMPORT_FILE_BYTES / (1024 * 1024))} MiB browser-copy limit.`,
+      })
+      continue
+    }
+
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      if (isProbablyBinary(bytes)) {
+        skipped.push({ name: file.name, reason: 'Binary file. The editor stores text only.' })
+        continue
+      }
+
+      const path = storedPath(parent, file.name)
+      await createStoredEntry(projectId, parent, file.name, 'file')
+      await writeStoredContent(projectId, path, new TextDecoder('utf-8').decode(bytes))
+      stored.push(path)
+      taken.add(file.name.toLocaleLowerCase())
+    } catch (cause) {
+      skipped.push({
+        name: file.name,
+        reason: cause instanceof Error ? cause.message : 'The file could not be stored.',
+      })
+    }
+  }
+
+  return { stored, skipped }
+}
+
+/**
+ * Collects the saved contents of every file for archive export. Stored copies
+ * win; linked-folder reads fill the gaps when permission allows. Nothing is
+ * invented for unavailable files.
+ */
+export async function collectProjectFiles(project: ProjectRecord): Promise<ProjectFileBundle> {
+  const entries = (await listStoredEntries(project.id)).filter((entry) => entry.kind === 'file')
+  const rows = await db.contents.where('projectId').equals(project.id).toArray()
+  const storedByPath = new Map(rows.map((row) => [row.path, row.content]))
+
+  const root = project.directoryHandle
+  let readGranted = false
+  let readReason = 'This project has no linked device folder, so only stored copies were exported.'
+
+  if (root) {
+    const permission = await ensureHandlePermission(root, 'read', true)
+    readGranted = permission.status === 'granted'
+    if (!readGranted) {
+      readReason =
+        permission.reason ??
+        'Read permission for the linked folder was not granted, so only stored copies were exported.'
+    }
+  }
+
+  const files: { path: string; content: string }[] = []
+  const unavailable: { path: string; reason: string }[] = []
+  let storedCount = 0
+  let diskCount = 0
+
+  for (const entry of entries) {
+    if (storedByPath.has(entry.path)) {
+      files.push({ path: entry.path, content: storedByPath.get(entry.path) ?? '' })
+      storedCount += 1
+      continue
+    }
+
+    if (!root || !readGranted) {
+      unavailable.push({ path: entry.path, reason: readReason })
+      continue
+    }
+
+    const result = await readTextFromDirectory(root, entry.path)
+    if (result.status === 'ready') {
+      if (isProbablyBinary(new TextEncoder().encode(result.content))) {
+        unavailable.push({
+          path: entry.path,
+          reason: 'Binary file. Archives include text files only.',
+        })
+        continue
+      }
+      files.push({ path: entry.path, content: result.content })
+      diskCount += 1
+    } else {
+      unavailable.push({ path: entry.path, reason: result.reason })
+    }
+  }
+
+  return { files, unavailable, storedCount, diskCount }
 }
 
 export async function createStoredEntry(

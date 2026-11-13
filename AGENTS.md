@@ -58,7 +58,8 @@ ESLint ignores `dist/` and `node_modules/`.
   `practiceProgress`, `practiceSubmissions` and `feedback`. Storage services belong in
   `src/lib/projectStorage.ts`, never in components. Stored content
   is authoritative after the first save; `directoryHandle` is only an honestly
-  disclosed read fallback and is structured-clone data. Opening a legacy record
+  disclosed read path and is structured-clone data. When the handle grants `readwrite`, saves
+  also write through to it; the browser copy is always written first. Opening a legacy record
   migrates its manifest into entries without resetting user data.
 - The Monaco surface is `MonacoWorkbench` behind `React.lazy` in `EditorArea`. Keep
   bundling local (no CDN); editor text models are owned by the workbench and must be
@@ -154,8 +155,10 @@ ESLint ignores `dist/` and `node_modules/`.
   non-workspace pages is `StandaloneEditor`; the workspace Run tab reads the live draft
   through `EditorCommandsContext`.
 - Converter AI parsing is `src/features/converter/convert.ts`; review uses the real LCS
-  diff in `diff.ts`; handoff from the workspace uses `staging.ts`. Saves and replaces
-  write the IndexedDB copy, never a linked folder on disk.
+  diff in `diff.ts`; handoff from the workspace uses `staging.ts`. Converter saves and
+  replaces write the IndexedDB copy only. Workspace saves write the IndexedDB copy first and
+  may also write the linked device folder when its handle grants `readwrite`; the two
+  outcomes are reported separately.
 - Practice catalog content lives in `src/features/practice/catalog.ts`; progress,
   drafts, notes, bookmarks and submissions are stored by `progressStorage.ts`.
 - Dropdowns in the app use the accessible `src/design-system/primitives/Select.tsx`
@@ -182,6 +185,33 @@ ESLint ignores `dist/` and `node_modules/`.
   never a simulated prompt.
 - Verified on Windows only. Linux/macOS lack `node-pty` prebuilds here and npm allow-scripts
   blocks its install script.
+
+## Device files (Milestone 4)
+
+- `src/lib/diskAccess.ts` is the only module that talks to the File System Access API
+  (`showOpenFilePicker`, `showDirectoryPicker`, `showSaveFilePicker`, permission queries and
+  `createWritable`). It returns typed outcomes; UI code must not call the raw API directly.
+- **Save order is non-negotiable:** write the IndexedDB copy first, then attempt the linked
+  folder only when the handle grants `readwrite`. A disk failure is reported as a separate
+  outcome and never invalidates a successful browser save.
+- `src/lib/projectArchive.ts` owns ZIP writing/reading (CRC-32, deflate-raw, path safety,
+  duplicate rejection, skip reasons) and the `codepilot.project.json` metadata entry. That
+  metadata path must never be imported as a project file.
+- `src/lib/projectStorage.ts` owns save-through, linked-folder probes/reconnect, content
+  capture, batch import and archive collection. Do not put storage logic in components.
+- Caps are product policy and must stay visible: 4000 archive entries, 8 MiB per archive
+  file, 64 MiB per archive, 80 MiB picker cap, 2 MiB per captured file, 24 MiB per folder
+  capture, 4 MiB for one opened file. Oversized/binary/unreadable entries are reported, not
+  silently dropped.
+- Drag-and-drop accepts files onto the explorer only; dropped folders are rejected with a
+  pointer to “Import folder”. Name collisions are reported, never overwritten.
+- The workspace origin chip must say `Browser copy` or `Folder linked`; the dossier shows the
+  real storage origin and permission state (`granted` / `asks on use` / `denied`). Never claim
+  a device write without the real outcome.
+- `BrowserRouter` has no `useBlocker`, so unsaved-draft protection is a `beforeunload`
+  warning only; do not claim in-app route blocking.
+- Native OS pickers are browser-specific and were not automated here. Write-through was
+  verified through an OPFS `FileSystemDirectoryHandle`; denial/revocation remain manual checks.
 
 ## TypeScript / React landmines
 

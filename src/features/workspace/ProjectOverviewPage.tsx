@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import {
+  Archive,
   ArrowLeft,
   CalendarDays,
   Check,
@@ -12,6 +13,7 @@ import {
   FolderOpen,
   HardDrive,
   ListTree,
+  RefreshCw,
 } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
@@ -21,7 +23,15 @@ import { Badge } from '../../design-system/primitives/Badge'
 import { Button } from '../../design-system/primitives/Button'
 import { Skeleton } from '../../design-system/primitives/Skeleton'
 import { getProject, type ProjectRecord } from '../../lib/db'
+import { saveBinaryFile } from '../../lib/diskAccess'
 import { formatBytes, formatDate, formatDateTime, relativeTime } from '../../lib/format'
+import { archiveFileName, createProjectArchive } from '../../lib/projectArchive'
+import {
+  collectProjectFiles,
+  probeLinkedFolder,
+  reconnectLinkedFolder,
+  type LinkedFolderProbe,
+} from '../../lib/projectStorage'
 import styles from './ProjectOverview.module.css'
 
 const MANIFEST_PREVIEW = 24
@@ -99,13 +109,57 @@ function ProjectOverviewPage({ projectId }: { projectId: string }) {
     )
   }
 
-  return <ProjectDossier project={state.project} />
+  return (
+    <ProjectDossier
+      project={state.project}
+      onProjectChange={(project) => setState({ status: 'ready', project })}
+    />
+  )
 }
 
-function ProjectDossier({ project }: { project: ProjectRecord }) {
+function ProjectDossier({
+  project,
+  onProjectChange,
+}: {
+  project: ProjectRecord
+  onProjectChange: (project: ProjectRecord) => void
+}) {
   const [copyState, setCopyState] = useState<CopyState>('idle')
   const [now] = useState(() => Date.now())
+  const [folderState, setFolderState] = useState<LinkedFolderProbe | { status: 'probing' }>({
+    status: 'probing',
+  })
+  const [reconnecting, setReconnecting] = useState(false)
+  const [folderMessage, setFolderMessage] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportMessage, setExportMessage] = useState<{
+    tone: 'ok' | 'warn' | 'danger'
+    text: string
+  } | null>(null)
   const workspaceRoute = getRouteInfo('/workspace')
+
+  useEffect(() => {
+    let cancelled = false
+
+    probeLinkedFolder(project)
+      .then((probe) => {
+        if (!cancelled) {
+          setFolderState(probe)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFolderState({
+            status: 'unsupported',
+            reason: 'The browser refused to report folder permissions for this record.',
+          })
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [project])
 
   const sourceLabel = project.source === 'created' ? 'Created locally' : 'Imported folder'
   const filesLabel =
@@ -118,6 +172,21 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
       ? 'Manifest only'
       : 'No folder linked'
 
+  const permissionLabel =
+    folderState.status === 'linked'
+      ? `Read ${permissionText(folderState.read)} · write ${permissionText(folderState.write)}`
+      : folderState.status === 'none'
+        ? 'No device folder linked'
+        : folderState.status === 'probing'
+          ? 'Checking folder permission…'
+          : folderState.reason
+
+  const storageOrigin = project.directoryHandle
+    ? folderState.status === 'linked' && folderState.write === 'granted'
+      ? 'IndexedDB browser copy + linked device folder (writes enabled)'
+      : 'IndexedDB browser copy + linked device folder (write access not granted)'
+    : 'IndexedDB browser copy only — no device folder linked'
+
   const copyRecordId = async () => {
     try {
       if (!navigator.clipboard) {
@@ -127,6 +196,117 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
       setCopyState('copied')
     } catch {
       setCopyState('failed')
+    }
+  }
+
+  const reconnect = async () => {
+    if (reconnecting) {
+      return
+    }
+
+    setReconnecting(true)
+    setFolderMessage(null)
+
+    try {
+      const result = await reconnectLinkedFolder(project)
+      if (result.status === 'cancelled') {
+        return
+      }
+      if (result.status === 'unsupported' || result.status === 'failed') {
+        setFolderMessage(result.reason)
+        return
+      }
+
+      onProjectChange(result.project)
+      setFolderMessage(
+        result.writeAccess
+          ? 'Folder relinked with read and write access. Saving a file now writes the browser copy and the device copy.'
+          : `Folder relinked, but write access was not granted. ${
+              result.reason ??
+              'Saving a file updates the browser copy only; grant write access to write the device copy.'
+            }`,
+      )
+    } catch (cause) {
+      setFolderMessage(
+        cause instanceof Error && cause.message
+          ? cause.message
+          : 'The folder could not be relinked.',
+      )
+    } finally {
+      setReconnecting(false)
+    }
+  }
+
+  const exportArchive = async () => {
+    if (exporting) {
+      return
+    }
+
+    setExporting(true)
+    setExportMessage(null)
+
+    try {
+      const bundle = await collectProjectFiles(project)
+      if (bundle.files.length === 0) {
+        setExportMessage({
+          tone: 'warn',
+          text:
+            bundle.unavailable[0]?.reason ??
+            'This project has no saved text files to export yet. Save a file in the workspace first.',
+        })
+        return
+      }
+
+      const archive = await createProjectArchive({
+        name: project.name,
+        description: project.description,
+        language: project.language,
+        source: project.source,
+        files: bundle.files,
+      })
+      const saved = await saveBinaryFile({
+        suggestedName: archiveFileName(project.name),
+        bytes: archive.bytes,
+        mimeType: 'application/zip',
+        description: 'CodePilot Lab project archive',
+        extensions: ['.zip'],
+      })
+
+      if (saved.status === 'cancelled') {
+        setExportMessage({ tone: 'warn', text: 'Archive export was cancelled. Nothing was written.' })
+        return
+      }
+      if (saved.status === 'failed') {
+        setExportMessage({ tone: 'danger', text: saved.reason })
+        return
+      }
+
+      const notes: string[] = []
+      if (bundle.unavailable.length > 0) {
+        notes.push(
+          `${bundle.unavailable.length} file${bundle.unavailable.length === 1 ? '' : 's'} unavailable`,
+        )
+      }
+      if (archive.skipped.length > 0) {
+        notes.push(
+          `${archive.skipped.length} invalid path${archive.skipped.length === 1 ? '' : 's'} skipped`,
+        )
+      }
+
+      setExportMessage({
+        tone: bundle.unavailable.length > 0 ? 'warn' : 'ok',
+        text: `${saved.status === 'saved' ? 'Exported' : 'Downloaded'} ${saved.fileName} · ${bundle.files.length} file${bundle.files.length === 1 ? '' : 's'}${notes.length > 0 ? ` · ${notes.join(' · ')}` : ''}`,
+      })
+    } catch (cause) {
+      setExportMessage({
+        tone: 'danger',
+        text:
+          cause instanceof Error && cause.message
+            ? cause.message
+            : 'The archive could not be created. Nothing was written.',
+      })
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -172,7 +352,7 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
             <div className={styles.badges}>
               <Badge tone="live">{sourceLabel}</Badge>
               <Badge tone="live">Workspace live</Badge>
-              <Badge tone="planned">Editor scheduled</Badge>
+              <Badge tone="planned">GitHub scheduled</Badge>
               <Badge tone="neutral" withDot={false}>
                 {project.language}
               </Badge>
@@ -241,7 +421,7 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
                 <p className={styles.emptyTitle}>No file manifest</p>
                 <p className={styles.emptyCopy}>
                   {project.source === 'created'
-                    ? 'This project was created as a local record. Its workspace starts with an empty session tree — create files and folders there to begin. Nothing is written to disk in this phase.'
+                    ? 'This project was created as a local record. Its workspace starts with an empty session tree — create files and folders there to begin. Entries and saves live in IndexedDB; a linked device folder also receives saves when it grants write access.'
                     : 'The import produced no readable files, so the record has no manifest to display.'}
                 </p>
               </div>
@@ -281,14 +461,15 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
                     Session workspace live
                   </h2>
                 </div>
-                <Badge tone="live">Phase 5</Badge>
+                <Badge tone="live">Device files</Badge>
               </div>
               <div className={styles.panelBody}>
                 <p className={styles.panelCopy}>
                   The project explorer, tabs, Copilot dock and development panel are mounted and
-                  driven by this record, with a real Monaco editor that saves to IndexedDB. The
-                  Copilot can now use a provider you configure; disk write-through and the
-                  execution lab remain scheduled.
+                  driven by this record, with a real Monaco editor that saves to IndexedDB and, when
+                  the linked folder grants write access, to the device copy. Run and trace go through
+                  the loopback execution sidecar; the terminal is a guarded local PTY. GitHub and
+                  hosted team features are not configured in this build.
                 </p>
                 <ol className={styles.planned}>
                   {workspaceRoute.planned.slice(0, 3).map((entry, index) => (
@@ -324,11 +505,15 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
               <dl className={styles.registry}>
                 <div className={styles.registryRow}>
                   <dt>Storage</dt>
-                  <dd>IndexedDB · this browser only</dd>
+                  <dd>{storageOrigin}</dd>
                 </div>
                 <div className={styles.registryRow}>
                   <dt>Folder</dt>
                   <dd>{folderLabel}</dd>
+                </div>
+                <div className={styles.registryRow}>
+                  <dt>Permission</dt>
+                  <dd>{permissionLabel}</dd>
                 </div>
                 <div className={styles.registryRow}>
                   <dt>Manifest</dt>
@@ -375,6 +560,40 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
                   </dd>
                 </div>
               </dl>
+              <div className={styles.storageActions}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={project.directoryHandle ? <RefreshCw size={13} /> : <FolderOpen size={13} />}
+                  onClick={() => void reconnect()}
+                  disabled={reconnecting}
+                >
+                  {reconnecting
+                    ? 'Choosing folder…'
+                    : project.directoryHandle
+                      ? 'Reconnect folder'
+                      : 'Link device folder'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Archive size={13} />}
+                  onClick={() => void exportArchive()}
+                  disabled={exporting}
+                >
+                  {exporting ? 'Exporting…' : 'Export archive'}
+                </Button>
+              </div>
+              {folderMessage ? (
+                <p className={styles.panelNote} role="status">
+                  {folderMessage}
+                </p>
+              ) : null}
+              {exportMessage ? (
+                <p className={styles.panelNote} data-tone={exportMessage.tone} role="status">
+                  {exportMessage.text}
+                </p>
+              ) : null}
               {project.truncated ? (
                 <p className={styles.panelNote}>
                   The manifest hit the import cap. The record is genuine but incomplete.
@@ -386,6 +605,19 @@ function ProjectDossier({ project }: { project: ProjectRecord }) {
       </motion.div>
     </section>
   )
+}
+
+function permissionText(state: 'granted' | 'prompt' | 'denied' | 'unsupported'): string {
+  if (state === 'granted') {
+    return 'granted'
+  }
+  if (state === 'denied') {
+    return 'denied'
+  }
+  if (state === 'unsupported') {
+    return 'unsupported'
+  }
+  return 'asks on use'
 }
 
 function Fact({

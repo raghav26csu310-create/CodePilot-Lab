@@ -1,12 +1,14 @@
 import { motion } from 'framer-motion'
 import {
   AlignLeft,
+  Archive,
   ArrowUpRight,
   BookOpen,
   Bug,
   ChevronRight,
   CircleSlash,
   Copy,
+  Download,
   FilePlus2,
   FolderGit2,
   FolderTree,
@@ -34,6 +36,9 @@ import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { useCopilot } from '../../copilot/CopilotContext'
 import { languageForPath, supportsDocumentFormatting } from '../../editor/languageRegistry'
 import { projectLanguageForMonaco } from '../../editor/projectLanguages'
+import { saveBinaryFile, saveTextFile } from '../../../lib/diskAccess'
+import { archiveFileName, createProjectArchive } from '../../../lib/projectArchive'
+import { collectProjectFiles } from '../../../lib/projectStorage'
 import { findNode } from '../state/fileTree'
 import { useWorkspace } from '../state/useWorkspace'
 import type { FileTreeNode, WorkspaceJobKind, WorkspaceTab } from '../state/types'
@@ -468,7 +473,7 @@ function EditorSurface({
   node: FileTreeNode
   onShowCopilot: () => void
 }) {
-  const { state, dispatch } = useWorkspace()
+  const { project, state, dispatch } = useWorkspace()
   const commands = useEditorCommands()
   const { seedComposer } = useCopilot()
   const { editor: preferences } = state.ui
@@ -560,6 +565,109 @@ function EditorSurface({
     }
   }
 
+  /**
+   * Saves a copy of the live Monaco draft through the real save picker. This
+   * never changes the project record or the device path of the linked folder.
+   */
+  const saveCopy = () => {
+    void (async () => {
+      const content = commands.current?.getDraft(tab.path) ?? tab.content
+      const result = await saveTextFile(tab.name, content)
+      if (result.status === 'cancelled') {
+        return
+      }
+      if (result.status === 'failed') {
+        dispatch({ type: 'ui/show-toast', tone: 'danger', message: result.reason })
+        return
+      }
+      dispatch({
+        type: 'ui/show-toast',
+        tone: 'ok',
+        message:
+          result.status === 'saved'
+            ? `Saved a copy as ${result.fileName}. The project record is unchanged.`
+            : `Downloaded ${result.fileName}. Your browser controls where it lands.`,
+      })
+    })()
+  }
+
+  /**
+   * Exports saved project contents as a ZIP. Unsaved editor drafts are never
+   * included silently: the toast names how many were left out.
+   */
+  const exportArchive = () => {
+    void (async () => {
+      dispatch({ type: 'ui/show-toast', tone: 'ok', message: 'Collecting saved files…' })
+      try {
+        const bundle = await collectProjectFiles(project)
+        if (bundle.files.length === 0) {
+          dispatch({
+            type: 'ui/show-toast',
+            tone: 'warn',
+            message:
+              bundle.unavailable[0]?.reason ??
+              'This project has no saved text files to export yet. Save a file first.',
+          })
+          return
+        }
+
+        const archive = await createProjectArchive({
+          name: project.name,
+          description: project.description,
+          language: project.language,
+          source: project.source,
+          files: bundle.files,
+        })
+        const saved = await saveBinaryFile({
+          suggestedName: archiveFileName(project.name),
+          bytes: archive.bytes,
+          mimeType: 'application/zip',
+          description: 'CodePilot Lab project archive',
+          extensions: ['.zip'],
+        })
+
+        if (saved.status === 'cancelled') {
+          dispatch({
+            type: 'ui/show-toast',
+            tone: 'warn',
+            message: 'Archive export was cancelled. Nothing was written.',
+          })
+          return
+        }
+        if (saved.status === 'failed') {
+          dispatch({ type: 'ui/show-toast', tone: 'danger', message: saved.reason })
+          return
+        }
+
+        const notes: string[] = []
+        if (bundle.unavailable.length > 0) {
+          notes.push(`${bundle.unavailable.length} file${bundle.unavailable.length === 1 ? '' : 's'} unavailable`)
+        }
+        if (archive.skipped.length > 0) {
+          notes.push(`${archive.skipped.length} invalid path${archive.skipped.length === 1 ? '' : 's'} skipped`)
+        }
+        if (dirtyCount > 0) {
+          notes.push(`${dirtyCount} unsaved change${dirtyCount === 1 ? '' : 's'} not included`)
+        }
+
+        dispatch({
+          type: 'ui/show-toast',
+          tone: bundle.unavailable.length > 0 || dirtyCount > 0 ? 'warn' : 'ok',
+          message: `${saved.status === 'saved' ? 'Exported' : 'Downloaded'} ${saved.fileName} · ${bundle.files.length} file${bundle.files.length === 1 ? '' : 's'}${notes.length > 0 ? ` · ${notes.join(' · ')}` : ''}`,
+        })
+      } catch (cause) {
+        dispatch({
+          type: 'ui/show-toast',
+          tone: 'danger',
+          message:
+            cause instanceof Error && cause.message
+              ? cause.message
+              : 'The archive could not be created. Nothing was written.',
+        })
+      }
+    })()
+  }
+
   const moreItems: EditorMenuItem[] = [
     {
       id: 'wrap',
@@ -604,6 +712,19 @@ function EditorSurface({
             : 'Copy path',
       icon: <Copy size={13} aria-hidden="true" />,
       onSelect: () => void copyPath(),
+    },
+    {
+      id: 'save-copy',
+      label: 'Save a copy…',
+      icon: <Download size={13} aria-hidden="true" />,
+      disabled: tab.status !== 'ready',
+      onSelect: saveCopy,
+    },
+    {
+      id: 'export-archive',
+      label: 'Export project archive…',
+      icon: <Archive size={13} aria-hidden="true" />,
+      onSelect: exportArchive,
     },
     {
       id: 'copilot-attach',

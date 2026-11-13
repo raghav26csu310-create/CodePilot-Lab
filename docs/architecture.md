@@ -53,8 +53,9 @@ Local sidecar (Node, loopback only)
 | `practiceSubmissions` | `id` | Verdict history |
 | `feedback` | `id` | Local feedback and delivery status |
 
-Stored content is authoritative after the first save. A linked `directoryHandle` is a
-read-only fallback and is structured-clone data, not a filesystem write path.
+Stored content is authoritative after the first save. A linked `directoryHandle` is
+structured-clone data: it is read on demand and, when it grants `readwrite`, also receives the
+saved copy. The browser copy is written first; a device write is a separate, reported outcome.
 
 ## Security boundaries
 

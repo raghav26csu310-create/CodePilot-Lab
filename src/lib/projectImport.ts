@@ -2,6 +2,14 @@ export const MAX_IMPORT_FILES = 3000
 export const MAX_IMPORT_DEPTH = 12
 
 /**
+ * Content capture is deliberately smaller than the manifest. A folder can be
+ * large; the editor stores real text only when it fits these caps, and every
+ * skipped file is reported rather than silently dropped.
+ */
+export const MAX_IMPORT_FILE_BYTES = 2 * 1024 * 1024
+export const MAX_IMPORT_CONTENT_BYTES = 24 * 1024 * 1024
+
+/**
  * Vendored or generated trees are excluded from the manifest. The scan reports
  * every excluded directory it actually encountered so the UI can disclose it.
  */
@@ -75,9 +83,15 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   less: 'Less',
 }
 
+export type ImportFileCandidate = {
+  path: string
+  file: File
+}
+
 export type ImportScan = {
   name: string
   manifest: string[]
+  files: ImportFileCandidate[]
   fileCount: number
   sizeBytes: number
   modifiedAt: number
@@ -89,6 +103,7 @@ export type ImportScan = {
 
 type ScanAccumulator = {
   manifest: string[]
+  files: ImportFileCandidate[]
   fileCount: number
   sizeBytes: number
   modifiedAt: number
@@ -100,6 +115,7 @@ type ScanAccumulator = {
 function createAccumulator(): ScanAccumulator {
   return {
     manifest: [],
+    files: [],
     fileCount: 0,
     sizeBytes: 0,
     modifiedAt: 0,
@@ -137,6 +153,7 @@ function addFile(
   acc.sizeBytes += file.size
   acc.modifiedAt = Math.max(acc.modifiedAt, file.lastModified)
   acc.manifest.push(path)
+  acc.files.push({ path, file })
 
   const language = languageForFile(file.name)
   if (language) {
@@ -155,6 +172,7 @@ function finalize(name: string, acc: ScanAccumulator): ImportScan {
   return {
     name,
     manifest: acc.manifest,
+    files: acc.files,
     fileCount: acc.fileCount,
     sizeBytes: acc.sizeBytes,
     modifiedAt: acc.modifiedAt || Date.now(),
@@ -208,21 +226,30 @@ export async function scanDirectory(
 
 /**
  * Fallback for browsers without the directory picker. `webkitdirectory` keeps
- * the relative path on each File, so the manifest stays faithful.
+ * the relative path on each File, so the manifest stays faithful. The selected
+ * top-level folder is stripped from every path to match `scanDirectory`, which
+ * always reports paths relative to the chosen folder.
  */
 export function scanFileList(files: File[]): ImportScan {
   const acc = createAccumulator()
   let name = 'Imported project'
 
   for (const file of files) {
-    const relativePath = file.webkitRelativePath || file.name
-    const segments = relativePath.split('/').filter(Boolean)
+    const rawPath = file.webkitRelativePath || file.name
+    const segments = rawPath.split('/').filter(Boolean)
+    const isInsideChosenFolder = segments.length > 1
 
-    if (segments.length > 1 && name === 'Imported project') {
+    if (isInsideChosenFolder && name === 'Imported project') {
       name = segments[0] ?? name
     }
 
-    const directories = segments.slice(0, -1).map((segment) => segment.toLowerCase())
+    const relativeSegments = isInsideChosenFolder ? segments.slice(1) : segments
+    const relativePath = relativeSegments.join('/')
+    if (!relativePath) {
+      continue
+    }
+
+    const directories = relativeSegments.slice(0, -1).map((segment) => segment.toLowerCase())
     const excluded = directories.find((directory) => EXCLUDED.has(directory))
     if (excluded) {
       acc.excluded.add(excluded)
@@ -238,6 +265,51 @@ export function scanFileList(files: File[]): ImportScan {
   }
 
   return finalize(name, acc)
+}
+
+export type ContentCaptureEstimate = {
+  /** Files that fit the per-file and total content budget. */
+  eligible: number
+  /** Files above the per-file limit; they stay available only from disk. */
+  tooLarge: number
+  bytes: number
+}
+
+/**
+ * Predicts what a folder import can store in the browser. Binary files cannot
+ * be identified until they are read, so this count is honest about being an
+ * upper bound.
+ */
+export function estimateContentCapture(scan: ImportScan): ContentCaptureEstimate {
+  let eligible = 0
+  let tooLarge = 0
+  let bytes = 0
+
+  for (const candidate of scan.files) {
+    if (candidate.file.size > MAX_IMPORT_FILE_BYTES) {
+      tooLarge += 1
+      continue
+    }
+    if (bytes + candidate.file.size > MAX_IMPORT_CONTENT_BYTES) {
+      tooLarge += 1
+      continue
+    }
+    eligible += 1
+    bytes += candidate.file.size
+  }
+
+  return { eligible, tooLarge, bytes }
+}
+
+/** True when a file's first bytes contain a NUL, the usual binary signal. */
+export function isProbablyBinary(bytes: Uint8Array): boolean {
+  const limit = Math.min(bytes.length, 8192)
+  for (let index = 0; index < limit; index += 1) {
+    if (bytes[index] === 0) {
+      return true
+    }
+  }
+  return false
 }
 
 export function supportsDirectoryPicker(): boolean {

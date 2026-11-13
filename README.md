@@ -2,12 +2,13 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Milestone 3 — the real terminal (local companion).** The workspace
-Terminal tab now opens a genuine PTY on the machine running the loopback service, through an
-Origin-locked WebSocket and a per-start pairing token printed only on the service console.
-Cloud terminal is visibly unavailable because no cloud runtime is configured in this build.
-Milestones 1 (AI gateway and accounts) and 2 (editor action bar, dropdown fix) are complete;
-`docs/technical-audit.md` §11–13 records the evidence, and `docs/session-handoff.md` is the
+**Current milestone: Milestone 4 — device file access.** The workspace can open a real text
+file, import a folder or a `.zip` project archive, save a copy, export an archive, accept
+files dropped on the explorer, and reconnect a linked device folder from the dossier. Saves
+write the IndexedDB copy first and write through to a linked folder only when its handle
+grants read-write access; the two outcomes are reported separately. Milestones 1 (AI gateway
+and accounts), 2 (editor action bar, dropdown fix) and 3 (local terminal) are complete.
+`docs/technical-audit.md` §11–14 records the evidence, and `docs/session-handoff.md` is the
 current resume point. No deployment, PostgreSQL run or live model completion has happened yet.
 
 **Previous milestone: Phase 7 — Public beta hardening.** The lab includes a
@@ -143,8 +144,13 @@ sandbox.
   project search over stored contents (results are capped and disclosed),
   `Ctrl/⌘ PageUp/PageDown` tab cycling, plus `Ctrl/⌘ B` panel toggling from Phase 3.
 - **Real persistence.** Every save writes through to IndexedDB; reloading the page and
-  reopening the project restores saved files. Linked folder handles are used only as an
-  honest read fallback when nothing was ever saved.
+  reopening the project restores saved files. When a project is linked to a device folder
+  that grants write access, the same save is also written to that folder; if the folder is
+  unavailable, the browser save still succeeds and the disk outcome is reported separately.
+- **Device files.** Open a real text file, import a folder or a `.zip` project archive, drag
+  files onto the explorer, save a copy, export a project archive, and reconnect a device
+  folder from the dossier. Permission state, storage origin and skipped archive entries are
+  shown explicitly; nothing is written to a folder without granted write access.
 - **Problems** panel fed by real Monaco markers collected from open buffers, with
   per-language validation coverage disclosed in Diagnostics.
 - **Recent projects** are read live from IndexedDB, sorted by last opened. Opening a
@@ -271,8 +277,20 @@ src/
 
 ## Verification
 
-- `npm run typecheck`, `npm run lint`, `npm test` (61 frontend tests), `npm run test:api`
-  (12 tests) and `npm run build` pass.
+- `npm run typecheck`, `npm run lint`, `npm test` (77 frontend tests, 8 files), `npm run
+test:api` (12 tests) and `npm run build` pass.
+- Milestone 4 verification covered: real single-file open into a project; browser-first save
+  with a dirty buffer; ZIP export and CRC-checked re-import with identical content; dossier
+  export; OPFS-handle relink with read-write permission and a matching device copy; honest
+  disk failure after the folder disappeared; drag-and-drop add and collision reporting;
+  corrupt-archive and denied-picker errors; persistence across reload; 1440 and 390 px
+  layouts.
+- Milestone 3 verification covered: the real ConPTY banner and prompt, typed command output,
+  exit code, tab-switch session continuity, wrong-token rejection, token rotation on restart,
+  and offline recovery. Windows only.
+- Milestone 2 verification covered: the dropdown staying open while its list scrolls,
+  keyboard selection, Run/Trace against the local sidecar, disabled Trace for non-Python,
+  Save all, Format, the More menu, and toolbar density at 554 px.
 - Milestone 1 verification covered: gateway health honesty, session isolation, CSRF,
   managed SSE, quota; BYO credentials stored encrypted on the API with no key in the
   browser; honest failure when no provider is available; gateway-routed conversion failure
@@ -309,8 +327,9 @@ src/
 
 ## Known constraints
 
-- The registry is specific to this browser profile. It does not sync; export/import is
-  scheduled.
+- The registry is specific to this browser profile. It does not sync; a project archive can
+  be exported and re-imported as a `.zip`, but that is not a registry backup or cross-device
+  sync.
 - The folder picker is Chromium-only; other browsers store a manifest without a handle.
 - Monaco's TypeScript service understands the open file in isolation: project-wide
   resolution, tests and builds are not claimed as verified anywhere in the product.
@@ -325,7 +344,10 @@ src/
   be exposed to untrusted networks. Only Python has a real tracer; other languages are
   marked unsupported. HTML, CSS and JSON have no runtime. AI conversion quality depends
   entirely on the configured provider and is never claimed to be behaviour-preserving.
-- Editor→disk write-through remains scheduled; writes go to the IndexedDB copy of a
-  project.
+- Device write-through requires a linked folder whose handle grants read-write access. A
+  browser save always succeeds on its own; disk writes are an additional, separately
+  reported outcome. Native OS picker prompts, permission denial and revocation were not
+  automated in this environment, and the download fallback is a file download rather than a
+  linked folder.
 - No analytics provider is configured. No user counts, ratings or testimonials are
   published.

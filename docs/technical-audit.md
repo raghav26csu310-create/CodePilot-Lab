@@ -19,9 +19,9 @@ separate what exists from what is still promised by the interface.
 | Is there a running application backend? | **No.** `server/api/` is an incomplete TypeScript scaffold: no entry point, no route wiring, no tests, not typechecked by the root build. |
 | Is AI production-safe today? | **No.** The browser calls user-configured providers directly; BYO keys can be persisted in plaintext IndexedDB. |
 | Is the execution runner a sandbox? | **No.** It is a loopback-only, resource-limited local runner with process-tree kills and timeouts. Code runs with the operator's OS permissions. |
-| Is there a terminal? | **No.** The Terminal tab honestly reports that no shell exists. |
+| Is there a terminal? | **Yes, local only.** A guarded loopback PTY shipped in Milestone 3. The cloud terminal is still absent and rendered as unavailable. |
 | Is there GitHub integration? | **No.** No OAuth/App flow, token storage, clone, branch, commit, push or PR code exists. |
-| Can users edit their device files? | **Partially, read-only.** A selected folder can be scanned and re-read as a fallback; there is no disk write-through, Save As, export or drag-and-drop. |
+| Can users edit their device files? | **Yes, with explicit permission.** Open/import, save through a linked folder that grants write access, Save As/export, archive import/export and drag-and-drop shipped in Milestone 4. IndexedDB remains authoritative; disk writes happen only through a granted handle. |
 | Is the product multi-user? | **No.** Projects, settings and practice data are browser-local. No accounts, sessions or server-side isolation are active. |
 | Is it production-ready? | **No.** It is a frontend beta. Public deployment, cloud AI, cloud files, terminal, GitHub and multi-user data isolation are not implemented or verified. |
 | Overall status | **NOT PRODUCTION READY.** Frontend beta only, with the documented local-only limits. |
@@ -149,10 +149,10 @@ or network egress control.
 unacceptable as a public cloud execution service. The UI and docs already disclose this;
 that disclosure must be preserved.
 
-**Remediation.** Milestone 4. Keep the local runner as a companion capability. Add a separate
-isolated cloud execution service (per-user container/VM, no host mounts, egress policy, CPU/
-memory/PID limits, TTL cleanup) or explicitly do not offer cloud execution. Never expose the
-current runner to the internet.
+**Remediation.** Deferred; the current milestone map does not fund a hosted execution service.
+Keep the local runner as a companion capability. Any future cloud execution needs a separate
+isolated service (per-user container/VM, no host mounts, egress policy, CPU/
+memory/PID limits, TTL cleanup). Never expose the current runner to the internet.
 
 ### C3 — BYO API keys are browser-held and can be stored in plaintext (Critical)
 
@@ -273,13 +273,13 @@ now been replaced by a real connection flow, not by simulated output.
 **Rule retained.** Do not present `/run` as a shell. Do not expose an unauthenticated terminal.
 The local bridge is genuine shell access on the operator's machine, not cloud isolation.
 
-### H4 — Device file access is read-only and incomplete (High)
+### H4 — Device file access was read-only and incomplete (High)
 
-**Current state.** `projectImport.ts` scans a user-selected directory (`showDirectoryPicker`)
-or a `webkitdirectory` input, excludes vendored directories, caps files/depth and reports the
-cap. `projectStorage.ts` reads saved content first and falls back to the linked folder handle
-for files whose content was never stored. The project record keeps the handle, so a
-re-permission prompt is possible on read. There is **no** `createWritable`,
+**Original state (audit, 2026-11-11).** `projectImport.ts` scanned a user-selected directory
+(`showDirectoryPicker`) or a `webkitdirectory` input, excluded vendored directories, capped
+files/depth and reported the cap. `projectStorage.ts` read saved content first and fell back
+to the linked folder handle for files whose content was never stored. The project record kept
+the handle, so a re-permission prompt was possible on read. There was **no** `createWritable`,
 `showSaveFilePicker`, `showOpenFilePicker`, drag-and-drop, project archive export/import,
 upload/download fallback, or reconnect UI beyond the implicit handle read.
 
@@ -287,13 +287,16 @@ upload/download fallback, or reconnect UI beyond the implicit handle read.
 deferred. The File System Access API is not available in all browsers, so a fallback was
 also deferred.
 
-**Consequences.** The UI must not say “saved to your folder”. A user who edits an imported
-file changes the IndexedDB copy, not the device file. Revoked permissions surface as a read
-failure, but there is no guided reconnect.
+**Original consequences.** The UI must not say “saved to your folder”. A user who edited an
+imported file changed the IndexedDB copy, not the device file. Revoked permissions surfaced as
+a read failure, but there was no guided reconnect.
 
-**Remediation.** Milestone 3. Add Open Folder/Open File, Save/Save As/Export, drag-and-drop,
-permission revocation handling, a download/upload fallback and an explicit storage-origin
-badge on every project (Browser-persisted / Device folder / Import / Cloud).
+**Resolved in Milestone 4** — see §14. Saves now write the browser copy first and write
+through to the linked folder only when the handle grants `readwrite`; the two outcomes are
+reported separately. Open File, Save a copy, archive export/import, drag-and-drop import and
+a dossier reconnect flow exist, with explicit storage-origin and permission readouts. The
+remaining honesty constraint is unchanged: without a granted folder handle, a save is a
+browser copy and the UI says exactly that.
 
 ### H5 — API scaffold is not buildable or lint-clean (High)
 
@@ -481,14 +484,16 @@ architecture must make that class of exposure impossible.
 
 - Dexie database `codepilot-lab`, schema v4: `projects`, `files`, `contents`, `settings`,
   `conversions`, `practiceProgress`, `practiceSubmissions`, `feedback`.
-- Stored content is authoritative after first save. Linked folder handles are a read
-  fallback only.
+- Stored content is authoritative after first save. A linked folder handle is read on demand
+  and, when it grants `readwrite`, also receives the saved copy; the browser copy is written
+  first and a disk failure never invalidates it.
 - Layout/preferences are in `localStorage`; drafts for non-workspace editors are in
   `localStorage`.
 - Feedback is written locally first; an optional endpoint POST is attempted and its real
   outcome recorded.
 - No server database is running. The PostgreSQL schema exists only as an unapplied SQL file.
-- No backup, export or quota-management UI.
+- No backup, export or quota-management UI. A project archive can be exported to `.zip`;
+  that is a file, not a backup of the registry.
 
 ### 4.5 Authentication
 
@@ -576,16 +581,16 @@ Find, More); wire Run to the live draft; keep the bottom panel; verify resize/co
 Exit: every language reachable by mouse and keyboard; no clipped dialog; action bar usable
 at 912×766 and 1440×1000.
 
-**Milestone 3 — Device files.**
+**Milestone 3 — Terminal and execution.**
+Entry: terminal decision confirmed. Work: chosen architecture, process lifecycle, output,
+cancellation, isolation/limits, expiry, UI states. Exit: a real command runs and is killed;
+the runner is never presented as a shell; public exposure is either isolated or absent.
+
+**Milestone 4 — Device files.**
 Entry: browser support matrix agreed. Work: Open Folder/Open File, Save/Save As/Export,
 drag-and-drop, permission-revoked flow, download/upload fallback, storage-origin badges,
 unsaved-change warnings. Exit: a real file edit is written to disk only with explicit
 permission; IndexedDB remains distinguishable; revocation is tested.
-
-**Milestone 4 — Terminal and execution.**
-Entry: terminal decision confirmed. Work: chosen architecture, process lifecycle, output,
-cancellation, isolation/limits, expiry, UI states. Exit: a real command runs and is killed;
-the runner is never presented as a shell; public exposure is either isolated or absent.
 
 **Milestone 5 — GitHub.**
 Entry: App/OAuth decision and credentials. Work: connect/disconnect, repo selection, import,
@@ -619,7 +624,7 @@ supports each claim; anything unverified stays labelled unverified.
 | AI gateway | **None** | Managed/BYO, quota, rate limit, timeout, abort, usage, SSE |
 | Auth/isolation | **None** | Two-user cross-access denial, session expiry, CSRF |
 | Editor UX | Manual only | Viewport/keyboard checks, dropdown scrolling |
-| Device files | Manual only | Permission revoke, save-as, export, fallback |
+| Device files | Archive round trip covered; permission flows manual only | Permission revoke, save-as, export, fallback |
 | Terminal | **None** | Real command, cancellation, cleanup |
 | GitHub | **None** | Connect, clone, commit, push, revoke |
 
@@ -641,9 +646,11 @@ supports each claim; anything unverified stays labelled unverified.
 ## 9. Non-claims
 
 This audit does **not** claim: a working backend, user accounts, data isolation, cloud AI,
-managed quotas in production, a terminal, GitHub integration, cloud file storage, disk
-write-through, a sandbox, production deployment, or verified end-to-end journeys. The UI’s
-honest “unavailable” states should remain until each capability is real and tested.
+managed quotas in production, GitHub integration, cloud file storage, a sandbox, production
+deployment, or verified end-to-end journeys. Terminal and device-file support that shipped
+after this audit are recorded honestly in §13 and §14; they remain local-only and
+permission-bound. The UI’s honest “unavailable” states should remain until each capability is
+real and tested.
 
 ---
 
@@ -651,10 +658,10 @@ honest “unavailable” states should remain until each capability is real and 
 
 | Decision | Choice | Consequence |
 | --- | --- | --- |
-| Terminal | **Local companion + cloud terminal, both** | Milestone 4 must ship both modes behind one UI with an explicit mode badge. The local PTY companion and the isolated cloud PTY are separate services; neither is the existing `/run` endpoint. |
+| Terminal | **Local companion + cloud terminal, both** | Milestone 3 must ship both modes behind one UI with an explicit mode badge. The local PTY companion and the isolated cloud PTY are separate services; neither is the existing `/run` endpoint. |
 | GitHub | **GitHub App** | Short-lived installation tokens, server-side private key, minimum permissions (`contents`, `metadata`, and pull requests only if PR workflows are in scope). No token in the browser or logs. |
 | AI default | **Managed CodePilot AI first, BYO second** | The gateway is the default preset. The direct browser provider remains an explicitly labelled advanced/local fallback, not the primary path. |
-| Terminal cloud infrastructure | Deferred to Milestone 4 execution | Requires container/VM infrastructure and is not available in this environment. |
+| Terminal cloud infrastructure | Deferred to Milestone 3 execution | Requires container/VM infrastructure and is not available in this environment. |
 
 ---
 
@@ -912,5 +919,106 @@ Known limits recorded at the end of Milestone 3:
   console token. Sessions do not survive a page reload or a service restart.
 - The cloud terminal is not implemented; the disabled Cloud control explains why.
 - Output is not persisted; scrollback lives in the mounted xterm instance only.
+
+---
+
+## 14. Milestone 4 status (device file access)
+
+Implemented and executed on 2026-11-13. No new dependency was added: ZIP writing and reading
+use `CompressionStream`/`DecompressionStream('deflate-raw')` with a hand-rolled container
+parser, and the File System Access API is used directly where the browser exposes it.
+
+### Storage and permission model
+
+- `src/lib/diskAccess.ts` — permission query/request, `showOpenFilePicker`,
+  `showDirectoryPicker`, `showSaveFilePicker`, read-write file access, link probing and a
+  download fallback when a picker is unavailable. Every outcome is a typed result, not a
+  thrown guess.
+- **Save order is fixed:** the IndexedDB copy is written first; a linked folder is written
+  only after that succeeds and only when the handle grants `readwrite`. Disk failure is
+  reported as a separate outcome and never turns a successful browser save into a failed one.
+- `src/lib/projectArchive.ts` — ZIP writer/reader with CRC-32 verification, path-safety
+  rejection, duplicate handling and explicit skip reasons. Project metadata lives at
+  `codepilot.project.json` and is never imported as a project file.
+- `src/lib/projectImport.ts` — folder scan now captures real text contents under caps
+  (2 MiB per file, 24 MiB per import), reports binary/oversized/unreadable files, strips the
+  selected root, and keeps the existing exclusion and depth policy visible.
+- `src/lib/projectStorage.ts` — `saveFileContent`, `writeContentToLinkedFolder`,
+  `probeLinkedFolder`, `reconnectLinkedFolder`, `storeScannedContents`,
+  `importFilesIntoProject` and `collectProjectFiles`. Components call these services; no
+  storage logic lives in a component.
+
+### UI surfaces
+
+- **Picker (`/workspace`)** — `Open file…` creates a real single-file project from the
+  browser-read bytes, names it from the file, records its language and size, and labels the
+  record as a browser copy. Picker/permission failures appear in a dismissible alert.
+- **Project dialog** — folder import and `.zip` archive import share one review step. Archive
+  import reports the CRC check, text-file count, bytes, language and every skipped entry.
+- **Dossier (`/workspace/:projectId/overview`)** — storage origin, folder state and live
+  permission readout (`Read granted · write granted`, `asks on use`, `denied`), plus
+  `Link device folder` / `Reconnect folder` and `Export archive` with real inline outcomes.
+- **Workspace** — an origin chip says `Browser copy` or `Folder linked`; the More menu has
+  `Save a copy…` and `Export project archive…`; an unsaved draft arms a `beforeunload`
+  warning. `useBlocker` is unavailable because the app uses `BrowserRouter`, so in-app route
+  blocking is not claimed.
+- **Explorer** — dropping files writes real entries and contents at the project root,
+  reports collisions instead of overwriting, and rejects dropped folders with a pointer to
+  `Import folder`.
+
+### Browser evidence (in-app 912×766, harness measured at 1440×1000)
+
+- Open file created `verify_open` with the exact picked content; the editor showed it and the
+  chip read `Browser copy`. A dirty buffer saved with the toast
+  “Saved verify_open.py to this browser”.
+- Export produced a 448-byte file beginning `PK\x03\x04` and the toast
+  “Exported verify_open.zip · 1 file”. Re-importing that archive showed
+  “ARCHIVE READ AND CRC-CHECKED”, 1 text file, 58 B, Python; the recreated project opened with
+  identical content.
+- Dossier export produced a 456-byte ZIP and the inline result
+  “Exported dossier-export.zip · 1 file”; the dossier rendered origin, folder and permission
+  rows with no stale “scheduled” claims.
+- `showDirectoryPicker` was stubbed with a real OPFS `FileSystemDirectoryHandle`. Relinking
+  updated the record, displayed `Read granted · write granted` and
+  `writes enabled`, and a save produced
+  “Saved verify_open.py · browser copy and device folder”; the OPFS file content matched the
+  editor exactly.
+- Deleting that OPFS folder and saving again produced
+  “Saved verify_open.py to this browser. The device folder was not updated: The file or folder
+  no longer exists at that path.” — the browser copy still succeeded.
+- A real `drop` event added `dropped.txt` to the root (“Added 1 file to the project root”); a
+  duplicate drop reported “A file or folder with this name already exists in that folder.”
+- A corrupt archive showed “No ZIP end-of-central-directory record was found in this file.”
+  and stayed in the chooser. A denied picker showed
+  “Open file failed. The browser denied permission for this device action.”
+- Reload preserved the browser copy and the dropped file; the editor content matched the last
+  save. Test records and the OPFS test folder were deleted afterwards.
+- At 1440×1000: `scrollWidth` 1430–1440, desktop sidebar present, dossier in two columns,
+  no horizontal overflow. At 390×844: `scrollWidth` 381, picker actions stack, dossier storage
+  actions fit.
+
+### Gates (Milestone 4)
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Typecheck (frontend + API) | `npm run typecheck` | Pass |
+| Lint | `npm run lint` | Pass with the same 2 pre-existing `react-refresh` warnings |
+| Tests | `npm test` | Pass — 8 files, 77 tests (9 archive tests added) |
+| API tests | `npm run test:api` | Pass — 12 tests |
+| Build | `npm run build` | Pass with the existing large-chunk warnings |
+
+### Limits that remain
+
+- Native OS folder/file pickers could not be driven by automation. Write-through was verified
+  with an OPFS handle through the same code path; explicit permission denial and revocation
+  remain manual checks.
+- `File System Access` pickers are browser-specific. Where they are unavailable the UI says
+  so; the download fallback is a file download, not a linked folder.
+- Caps are product policy and are reported, never silent: 4000 archive entries, 8 MiB per
+  archive file, 64 MiB per archive, 80 MiB picker cap, 2 MiB per captured file, 24 MiB per
+  folder capture, 4 MiB for a single opened file.
+- Archived content is the saved IndexedDB copy. Unsaved Monaco drafts are not exported.
+- This is still browser-local storage plus an optional device folder. There is no cloud file
+  storage, cross-device sync or multi-user sharing.
 
 

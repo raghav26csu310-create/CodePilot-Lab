@@ -39,8 +39,8 @@ export const ROUTES: RouteInfo[] = [
     status: 'live',
     tagline: 'A real Monaco editor over a persisted local project tree.',
     planned: [
-      'Writing file changes through to a linked folder handle',
-      'Terminal, task and output channels',
+      'GitHub branch, commit and push actions from the workspace',
+      'Hosted multi-user project sharing through the API',
     ],
   },
   {

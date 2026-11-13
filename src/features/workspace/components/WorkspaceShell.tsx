@@ -206,6 +206,22 @@ export function WorkspaceShell() {
   const activeProjectLanguage = activeLanguage ? projectLanguageForMonaco(activeLanguage.id) : null
   const dirtyCount = state.tree.tabs.filter((tab) => tab.dirty).length
 
+  // BrowserRouter has no navigation blocker, so at minimum guard tab close and
+  // reload while real unsaved editor drafts exist.
+  useEffect(() => {
+    if (dirtyCount === 0) {
+      return
+    }
+
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [dirtyCount])
+
   return (
     <div
       className={styles.workspace}
@@ -236,9 +252,17 @@ export function WorkspaceShell() {
             </h1>
           </div>
 
-          <span className={styles.sessionChip}>
+          <span
+            className={styles.sessionChip}
+            data-origin={project.directoryHandle ? 'linked' : 'browser'}
+            title={
+              project.directoryHandle
+                ? 'Saves write the browser copy and, with write permission, the linked device folder.'
+                : 'Saves stay in this browser’s IndexedDB. Link a device folder from the dossier to write device copies.'
+            }
+          >
             <span className={styles.sessionDot} aria-hidden="true" />
-            Session
+            {project.directoryHandle ? 'Folder linked' : 'Browser copy'}
           </span>
 
           <span className={styles.fileCount}>

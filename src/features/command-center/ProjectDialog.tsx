@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { FolderOpen, LoaderCircle, X } from 'lucide-react'
+import { Archive, FolderOpen, LoaderCircle, X } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -12,17 +12,29 @@ import {
 import { Button } from '../../design-system/primitives/Button'
 import { Select } from '../../design-system/primitives/Select'
 import { createProjectRecord, findProjectByName, type ProjectRecord } from '../../lib/db'
+import { pickBinaryFile } from '../../lib/diskAccess'
 import { formatBytes, formatDate } from '../../lib/format'
 import {
   PROJECT_LANGUAGES,
   projectLanguage,
   type ProjectLanguageId,
 } from '../editor/projectLanguages'
-import { createStoredEntry, writeStoredContent } from '../../lib/projectStorage'
+import {
+  createStoredEntry,
+  storeProjectContents,
+  storeScannedContents,
+  writeStoredContent,
+} from '../../lib/projectStorage'
+import {
+  readProjectArchive,
+  type ArchiveReadResult,
+} from '../../lib/projectArchive'
 import {
   EXCLUDED_DIRECTORIES,
   MAX_IMPORT_DEPTH,
   MAX_IMPORT_FILES,
+  estimateContentCapture,
+  languageForFile,
   scanDirectory,
   scanFileList,
   supportsDirectoryPicker,
@@ -269,6 +281,8 @@ function ImportProjectFlow({
 }) {
   const [phase, setPhase] = useState<ImportPhase>('idle')
   const [scan, setScan] = useState<ImportScan | null>(null)
+  const [archive, setArchive] = useState<ArchiveReadResult | null>(null)
+  const [archiveName, setArchiveName] = useState('')
   const [handle, setHandle] = useState<FileSystemDirectoryHandle | undefined>(undefined)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -315,6 +329,8 @@ function ImportProjectFlow({
       }
 
       setScan(result)
+      setArchive(null)
+      setArchiveName('')
       setHandle(picked)
       setName(result.name)
       setPhase('preview')
@@ -327,6 +343,84 @@ function ImportProjectFlow({
         describeError(
           cause,
           'The folder could not be read. Permission may have been denied.',
+        ),
+      )
+    }
+  }
+
+  const chooseArchive = async () => {
+    if (phase === 'scanning') {
+      return
+    }
+
+    setError(null)
+
+    const picked = await pickBinaryFile({
+      accept: 'application/zip',
+      description: 'CodePilot Lab project archive',
+      maxBytes: 80 * 1024 * 1024,
+    })
+
+    if (picked.status === 'cancelled') {
+      return
+    }
+    if (picked.status === 'failed') {
+      setError(picked.reason)
+      return
+    }
+
+    setPhase('scanning')
+
+    try {
+      const result = await readProjectArchive(picked.file.bytes)
+      if (result.files.length === 0) {
+        setPhase('idle')
+        setError(
+          result.skipped[0]
+            ? `No text files could be imported from that archive. ${result.skipped[0].reason}`
+            : 'That archive contains no files this editor can import.',
+        )
+        return
+      }
+
+      const counts = new Map<string, number>()
+      for (const file of result.files) {
+        const language = languageForFile(file.path)
+        if (language) {
+          counts.set(language, (counts.get(language) ?? 0) + 1)
+        }
+      }
+      const breakdown = [...counts.entries()]
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .slice(0, 4)
+        .map(([language, files]) => ({ language, files }))
+
+      const fallbackName = picked.file.name.replace(/\.zip$/i, '').trim()
+      const archiveLabel = result.meta.name?.trim() || fallbackName || 'Imported archive'
+
+      setArchive(result)
+      setArchiveName(picked.file.name)
+      setHandle(undefined)
+      setScan({
+        name: archiveLabel,
+        manifest: result.files.map((file) => file.path),
+        files: [],
+        fileCount: result.files.length,
+        sizeBytes: result.totalBytes,
+        modifiedAt: result.meta.modifiedAt ?? Date.now(),
+        language: breakdown[0]?.language ?? result.meta.language ?? 'Unknown',
+        languageBreakdown: breakdown,
+        excluded: [],
+        truncated: result.truncated,
+      })
+      setName(archiveLabel)
+      setPhase('preview')
+    } catch (cause) {
+      setPhase('idle')
+      setError(
+        describeError(
+          cause,
+          'That archive could not be read. It may be damaged, encrypted, or use an unsupported ZIP feature.',
         ),
       )
     }
@@ -357,6 +451,8 @@ function ImportProjectFlow({
       }
 
       setScan(result)
+      setArchive(null)
+      setArchiveName('')
       setHandle(undefined)
       setName(result.name)
       setPhase('preview')
@@ -389,8 +485,11 @@ function ImportProjectFlow({
 
       const project = await createProjectRecord({
         name: trimmed,
-        language: scan.language,
+        language: archive
+          ? (archive.meta.language ?? scan.language)
+          : scan.language,
         source: 'imported',
+        description: archive?.meta.description ?? '',
         modifiedAt: scan.modifiedAt,
         fileCount: scan.fileCount,
         sizeBytes: scan.sizeBytes,
@@ -399,6 +498,23 @@ function ImportProjectFlow({
         excluded: scan.excluded,
         directoryHandle: handle,
       })
+
+      try {
+        if (archive) {
+          await storeProjectContents(project.id, archive.files)
+        } else if (scan.files.length > 0) {
+          await storeScannedContents(project.id, scan.files)
+        }
+      } catch (cause) {
+        setError(
+          describeError(
+            cause,
+            'The project record was created, but its browser copies could not be written to IndexedDB. Close this dialog and open the record from the registry; linked-folder files remain readable.',
+          ),
+        )
+        return
+      }
+
       onCompleted(project)
     } catch (cause) {
       setError(
@@ -412,20 +528,28 @@ function ImportProjectFlow({
     }
   }
 
+  const capture = scan && !archive ? estimateContentCapture(scan) : null
+
   if (phase === 'preview' && scan) {
     return (
       <div className={styles.form}>
         <div className={styles.scanSummary}>
           <div className={styles.scanHead}>
             <span className={styles.scanIcon} aria-hidden="true">
-              <FolderOpen size={16} />
+              {archive ? <Archive size={16} /> : <FolderOpen size={16} />}
             </span>
             <div className={styles.scanTitle}>
-              <span className={styles.label}>Folder scanned</span>
-              <strong>{scan.name}</strong>
+              <span className={styles.label}>
+                {archive ? 'Archive read and CRC-checked' : 'Folder scanned'}
+              </span>
+              <strong>{archive ? archiveName : scan.name}</strong>
             </div>
             <span className={styles.scanLinked}>
-              {handle ? 'Handle stored' : 'Manifest only'}
+              {archive
+                ? `${archive.files.length} text file${archive.files.length === 1 ? '' : 's'}`
+                : handle
+                  ? 'Folder linked'
+                  : 'Browser copies'}
             </span>
           </div>
 
@@ -474,26 +598,70 @@ function ImportProjectFlow({
           />
         </div>
 
-        <p className={styles.policy}>
-          Skipped by policy: {EXCLUDED_DIRECTORIES.join(', ')}.
-        </p>
-        {scan.excluded.length > 0 ? (
-          <p className={styles.policy}>
-            Found and skipped in this folder: {scan.excluded.join(', ')}.
-          </p>
-        ) : null}
-        {scan.truncated ? (
-          <p className={styles.warn}>
-            The manifest stopped at {MAX_IMPORT_FILES} files or {MAX_IMPORT_DEPTH} directory
-            levels. The record is real but incomplete, and says so here.
-          </p>
-        ) : null}
-        {!handle ? (
-          <p className={styles.warn}>
-            This browser did not return a folder handle. The manifest is stored, but the folder will
-            need to be selected again when the editor arrives.
-          </p>
-        ) : null}
+        {archive ? (
+          <>
+            <p className={styles.policy}>
+              Every imported entry passed a CRC check. Unsafe paths, binaries and entries above the
+              size cap were not imported.
+            </p>
+            {archive.metaProblem ? (
+              <p className={styles.warn}>{archive.metaProblem}</p>
+            ) : null}
+            {archive.skipped.length > 0 ? (
+              <p className={styles.warn}>
+                {archive.skipped.length} entr{archive.skipped.length === 1 ? 'y was' : 'ies were'} skipped:{' '}
+                {archive.skipped
+                  .slice(0, 4)
+                  .map((entry) => `${entry.path} (${entry.reason})`)
+                  .join(' · ')}
+                {archive.skipped.length > 4 ? ` · +${archive.skipped.length - 4} more` : ''}
+              </p>
+            ) : null}
+            {archive.truncated ? (
+              <p className={styles.warn}>
+                The archive hit the import budget. The record is real but incomplete, and says so.
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <p className={styles.policy}>
+              Skipped by policy: {EXCLUDED_DIRECTORIES.join(', ')}.
+            </p>
+            {scan.excluded.length > 0 ? (
+              <p className={styles.policy}>
+                Found and skipped in this folder: {scan.excluded.join(', ')}.
+              </p>
+            ) : null}
+            {capture && capture.eligible > 0 ? (
+              <p className={styles.policy}>
+                Browser copies: up to {capture.eligible} of {scan.fileCount} files (
+                {formatBytes(capture.bytes)}). Binary files are detected while reading and are not
+                stored.
+              </p>
+            ) : null}
+            {capture && capture.tooLarge > 0 ? (
+              <p className={styles.warn}>
+                {capture.tooLarge} file{capture.tooLarge === 1 ? '' : 's'} exceed the browser-copy
+                budget and stay device-only. {handle
+                  ? 'They can still be read from the linked folder.'
+                  : 'Without a folder link they will not be readable in the editor.'}
+              </p>
+            ) : null}
+            {scan.truncated ? (
+              <p className={styles.warn}>
+                The manifest stopped at {MAX_IMPORT_FILES} files or {MAX_IMPORT_DEPTH} directory
+                levels. The record is real but incomplete, and says so here.
+              </p>
+            ) : null}
+            {!handle ? (
+              <p className={styles.warn}>
+                This browser did not return a folder handle. Text contents are stored as browser
+                copies; changing a file here will not change the original folder.
+              </p>
+            ) : null}
+          </>
+        )}
 
         {error ? (
           <p className={styles.error} role="alert">
@@ -505,6 +673,11 @@ function ImportProjectFlow({
           <Button variant="secondary" onClick={chooseFolder} disabled={busy}>
             Choose another
           </Button>
+          {archive ? (
+            <Button variant="secondary" onClick={() => void chooseArchive()} disabled={busy}>
+              Another archive
+            </Button>
+          ) : null}
           <Button onClick={register} disabled={busy}>
             {busy ? 'Registering…' : 'Register project'}
           </Button>
@@ -535,19 +708,20 @@ function ImportProjectFlow({
         </span>
         {phase === 'scanning' ? (
           <>
-            <p className={styles.chooserTitle}>Reading the folder…</p>
+            <p className={styles.chooserTitle}>Reading the selection…</p>
             <p className={styles.chooserCopy}>
               {progress > 0
                 ? `${progress} files read so far. Counting real files and sizes.`
-                : 'Waiting for the folder picker, then reading real files and sizes.'}
+                : 'Waiting for the folder or archive picker, then reading real files and sizes.'}
             </p>
           </>
         ) : (
           <>
-            <p className={styles.chooserTitle}>Choose a folder on this machine</p>
+            <p className={styles.chooserTitle}>Choose a folder or a project archive</p>
             <p className={styles.chooserCopy}>
-              The scan reads file names, sizes and timestamps to build a local manifest. It never
-              uploads anything.
+              A folder scan reads file names, sizes and timestamps, then stores real text contents
+              where they fit the browser budget. A `.zip` archive is CRC-checked before import.
+              Nothing is uploaded.
             </p>
           </>
         )}
@@ -567,6 +741,13 @@ function ImportProjectFlow({
       <div className={styles.actions}>
         <Button variant="secondary" onClick={onClose} disabled={phase === 'scanning'}>
           Cancel
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => void chooseArchive()}
+          disabled={phase === 'scanning'}
+        >
+          Import .zip
         </Button>
         <Button onClick={chooseFolder} disabled={phase === 'scanning'}>
           {phase === 'scanning' ? 'Scanning…' : 'Choose folder'}

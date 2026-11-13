@@ -1,4 +1,4 @@
-# Session handoff — 2026-11-12
+# Session handoff — 2026-11-13
 
 This is the resume point for the next working session. It records what exists, what was
 verified, what was not, and the exact next task. It is not a claim of production
@@ -22,10 +22,10 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | 1 | AI gateway + conversion hardening | **Done and verified (§11)** |
 | 2 | `Select` scroll-close root cause, New Project dialog viewport, editor action bar | **Done and verified (§12)** |
 | 3 | Real terminal (local companion shipped; cloud mode rendered unavailable) | **Done and verified (§13)** |
-| 4 | Device file access (open/import/save/save-as/export/reconnect) | Not started — next |
-| 5 | GitHub integration (GitHub App, server-side key) | Not started |
-| 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | Not started |
-| 7 | End-to-end verification of the 17 journeys | Not started |
+| 4 | Device file access (open/import/save/save-as/export/reconnect) | **Done and verified (§14)** |
+| 5 | GitHub integration (GitHub App, server-side key) | Not started — next; blocked on App credentials |
+| 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | Not started — blocked on infrastructure |
+| 7 | End-to-end verification of the 17 journeys | Not started — GitHub/deployment journeys blocked |
 
 ## Environment state at wrap-up
 
@@ -38,11 +38,13 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
     Terminal tab. Tokens rotate on every restart.
 - The in-memory store means **all accounts and saved connections from today are gone** on
   restart. Recreate one account on `/settings` when testing.
-- Projects created during verification live in this browser's IndexedDB (`fn`, `py-lab`);
-  they are local test records, not seeded demo data.
+- Projects created during Milestone 4 verification were deleted. The picker registry is
+  empty again and the OPFS test folder was removed; no seeded demo data exists.
 - No `.env` file is present. `.env.example` lists every variable and contains no secrets.
 - Nothing has been deployed. No provider credential exists in this environment, so no real
   model completion has ever run here.
+- Milestone 4 browser checks used stubbed native pickers plus a real OPFS
+  `FileSystemDirectoryHandle`. Native OS picker prompts were never driven by automation.
 
 ## What Milestone 1 delivered
 
@@ -236,6 +238,98 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - Cloud terminal, installer packaging, multi-tab session sharing and scrollback persistence
   are not implemented.
 
+## What Milestone 4 delivered
+
+### Storage services (no new dependency)
+
+- `src/lib/diskAccess.ts` — permission query/request, `showOpenFilePicker`,
+  `showDirectoryPicker`, `showSaveFilePicker`, read-write access, link probing and a download
+  fallback. Every outcome is typed; picker errors map to honest reasons.
+- `src/lib/projectArchive.ts` — hand-rolled ZIP writer/reader using
+  `CompressionStream`/`DecompressionStream('deflate-raw')`, with CRC-32 verification,
+  path-safety rejection, duplicate rejection and per-entry skip reasons. Project metadata is
+  `codepilot.project.json` at the archive root and is never imported as a file.
+- `src/lib/projectImport.ts` — folder scans now capture real text contents under
+  **2 MiB/file and 24 MiB/import**, strip the selected root, and report binary, oversized and
+  unreadable files instead of dropping them silently.
+- `src/lib/projectStorage.ts` — `saveFileContent`, `writeContentToLinkedFolder`,
+  `probeLinkedFolder`, `reconnectLinkedFolder`, `storeScannedContents`,
+  `importFilesIntoProject` and `collectProjectFiles`. Components call these services.
+
+### Save behaviour
+
+- The IndexedDB copy is written **first**. The linked folder is written only after that
+  succeeds and only when `queryPermission({ mode: 'readwrite' })` is `granted` (requested if
+  the browser allows). Disk failure is a separate outcome and never turns a successful
+  browser save into a failure.
+- Toasts state the real result: “Saved X to this browser”, “Saved X · browser copy and device
+  folder”, or the browser-save success plus the real disk reason.
+
+### UI surfaces
+
+- **Picker (`/workspace`)** — `Open file` creates a genuine single-file project from the
+  browser-read bytes (cap 4 MiB), records language/size, and labels it a browser copy. Picker
+  and permission failures appear in a dismissible alert.
+- **Project dialog** — folder import and `.zip` import share a review step that reports the
+  CRC check, text-file count, bytes, language and skipped entries.
+- **Dossier** — storage origin, folder state, live permission readout
+  (`Read granted · write granted`, `asks on use`, `denied`), `Link device folder` /
+  `Reconnect folder`, and `Export archive`, each with a real inline outcome.
+- **Workspace** — origin chip (`Browser copy` / `Folder linked`), More-menu
+  `Save a copy…` and `Export project archive…`, and a `beforeunload` guard while drafts are
+  dirty. `useBlocker` is unavailable with `BrowserRouter`, so in-app route blocking is not
+  claimed.
+- **Explorer** — real drag-and-drop file import at the project root, explicit collision
+  reporting, and folder drops rejected with a pointer to “Import folder”.
+
+### Browser evidence (in-app 912×766, harness measured at 1440×1000)
+
+- `Open file` created `verify_open` with the exact picked content; the chip read
+  `Browser copy`. A dirty buffer saved with “Saved verify_open.py to this browser”.
+- Export produced a 448-byte file beginning `PK\x03\x04` and
+  “Exported verify_open.zip · 1 file”. Re-importing it showed
+  “ARCHIVE READ AND CRC-CHECKED”, 1 text file, 58 B, Python; the recreated project reopened
+  with identical content.
+- Dossier export produced a 456-byte ZIP and “Exported dossier-export.zip · 1 file”.
+- Relinking with a real OPFS `FileSystemDirectoryHandle` showed
+  `Read granted · write granted`, `writes enabled`, and a save produced
+  “Saved verify_open.py · browser copy and device folder”. The OPFS file matched the editor.
+- Removing the OPFS folder and saving again produced
+  “Saved verify_open.py to this browser. The device folder was not updated: The file or folder
+  no longer exists at that path.” The browser copy still succeeded.
+- A real `drop` event added `dropped.txt` (“Added 1 file to the project root”); a duplicate
+  drop reported “A file or folder with this name already exists in that folder.”
+- A corrupt archive showed “No ZIP end-of-central-directory record was found in this file.”
+  and stayed in the chooser. A denied picker showed
+  “Open file failed. The browser denied permission for this device action.”
+- Reload preserved the browser copy and the dropped file; editor content matched the last
+  save. Test records and the OPFS folder were deleted afterwards.
+- 1440×1000: `scrollWidth` 1430–1440, desktop sidebar, dossier two columns, no horizontal
+  overflow. 390×844: `scrollWidth` 381, picker actions stack, dossier storage actions fit.
+
+### Gates (Milestone 4)
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` (frontend + API) | pass |
+| `npm run lint` | pass, same 2 pre-existing `react-refresh` warnings |
+| `npm test` | 77/77, 8 files (9 archive tests added) |
+| `npm run test:api` | 12/12 |
+| `npm run build` | pass (existing large-chunk warnings) |
+
+### Device-file limits that remain
+
+- Native OS folder/file picker prompts, explicit permission denial and revocation could not
+  be automated. Write-through was verified through OPFS handles using the same code path;
+  denial/revocation remain manual checks.
+- `File System Access` is browser-specific; where it is unavailable the UI says so and the
+  download path produces a file download, not a linked folder.
+- Caps are visible policy: 4000 archive entries, 8 MiB per archive file, 64 MiB per archive,
+  80 MiB picker cap, 2 MiB per captured file, 24 MiB per folder capture, 4 MiB for one opened
+  file.
+- Archives contain the saved IndexedDB copy; unsaved Monaco drafts are not included.
+- No cloud file storage, cross-device sync or multi-user sharing exists.
+
 ## Not verified — do not present as done
 
 - Any real model completion (managed or BYO). Routing, storage, quotas, error propagation
@@ -243,23 +337,35 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - A UI partial-output conversion caused by a real mid-stream failure (unit-tested only).
 - PostgreSQL persistence — PostgreSQL is not installed here.
 - Multi-instance rate limiting, deployment, TLS, secure cookies, CSP.
-- GitHub App, device write-through, cloud storage, multi-user frontend.
+- GitHub App, cloud storage, multi-user frontend.
+- Native OS picker prompts and explicit permission revocation for device files; write-through
+  itself was verified through OPFS handles.
 - Cloud terminal: no per-user container/VM runtime exists in this environment.
 - The local PTY on Linux/macOS: no prebuild is installed and allow-scripts blocks compiling.
 - Email verification, password reset, MFA, account export UI.
 
-## Known issues to fix next (Milestone 4 — device file access)
+## Next task — Milestone 5 (GitHub), blocked on credentials
 
-1. Disk writes are absent. Saves, renames and file creation update IndexedDB only; there is no
-   `createWritable`, save-as/open picker, archive export/import, drag-and-drop upload or
-   reconnect UI beyond the implicit read fallback. Milestone 4 must add those with honest
-   permission/failure states.
-2. Terminal follow-ups (not blockers for Milestone 4): no installer/signing, no cloud
-   runtime, no scrollback persistence across reload, and only Windows was verified.
-3. `Format` covers only Monaco's bundled formatters. If the product wants Prettier, it must be
-   bundled locally (no CDN) and added to `supportsDocumentFormatting()` honestly.
-4. Trace is Python-only (`server/trace_python.py`). Adding a JS/TS tracer would need a real
-   recorder, not a simulated event list.
+Milestone 4 is complete and committed. The next milestone is GitHub integration, but this
+environment has no GitHub App registration, client ID/secret or private key, and no network
+identity that can register one. Do not fabricate a connection.
+
+What can be done without credentials, and what must wait:
+
+1. **Can be built now:** a settings/connection panel that reads a real server-side
+   configuration state and honestly reports “GitHub App not configured” with the missing
+   variables; typed server routes that validate configuration before any request; unit tests
+   for signature/state validation and for refusing unconfigured calls. No fake repos,
+   branches or commits.
+2. **Must wait for credentials:** install/callback flow, repository listing, clone/import,
+   branch/commit/push and PR actions. Each requires a live GitHub App and a real round trip.
+3. **Do not** store GitHub tokens in the browser, IndexedDB or logs. The audit decision is a
+   GitHub App with server-held private key and short-lived installation tokens.
+
+Terminal and device-file follow-ups (not Milestone 5 blockers): installer/signing, cloud
+terminal runtime, scrollback persistence, Linux/macOS PTY verification, and native-picker
+denial/revocation checks. `Format` remains limited to Monaco's bundled formatters, and Trace
+remains Python-only.
 
 ## Resume checklist
 
@@ -276,8 +382,9 @@ tab, paste that token and press Connect. The token changes every time the servic
 
 Then open `http://localhost:5173/settings`, create an account, and confirm the managed
 panel reports “No AI provider available” with the real reason (expected without a provider).
-For the action bar, create a Python project and use Run / Trace from the editor toolbar; both
-need `npm run exec` running or they will report the service as offline.
+For device files, use `Open file` on `/workspace`, or link a folder from a project dossier and
+check the permission row before saving. For Run / Trace, create a Python project and use the
+editor toolbar; both need `npm run exec` running or they will report the service as offline.
 
 Local runtimes present on this machine: Python 3.14.5, Node v24.19.0, gcc (MSYS2), Java.
 
@@ -285,7 +392,7 @@ Local runtimes present on this machine: Python 3.14.5, Node v24.19.0, gcc (MSYS2
 
 | File | Purpose | Freshness |
 | --- | --- | --- |
-| `docs/technical-audit.md` | Audit, decisions, Milestone 1 status and evidence | Current |
+| `docs/technical-audit.md` | Audit, decisions, Milestone 1–4 status and evidence | Current |
 | `docs/ai-gateway.md` | Gateway setup, endpoints, route semantics, non-claims | Current |
 | `docs/architecture.md` | Browser/editor architecture | Stale for backend; banner added |
 | `docs/security.md` | Security posture | Stale for backend; banner added |

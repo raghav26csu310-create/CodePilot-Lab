@@ -149,6 +149,11 @@
   box-shadow: 0 0 7px rgb(87 226 230 / 0.75);
 }
 
+.sessionChip[data-origin='browser'] .sessionDot {
+  background: var(--text-3);
+  box-shadow: none;
+}
+
 .fileCount {
   flex: none;
   color: var(--text-3);

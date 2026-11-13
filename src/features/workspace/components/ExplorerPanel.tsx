@@ -19,6 +19,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
@@ -26,7 +27,16 @@ import {
 import { createPortal } from 'react-dom'
 
 import { useMediaQuery } from '../../../lib/useMediaQuery'
-import { findNode, getParentPath, searchTree } from '../state/fileTree'
+import {
+  importFilesIntoProject,
+  listStoredEntries,
+} from '../../../lib/projectStorage'
+import {
+  buildFileTreeFromEntries,
+  findNode,
+  getParentPath,
+  searchTree,
+} from '../state/fileTree'
 import type { FileTreeNode, WorkspaceAction } from '../state/types'
 import { useWorkspace } from '../state/useWorkspace'
 import { FileGlyph } from './FileGlyph'
@@ -67,8 +77,10 @@ export function ExplorerPanel({ variant = 'inline', onRequestClose }: ExplorerPa
   const { tree, ui } = state
   const [query, setQuery] = useState('')
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [dropActive, setDropActive] = useState(false)
   const treeRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const dragDepthRef = useRef(0)
   const inlineCopilot = useMediaQuery('(min-width: 1360px)')
 
   const normalizedQuery = query.trim()
@@ -197,6 +209,121 @@ export function ExplorerPanel({ variant = 'inline', onRequestClose }: ExplorerPa
       event.preventDefault()
       setQuery('')
     }
+  }
+
+  const dropParent = () => {
+    const selected = tree.selectedPath ? findNode(tree.nodes, tree.selectedPath) : null
+    if (selected?.kind === 'folder') {
+      return selected.path
+    }
+    if (selected) {
+      return getParentPath(selected.path)
+    }
+    return ''
+  }
+
+  const isFileDrag = (dataTransfer: DataTransfer) =>
+    Array.from(dataTransfer.types).includes('Files')
+
+  const hasDirectoryDrop = (dataTransfer: DataTransfer) =>
+    Array.from(dataTransfer.items).some(
+      (item) => item.kind === 'file' && item.webkitGetAsEntry()?.isDirectory === true,
+    )
+
+  const onDragEnter = (event: DragEvent<HTMLElement>) => {
+    if (!isFileDrag(event.dataTransfer)) {
+      return
+    }
+    event.preventDefault()
+    dragDepthRef.current += 1
+    setDropActive(true)
+  }
+
+  const onDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!isFileDrag(event.dataTransfer)) {
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  const onDragLeave = () => {
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+    if (dragDepthRef.current === 0) {
+      setDropActive(false)
+    }
+  }
+
+  const onDrop = (event: DragEvent<HTMLElement>) => {
+    if (!isFileDrag(event.dataTransfer)) {
+      return
+    }
+
+    event.preventDefault()
+    dragDepthRef.current = 0
+    setDropActive(false)
+
+    if (hasDirectoryDrop(event.dataTransfer)) {
+      dispatch({
+        type: 'ui/show-toast',
+        tone: 'warn',
+        message:
+          'Folders cannot be dropped into the workspace yet. Use “Import folder” in the project picker to scan one.',
+      })
+      return
+    }
+
+    const files = Array.from(event.dataTransfer.files)
+    if (files.length === 0) {
+      dispatch({
+        type: 'ui/show-toast',
+        tone: 'warn',
+        message: 'The drop contained no readable files.',
+      })
+      return
+    }
+
+    const parent = dropParent()
+    void (async () => {
+      try {
+        const result = await importFilesIntoProject(project.id, parent, files)
+        if (result.stored.length > 0) {
+          const entries = await listStoredEntries(project.id)
+          dispatch({ type: 'tree/replace', nodes: buildFileTreeFromEntries(entries) })
+        }
+
+        const destination = parent || 'the project root'
+        if (result.stored.length === 0) {
+          dispatch({
+            type: 'ui/show-toast',
+            tone: 'warn',
+            message: `No files were added to ${destination}. ${
+              result.skipped[0]?.reason ?? 'Nothing in the drop could be stored.'
+            }`,
+          })
+          return
+        }
+
+        dispatch({
+          type: 'ui/show-toast',
+          tone: result.skipped.length > 0 ? 'warn' : 'ok',
+          message: `Added ${result.stored.length} file${result.stored.length === 1 ? '' : 's'} to ${destination}${
+            result.skipped.length > 0
+              ? ` · ${result.skipped.length} skipped: ${result.skipped[0]?.reason ?? ''}`
+              : ''
+          }`,
+        })
+      } catch (cause) {
+        dispatch({
+          type: 'ui/show-toast',
+          tone: 'danger',
+          message:
+            cause instanceof Error && cause.message
+              ? cause.message
+              : 'The dropped files could not be written to IndexedDB.',
+        })
+      }
+    })()
   }
 
   const handleTreeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -357,6 +484,10 @@ export function ExplorerPanel({ variant = 'inline', onRequestClose }: ExplorerPa
       className={styles.panel}
       data-variant={variant}
       aria-label="Project explorer"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
     >
       <header className={styles.head}>
         <div className={styles.identity}>
@@ -510,7 +641,8 @@ export function ExplorerPanel({ variant = 'inline', onRequestClose }: ExplorerPa
           <p className={styles.emptyTitle}>No files in this project</p>
           <p className={styles.emptyCopy}>
             This record has no imported manifest. Create a file or folder to begin a session tree —
-            nothing is written to disk or to IndexedDB in this phase.
+            entries and saves are written to IndexedDB. A linked device folder also receives saves
+            when it grants write access.
           </p>
           <div className={styles.emptyActions}>
             <button
@@ -551,9 +683,21 @@ export function ExplorerPanel({ variant = 'inline', onRequestClose }: ExplorerPa
         <span className={styles.footMeta}>
           {project.truncated ? <span className={styles.warnChip}>Capped</span> : null}
           <span className={styles.sessionDot} aria-hidden="true" />
-          Session tree
+          {project.directoryHandle ? 'Folder linked' : 'Browser copy'}
         </span>
       </footer>
+
+      {dropActive ? (
+        <div className={styles.dropOverlay} aria-hidden="true">
+          <span className={styles.dropIcon}>
+            <FilePlus2 size={22} />
+          </span>
+          <p className={styles.dropTitle}>Drop files to add browser copies</p>
+          <p className={styles.dropCopy}>
+            Destination: {dropParent() || 'project root'} · folders are not accepted
+          </p>
+        </div>
+      ) : null}
 
       {createPortal(
         <AnimatePresence>

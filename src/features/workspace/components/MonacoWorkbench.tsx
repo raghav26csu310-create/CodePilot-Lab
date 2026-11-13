@@ -5,7 +5,7 @@ import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { clampFontSize } from '../../editor/editorPreferences'
 import { languageForPath, monacoLanguageId, supportsDocumentFormatting } from '../../editor/languageRegistry'
 import { MONACO_THEMES, ensureMonacoSetup, monaco } from '../../editor/monacoSetup'
-import { writeStoredContent } from '../../../lib/projectStorage'
+import { saveFileContent, type SaveContentResult } from '../../../lib/projectStorage'
 import { useWorkspace } from '../state/useWorkspace'
 import styles from './MonacoWorkbench.module.css'
 
@@ -165,13 +165,13 @@ export default function MonacoWorkbench() {
     [dispatch],
   )
 
-  const persistPath = useCallback(
+  const persistOutcome = useCallback(
     async (
       path: string | null,
       notify: 'silent' | 'single' = 'single',
-    ): Promise<boolean> => {
+    ): Promise<SaveContentResult | null> => {
       if (!path) {
-        return false
+        return null
       }
 
       const record = modelsRef.current.get(path)
@@ -181,20 +181,46 @@ export default function MonacoWorkbench() {
           tone: 'warn',
           message: 'No editor content is loaded for this file yet.',
         })
-        return false
+        return null
       }
 
       const content = record.model.getValue()
       try {
-        await writeStoredContent(projectRef.current.id, path, content)
+        const outcome = await saveFileContent(projectRef.current, path, content)
         savedVersionsRef.current.set(path, record.model.getAlternativeVersionId())
         dirtyRef.current.set(path, false)
         dispatch({ type: 'tab/mark-saved', path, content })
+
         if (notify === 'single') {
           const name = path.slice(path.lastIndexOf('/') + 1)
-          dispatch({ type: 'ui/show-toast', tone: 'ok', message: `Saved ${name}` })
+          if (outcome.disk.status === 'written') {
+            dispatch({
+              type: 'ui/show-toast',
+              tone: 'ok',
+              message: `Saved ${name} · browser copy and device folder`,
+            })
+          } else if (outcome.disk.status === 'denied' || outcome.disk.status === 'failed') {
+            dispatch({
+              type: 'ui/show-toast',
+              tone: 'warn',
+              message: `Saved ${name} to this browser. The device folder was not updated: ${outcome.disk.reason}`,
+            })
+          } else if (outcome.disk.status === 'unsupported') {
+            dispatch({
+              type: 'ui/show-toast',
+              tone: 'ok',
+              message: `Saved ${name} to this browser · this browser cannot write to device folders`,
+            })
+          } else {
+            dispatch({
+              type: 'ui/show-toast',
+              tone: 'ok',
+              message: `Saved ${name} to this browser`,
+            })
+          }
         }
-        return true
+
+        return outcome
       } catch (cause) {
         const message =
           cause instanceof Error && cause.message
@@ -205,10 +231,20 @@ export default function MonacoWorkbench() {
           tone: 'danger',
           message: `Save failed for ${path}: ${message}`,
         })
-        return false
+        return null
       }
     },
     [dispatch],
+  )
+
+  const persistPath = useCallback(
+    async (
+      path: string | null,
+      notify: 'silent' | 'single' = 'single',
+    ): Promise<boolean> => {
+      return (await persistOutcome(path, notify)) !== null
+    },
+    [persistOutcome],
   )
 
   const saveAll = useCallback(async () => {
@@ -218,30 +254,43 @@ export default function MonacoWorkbench() {
 
     let saved = 0
     let failedCount = 0
+    let diskWritten = 0
+    let diskFailed = 0
     for (const path of dirtyPaths) {
-      const ok = await persistPath(path, 'silent')
-      if (ok) {
-        saved += 1
-      } else {
+      const outcome = await persistOutcome(path, 'silent')
+      if (!outcome) {
         failedCount += 1
+        continue
+      }
+
+      saved += 1
+      if (outcome.disk.status === 'written') {
+        diskWritten += 1
+      } else if (outcome.disk.status === 'denied' || outcome.disk.status === 'failed') {
+        diskFailed += 1
       }
     }
 
     if (saved > 0 || failedCount > 0) {
+      const message =
+        failedCount > 0
+          ? `Saved ${saved} file${saved === 1 ? '' : 's'} · ${failedCount} failed`
+          : diskFailed > 0
+            ? `Saved ${saved} file${saved === 1 ? '' : 's'} to this browser · ${diskFailed} device write${diskFailed === 1 ? '' : 's'} failed`
+            : diskWritten > 0
+              ? `Saved ${saved} file${saved === 1 ? '' : 's'} · ${diskWritten} written to the device folder`
+              : `Saved ${saved} file${saved === 1 ? '' : 's'} to this browser`
       dispatch({
         type: 'ui/show-toast',
-        tone: failedCount > 0 ? 'warn' : 'ok',
-        message:
-          failedCount > 0
-            ? `Saved ${saved} file${saved === 1 ? '' : 's'} · ${failedCount} failed`
-            : `Saved ${saved} file${saved === 1 ? '' : 's'}`,
+        tone: failedCount > 0 || diskFailed > 0 ? 'warn' : 'ok',
+        message,
       })
     } else {
       dispatch({ type: 'ui/show-toast', tone: 'ok', message: 'No unsaved changes' })
     }
 
     return { saved, failed: failedCount }
-  }, [dispatch, persistPath])
+  }, [dispatch, persistOutcome])
 
   const cycleTab = useCallback(
     (direction: 1 | -1) => {

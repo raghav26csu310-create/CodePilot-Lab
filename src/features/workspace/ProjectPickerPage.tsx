@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   ChevronRight,
   CircleSlash,
+  FileUp,
   FolderInput,
   FolderOpen,
   FolderPlus,
@@ -31,6 +32,7 @@ import { Button } from '../../design-system/primitives/Button'
 import { Skeleton } from '../../design-system/primitives/Skeleton'
 import { ProjectDialog } from '../command-center/ProjectDialog'
 import {
+  createProjectRecord,
   deleteProjectCascade,
   findProjectByName,
   listProjects,
@@ -38,7 +40,10 @@ import {
   touchProject,
   type ProjectRecord,
 } from '../../lib/db'
+import { pickTextFile } from '../../lib/diskAccess'
 import { formatBytes, formatDate, relativeTime } from '../../lib/format'
+import { languageForFile } from '../../lib/projectImport'
+import { createStoredEntry, writeStoredContent } from '../../lib/projectStorage'
 import { useFocusTrap } from '../../lib/useFocusTrap'
 import styles from './ProjectPicker.module.css'
 
@@ -60,6 +65,8 @@ export function ProjectPickerPage() {
   const [query, setQuery] = useState('')
   const [dialog, setDialog] = useState<DialogMode | null>(null)
   const [rowAction, setRowAction] = useState<RowAction | null>(null)
+  const [deviceError, setDeviceError] = useState<string | null>(null)
+  const [opening, setOpening] = useState(false)
   const [now] = useState(() => Date.now())
 
   useEffect(() => {
@@ -89,7 +96,11 @@ export function ProjectPickerPage() {
     }
   }, [attempt])
 
-  const closeDialog = useCallback(() => setDialog(null), [])
+  const closeDialog = useCallback(() => {
+    setDialog(null)
+    // The dialog may have created a record before the user cancelled elsewhere.
+    setAttempt((current) => current + 1)
+  }, [])
   const openCreate = useCallback(() => setDialog('create'), [])
   const openImport = useCallback(() => setDialog('import'), [])
   const retry = useCallback(() => setAttempt((current) => current + 1), [])
@@ -118,6 +129,83 @@ export function ProjectPickerPage() {
     },
     [navigate],
   )
+
+  /**
+   * Opens one real text file from the device as a single-file project. The
+   * browser reads the exact bytes; nothing is linked back to the original path,
+   * so the record is honestly a browser copy.
+   */
+  const openDeviceFile = useCallback(async () => {
+    if (opening) {
+      return
+    }
+
+    setDeviceError(null)
+    setOpening(true)
+    let createdId: string | null = null
+
+    try {
+      const picked = await pickTextFile()
+      if (picked.status === 'cancelled') {
+        return
+      }
+      if (picked.status === 'failed') {
+        setDeviceError(picked.reason)
+        return
+      }
+
+      const fileName = picked.name.trim()
+      const stem = fileName.replace(/\.[^.]+$/, '').trim() || fileName
+      let name = stem
+      let suffix = 2
+      while (await findProjectByName(name)) {
+        name = `${stem} (${suffix})`
+        suffix += 1
+      }
+
+      const language = languageForFile(fileName) ?? 'Unknown'
+      const now = Date.now()
+
+      const project = await createProjectRecord({
+        name,
+        description: `Opened from the device file “${fileName}”.`,
+        language,
+        source: 'created',
+        modifiedAt: now,
+        fileCount: 1,
+        sizeBytes: new TextEncoder().encode(picked.content).length,
+        manifest: [fileName],
+      })
+      createdId = project.id
+
+      await createStoredEntry(project.id, '', fileName, 'file')
+      await writeStoredContent(project.id, fileName, picked.content)
+
+      try {
+        await touchProject(project.id)
+      } catch {
+        // Opening still works; only the last-opened stamp failed.
+      }
+
+      navigate(`/workspace/${project.id}`)
+    } catch (cause) {
+      const message =
+        cause instanceof Error && cause.message
+          ? cause.message
+          : 'The file could not be turned into a project record.'
+      setDeviceError(message)
+
+      if (createdId) {
+        try {
+          await deleteProjectCascade(createdId)
+        } catch {
+          // The failed record stays visible rather than silently vanishing.
+        }
+      }
+    } finally {
+      setOpening(false)
+    }
+  }, [navigate, opening])
 
   const projects = useMemo(
     () => (state.status === 'ready' ? state.projects : []),
@@ -185,8 +273,33 @@ export function ProjectPickerPage() {
             >
               Import folder
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<FileUp size={14} />}
+              onClick={() => void openDeviceFile()}
+              disabled={opening}
+            >
+              {opening ? 'Opening…' : 'Open file'}
+            </Button>
           </div>
         </header>
+
+        {deviceError ? (
+          <div className={styles.deviceError} role="alert">
+            <p className={styles.deviceErrorText}>
+              <strong>Open file failed.</strong> {deviceError}
+            </p>
+            <button
+              type="button"
+              className={styles.deviceErrorClose}
+              onClick={() => setDeviceError(null)}
+              aria-label="Dismiss open-file error"
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          </div>
+        ) : null}
 
         <div className={styles.toolbar}>
           <div className={styles.search}>
@@ -285,6 +398,15 @@ export function ProjectPickerPage() {
                 onClick={openImport}
               >
                 Import folder
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<FileUp size={14} />}
+                onClick={() => void openDeviceFile()}
+                disabled={opening}
+              >
+                {opening ? 'Opening…' : 'Open file'}
               </Button>
             </div>
           </div>

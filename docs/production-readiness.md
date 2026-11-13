@@ -99,7 +99,8 @@ Nothing below claims that a deployed URL was tested.
   execution is not offered.
 - **Project Atlas, Project Vault, Activity & Diagnostics.** Labelled placeholders.
 - **Cloud sync, accounts, team spaces.** Not implemented.
-- **Project export/import and disk write-through.** Scheduled.
+- **Cloud sync and multi-device files.** Local archive export/import and permission-bound
+  device-folder write-through exist; cloud file storage and cross-device sync do not.
 - **Analytics.** No provider configured; no metrics are claimed.
 - **Cross-browser equality.** File System Access is Chromium-only. Monaco and execution
   were verified primarily in Chromium/Edge.
