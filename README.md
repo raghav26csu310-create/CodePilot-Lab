@@ -2,12 +2,13 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Milestone 1 of the AI gateway plan — managed CodePilot AI, accounts and
-conversion hardening.** The default AI route is now the CodePilot API (`server/api`), which
-holds provider credentials server-side, enforces per-user quotas and streams SSE; a direct
-browser provider remains as an explicitly labelled advanced/local mode. Milestone 0
-(`docs/technical-audit.md`) recorded the gaps, and `docs/session-handoff.md` is the current
-resume point. No deployment, PostgreSQL run or live model completion has happened yet.
+**Current milestone: Milestone 3 — the real terminal (local companion).** The workspace
+Terminal tab now opens a genuine PTY on the machine running the loopback service, through an
+Origin-locked WebSocket and a per-start pairing token printed only on the service console.
+Cloud terminal is visibly unavailable because no cloud runtime is configured in this build.
+Milestones 1 (AI gateway and accounts) and 2 (editor action bar, dropdown fix) are complete;
+`docs/technical-audit.md` §11–13 records the evidence, and `docs/session-handoff.md` is the
+current resume point. No deployment, PostgreSQL run or live model completion has happened yet.
 
 **Previous milestone: Phase 7 — Public beta hardening.** The lab includes a
 static public site with honest SEO, a real feedback pipeline, automated tests, centralized
@@ -156,12 +157,13 @@ sandbox.
 
 ## What is deliberately not built yet
 
-Project Atlas, Project Vault, and Activity & Diagnostics remain placeholders. The
-development panel's Terminal and Output views state plainly that no interactive shell
-exists; program execution happens through the Run tab and the loopback service. There is
-no hardened sandbox: the execution service is a resource-limited local runner, not a
-security boundary. HTML, CSS and JSON are editor languages with no runtime, and only
-Python has a real tracer in this phase.
+Project Atlas, Project Vault, and Activity & Diagnostics remain placeholders. The Terminal tab
+opens a real local shell through the loopback sidecar and states that it is a shell on the host
+machine, not a sandbox; a cloud terminal is not configured and is rendered as unavailable. The
+Output view still states plainly that no channel has produced output, and program execution
+remains available through the Run tab. There is no hardened sandbox: the execution service is a
+resource-limited local runner, not a security boundary. HTML, CSS and JSON are editor languages
+with no runtime, and only Python has a real tracer in this phase.
 
 No paid dependency is required for the editor, execution, tracing, converter UI or practice
 grading, and the editor keeps working with no account and no AI provider. Managed CodePilot

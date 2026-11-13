@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronUp,
   CircleSlash,
-  Lock,
   PanelBottom,
   Play,
   RotateCcw,
@@ -18,6 +17,7 @@ import { languageForPath } from '../../editor/languageRegistry'
 import { useCopilot } from '../../copilot/CopilotContext'
 import { providerLabel } from '../../copilot/providerPresets'
 import { useAiSettings } from '../../copilot/settingsStore'
+import { TerminalPanel } from '../../terminal/TerminalPanel'
 import { findNode } from '../state/fileTree'
 import type { BottomPanelTab } from '../state/types'
 import { useWorkspace } from '../state/useWorkspace'
@@ -132,7 +132,10 @@ export function DevelopmentPanel({ height }: { height: number }) {
           aria-labelledby={`devtab-${ui.bottomTab}`}
         >
           {ui.bottomTab === 'run' ? <WorkspaceRunPanel activePath={activeNode?.path ?? null} /> : null}
-          {ui.bottomTab === 'terminal' ? <TerminalView /> : null}
+          {/* Kept mounted while the panel is open so switching tabs does not kill a live shell. */}
+          <div className={styles.terminalHost} hidden={ui.bottomTab !== 'terminal'}>
+            <TerminalPanel />
+          </div>
           {ui.bottomTab === 'output' ? <OutputView /> : null}
           {ui.bottomTab === 'problems' ? <ProblemsView /> : null}
           {ui.bottomTab === 'diagnostics' ? (
@@ -189,24 +192,6 @@ function PanelEmpty({
       </ul>
       {action}
     </div>
-  )
-}
-
-function TerminalView() {
-  return (
-    <PanelEmpty
-      icon={<Terminal size={20} />}
-      kicker="Terminal · not connected"
-      title="No terminal session"
-      copy="There is no interactive shell in this build. Program execution is real: use the Run tab, which sends the active file to the local execution service and shows its actual output. This terminal surface shows no shell because none exists."
-      chips={['Shell · not connected', 'Run tab · real execution', 'Working dir · project root']}
-      action={
-        <button type="button" className={styles.disabledAction} disabled>
-          <Lock size={12} aria-hidden="true" />
-          Start terminal · unavailable
-        </button>
-      }
-    />
   )
 }
 

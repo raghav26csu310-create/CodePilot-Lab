@@ -21,8 +21,8 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | 0 | Audit (`docs/technical-audit.md`) | Done |
 | 1 | AI gateway + conversion hardening | **Done and verified (§11)** |
 | 2 | `Select` scroll-close root cause, New Project dialog viewport, editor action bar | **Done and verified (§12)** |
-| 3 | Real terminal (local companion **and** cloud, user chose both) | Not started — next |
-| 4 | Device file access (open/import/save/save-as/export/reconnect) | Not started |
+| 3 | Real terminal (local companion shipped; cloud mode rendered unavailable) | **Done and verified (§13)** |
+| 4 | Device file access (open/import/save/save-as/export/reconnect) | Not started — next |
 | 5 | GitHub integration (GitHub App, server-side key) | Not started |
 | 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | Not started |
 | 7 | End-to-end verification of the 17 journeys | Not started |
@@ -33,7 +33,9 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - Dev servers are **stopped**. Restart with three terminals:
   - `npm run api:dev` → API on `127.0.0.1:8787` (in-memory store, ephemeral credential key)
   - `npm run dev` → Vite on `http://localhost:5173`, proxies `/api` to the API
-  - `npm run exec` → execution sidecar on `127.0.0.1:5310` (required for Run/Trace)
+  - `npm run exec` → execution sidecar on `127.0.0.1:5310` (Run/Trace **and** the terminal).
+    Its startup log prints the per-start terminal pairing token; paste that token into the
+    Terminal tab. Tokens rotate on every restart.
 - The in-memory store means **all accounts and saved connections from today are gone** on
   restart. Recreate one account on `/settings` when testing.
 - Projects created during verification live in this browser's IndexedDB (`fn`, `py-lab`);
@@ -172,6 +174,68 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | `npm run test:api` | 12/12 |
 | `npm run build` | pass (pre-existing large-chunk warning) |
 
+## What Milestone 3 delivered
+
+### Local terminal (`server/terminal.mjs`, `src/features/terminal/*`)
+
+- **Real PTY, not a simulation.** `node-pty@1.1.0` spawns `cmd.exe` through ConPTY on this
+  machine; `ws@8.22.2` streams it to the browser. `node-pty` ships `prebuilds/win32-x64`, so
+  no compiler is needed here.
+- **Attachment point.** The hub lives on the existing loopback sidecar:
+  `GET /terminal/health` and a WebSocket upgrade at `/terminal`. It is not a new public
+  service and it does not route through `/run`.
+- **Guards.** Loopback bind, Origin allow-list, and a per-start pairing token that is printed
+  only on the service console. Tokens rotate on restart; the browser keeps the current one in
+  `sessionStorage` (`codepilot.terminal.token.v1`), never in localStorage or Dexie.
+- **Limits.** 2 sessions, 64 KiB frames, columns 20–400, rows 5–200. Windows kills use
+  `taskkill /PID /T /F`; shutdown terminates sockets so the server closes.
+- **Protocol.** `ready` / `output` / `exit` / `error` from the server; `input` / `resize` /
+  `cwd` from the client. A `cwd` change validates the directory and restarts the shell there.
+- **UI.** `TerminalPanel` shows the real shell, cwd, pid, exit code, service health and the
+  exact `npm run exec` command when offline. Connect is disabled until a health probe succeeds.
+  `TerminalSurface` is a lazy xterm + FitAddon boundary in its own 333.69 kB chunk.
+- **Cloud.** Rendered as a disabled “Cloud · unavailable” control with the reason “No cloud
+  terminal runtime is configured in this build”. Nothing pretends a cloud shell exists.
+- **Session continuity.** The Terminal panel stays mounted while the bottom panel is open, so
+  switching to Run/Output and back keeps the same pid and scrollback. Closing the panel or the
+  page ends the session; scrollback is not persisted.
+
+### Browser evidence (Milestone 3)
+
+- In-app 912×766: connected with the printed token, saw the real
+  `Microsoft Windows [Version 10.0.26300.9818]` banner, `C:\Users\19rag\Code\codepilot-lab>`
+  prompt and `Live · pid 22400`. Typed `echo code-pilot-terminal-ok` and got the real output.
+- `exit` produced `Shell exited · code 0` with the honest session-log note.
+- Tab switch to Run and back preserved pid 22400 and the full scrollback.
+- A wrong token showed “The terminal connection closed without a handshake. The pairing token
+  may not match the one printed by `npm run exec`, or the service was stopped.”
+- Restarting the service rejected the old token and accepted the new one
+  (`Live · pid 23280`), proving rotation. Stopping the service mid-session returned the UI to
+  `Not connected`; **Re-check service** showed `Service offline`, the real endpoint and start
+  command, with Connect disabled.
+- 1440×1000 through a same-origin harness: `scrollWidth === 1440` (no horizontal overflow),
+  live session, runtime/status clusters wrapping as whole rows in the 554 px editor column.
+
+### Gates (Milestone 3)
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` (frontend + API) | pass |
+| `npm run lint` | pass, same 2 pre-existing `react-refresh` warnings |
+| `npm test` | 68/68, 7 files (7 terminal integration tests) |
+| `npm run test:api` | 12/12 |
+| `npm run build` | pass; terminal renderer in a lazy chunk |
+| `npm audit --omit=dev` | 0 vulnerabilities (`ws` 8.22.2) |
+
+### Terminal limits that remain
+
+- Windows-only verification. Linux/macOS have no `node-pty` prebuild here and npm's
+  allow-scripts blocks the build script.
+- No installer or signing; the user starts `npm run exec` and pastes the console token.
+- This is real shell access with the operator's privileges, not a sandbox. The UI says so.
+- Cloud terminal, installer packaging, multi-tab session sharing and scrollback persistence
+  are not implemented.
+
 ## Not verified — do not present as done
 
 - Any real model completion (managed or BYO). Routing, storage, quotas, error propagation
@@ -179,17 +243,19 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - A UI partial-output conversion caused by a real mid-stream failure (unit-tested only).
 - PostgreSQL persistence — PostgreSQL is not installed here.
 - Multi-instance rate limiting, deployment, TLS, secure cookies, CSP.
-- GitHub App, terminal, device write-through, cloud storage, multi-user frontend.
+- GitHub App, device write-through, cloud storage, multi-user frontend.
+- Cloud terminal: no per-user container/VM runtime exists in this environment.
+- The local PTY on Linux/macOS: no prebuild is installed and allow-scripts blocks compiling.
 - Email verification, password reset, MFA, account export UI.
 
-## Known issues to fix next (Milestone 3 — real terminal)
+## Known issues to fix next (Milestone 4 — device file access)
 
-1. There is no terminal. The bottom Terminal tab states "No terminal session" and explains
-   that execution lives in the Run tab. Milestone 3 must ship the local PTY companion **and**
-   the cloud PTY behind one UI with an explicit mode badge; neither is the existing `/run`
-   endpoint.
-2. `/run` has no streaming output, interactive stdin or reuse of a working directory; it is a
-   one-shot compile/run with temp dirs and tree-kill timeouts.
+1. Disk writes are absent. Saves, renames and file creation update IndexedDB only; there is no
+   `createWritable`, save-as/open picker, archive export/import, drag-and-drop upload or
+   reconnect UI beyond the implicit read fallback. Milestone 4 must add those with honest
+   permission/failure states.
+2. Terminal follow-ups (not blockers for Milestone 4): no installer/signing, no cloud
+   runtime, no scrollback persistence across reload, and only Windows was verified.
 3. `Format` covers only Monaco's bundled formatters. If the product wants Prettier, it must be
    bundled locally (no CDN) and added to `supportsDocumentFormatting()` honestly.
 4. Trace is Python-only (`server/trace_python.py`). Adding a JS/TS tracer would need a real
@@ -202,8 +268,11 @@ git status                  # should be clean after the checkpoint commit
 npm install                 # only if node_modules is missing
 npm run api:dev             # terminal 1
 npm run dev                 # terminal 2
-npm run exec                # terminal 3 — loopback runner for Run/Trace (127.0.0.1:5310)
+npm run exec                # terminal 3 — Run/Trace + terminal (127.0.0.1:5310)
 ```
+
+The `npm run exec` console prints `pairing token: …`. Open the workspace, select the Terminal
+tab, paste that token and press Connect. The token changes every time the service restarts.
 
 Then open `http://localhost:5173/settings`, create an account, and confirm the managed
 panel reports “No AI provider available” with the real reason (expected without a provider).

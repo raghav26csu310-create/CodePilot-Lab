@@ -22,6 +22,7 @@ import {
   traceCode,
 } from './executor.mjs'
 import { PROBLEM_IDS, PROBLEM_SETS } from './problems.mjs'
+import { createTerminalHub } from './terminal.mjs'
 
 const PORT = Number(process.env.EXEC_PORT || 5310)
 const HOST = process.env.EXEC_HOST || '127.0.0.1'
@@ -55,6 +56,13 @@ const ALLOWED_ORIGINS = new Set(
 function isLoopbackHost(host) {
   return LOOPBACK_HOSTS.has(host)
 }
+
+/**
+ * The terminal is a real shell, so it needs its own gate on top of the loopback
+ * bind: an allow-listed Origin plus a per-start pairing token that never leaves
+ * the service console until the operator pastes it into the UI.
+ */
+const terminal = createTerminalHub({ origins: ALLOWED_ORIGINS })
 
 function authorized(request) {
   if (isLoopbackHost(HOST)) {
@@ -170,6 +178,11 @@ const server = createServer(async (request, response) => {
       return
     }
 
+    if (request.method === 'GET' && url.pathname === '/terminal/health') {
+      sendJson(response, 200, terminal.health())
+      return
+    }
+
     if (request.method === 'GET' && url.pathname === '/problems') {
       sendJson(response, 200, {
         problems: PROBLEM_IDS.map((id) => ({
@@ -249,6 +262,7 @@ if (!isLoopbackHost(HOST)) {
 
 server.listen(PORT, HOST, async () => {
   const runtimes = await detectRuntimes(true)
+  const terminalInfo = terminal.describe()
   const lines = [
     `CodePilot execution service · http://${HOST}:${PORT}`,
     `CORS origins: ${[...ALLOWED_ORIGINS].join(', ') || '(none)'}`,
@@ -258,9 +272,16 @@ server.listen(PORT, HOST, async () => {
   for (const [key, value] of Object.entries(runtimes)) {
     lines.push(`  ${key.padEnd(6)} ${value.ok ? value.version : 'not available'}`)
   }
+  lines.push(
+    `Terminal: ${terminalInfo.shell} · cwd ${terminalInfo.cwd} · ${terminalInfo.generated ? 'generated' : 'env'} pairing token`,
+  )
+  lines.push(`  pairing token: ${terminalInfo.token}`)
   lines.push('Resource-limited local runner — not a security boundary.')
+  lines.push('Terminal: real local shell for this machine, not a sandbox and not cloud isolation.')
   console.log(lines.join('\n'))
 })
+
+terminal.attach(server)
 
 server.on('error', (error) => {
   if (error && error.code === 'EADDRINUSE') {
@@ -274,6 +295,7 @@ server.on('error', (error) => {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     cancelAllJobs()
+    terminal.closeAll()
     server.close(() => process.exit(0))
     // Do not leave a hung keep-alive connection holding the process open.
     setTimeout(() => process.exit(0), 3_000).unref()

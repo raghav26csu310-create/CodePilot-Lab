@@ -253,28 +253,25 @@ answer marker, handle multiple fences, detect unclosed/empty output), add valida
 tests, route through the gateway, preserve partial output for review, and keep the
 never-overwrite-without-confirmation rule.
 
-### H3 — There is no terminal (High)
+### H3 — Cloud terminal is still absent; the local terminal now exists (High)
 
-**Current state.** `DevelopmentPanel.tsx` renders a Terminal tab that says “No terminal
-session”, lists `Shell · not connected`, and disables “Start terminal · unavailable”. This
-is honest and must not be replaced by a fake prompt.
+**Status (Milestone 3).** The local half is implemented and verified: the workspace Terminal
+tab opens a real PTY (`node-pty`/ConPTY) hosted by the loopback sidecar over a WebSocket,
+guarded by an Origin allow-list and a per-start pairing token printed only on the service
+console. The UI says it is a shell on the host machine, not a sandbox. See §13 for the
+protocol, evidence and limits.
 
-**Root cause.** The execution sidecar is a request/response code runner (`/run`, `/trace`),
-not an interactive PTY. No `node-pty`, WebSocket, companion installer or cloud sandbox exists.
+The cloud half is still absent. It is rendered as a disabled “Cloud · unavailable” control with
+the reason “No cloud terminal runtime is configured in this build”; there is no fake prompt.
+A hosted terminal still needs authenticated API → per-user container/VM → PTY, CPU/memory/PID/
+time limits, no host mounts, egress policy and TTL cleanup.
 
-**Remediation.** Milestone 4. Choose one primary architecture and label the other as a
-separate mode:
+**History.** Before Milestone 3, `DevelopmentPanel.tsx` rendered an honest empty state (“No
+terminal session”) and disabled “Start terminal · unavailable”. That was correct then and has
+now been replaced by a real connection flow, not by simulated output.
 
-- **Local companion (recommended first):** a small signed local service with a one-time
-  pairing token and an explicit project-directory grant, exposing a PTY over WebSocket on
-  loopback. It must be user-installed, user-started, origin-locked, and able to kill the
-  process tree. It is genuine local shell access, not cloud isolation.
-- **Cloud terminal (recommended for hosted users):** authenticated API → per-user container
-  or VM → PTY over WebSocket, with CPU/memory/PID/time limits, no host mounts, egress
-  policy and TTL cleanup.
-
-Do not present `/run` as a shell. Do not expose an unauthenticated terminal. See §5 for the
-decision request.
+**Rule retained.** Do not present `/run` as a shell. Do not expose an unauthenticated terminal.
+The local bridge is genuine shell access on the operator's machine, not cloud isolation.
 
 ### H4 — Device file access is read-only and incomplete (High)
 
@@ -829,5 +826,91 @@ Known limits recorded at the end of Milestone 2:
 - Trace coverage is Python-only because `server/trace_python.py` is the only real tracer.
 - The 1440×1000 layout was measured through a same-origin iframe harness inside the in-app
   browser (the pane is 912×766); it is not a headless Edge screenshot.
+
+---
+
+## 13. Milestone 3 status (real terminal — local companion)
+
+Implemented and executed on 2026-11-12.
+
+### Architecture
+
+- `server/terminal.mjs` is a PTY hub on the existing loopback execution sidecar:
+  `createTerminalHub` owns sessions, `GET /terminal/health` reports the real shell, cwd and
+  limits, and `terminal.attach(server)` handles WebSocket upgrades at `/terminal`.
+- `node-pty@1.1.0` spawns the platform shell (ConPTY on Windows); `ws@8.22.2` carries the
+  stream. The package ships `prebuilds/win32-x64`, so no compiler is required on this machine.
+- Guards: the HTTP listener stays loopback-only, the handshake requires an allow-listed
+  `Origin`, and a per-start pairing token is printed only on the service console. Tokens rotate
+  on every `npm run exec`; an old token is rejected after a restart.
+- Limits: 2 concurrent sessions, 64 KiB frames, columns clamped to 20–400 and rows to 5–200.
+- Protocol (JSON text frames):
+  - server → client: `ready { shell, cwd, pid, cols, rows }`, `output { data }`,
+    `exit { exitCode, signal }`, `error { message }`
+  - client → server: `input { data }`, `resize { cols, rows }`, `cwd { path }`
+- Changing `cwd` validates the directory and restarts the shell there, because the shell owns
+  its working directory. Invalid paths come back as an `error` frame.
+- Windows process kills use `taskkill /PID <pid> /T /F`; node-pty's own console-list helper
+  fails when the service has no console. `closeAll()` also terminates upgraded sockets so
+  `server.close()` settles.
+
+### Frontend
+
+- `src/features/terminal/client.ts` resolves the endpoint from
+  `codepilot.exec.endpoint.v1`, keeps the pairing token in `sessionStorage`
+  (`codepilot.terminal.token.v1`) so it dies with the tab, probes `/terminal/health`, and
+  exposes typed frames plus `TerminalServiceError`.
+- `TerminalPanel.tsx` renders the runtime badge, a disabled Cloud option with its reason,
+  service status, the pairing form, the live cwd, Connect/Disconnect and the real exit code.
+  It shows the exact start command and endpoint when the service is offline, and disables
+  Connect until a health probe succeeds.
+- `TerminalSurface.tsx` is a `React.lazy` boundary around xterm plus `@xterm/addon-fit`; the
+  renderer is a separate 333.69 kB chunk (84.19 kB gzip) and is never loaded for other tabs.
+  A ResizeObserver fits the grid and sends `resize`; output is buffered if frames arrive before
+  the lazy chunk mounts.
+- The Terminal panel stays mounted while the bottom panel is open, so switching to Run/Output
+  does not kill a live shell. Closing the panel or the page ends the session.
+- Cloud is a disabled button with the visible reason “No cloud terminal runtime is configured
+  in this build”; it is not a fake prompt.
+
+### Browser evidence (in-app 912×766, harness measured at 1440×1000)
+
+- Connected with the printed token: real `Microsoft Windows [Version 10.0.26300.9818]`
+  banner and `C:\Users\19rag\Code\codepilot-lab>` prompt, status `Live · pid 22400`.
+- Input through xterm executed `echo code-pilot-terminal-ok` and rendered the real output.
+  `exit` produced `Shell exited · code 0` and the honest session-log note.
+- Switching to the Run tab and back kept the same pid and the full scrollback.
+- A wrong token produced “The terminal connection closed without a handshake. The pairing token
+  may not match the one printed by `npm run exec`, or the service was stopped.” and returned to
+  `Not connected`.
+- After restarting the service, the previous token was rejected and the new one connected
+  (`Live · pid 23280`), confirming per-start rotation. Stopping the service while connected
+  closed the socket; **Re-check service** then showed `Service offline`, the real endpoint and
+  start command, and left Connect disabled.
+- At 1440×1000 through a same-origin harness: `documentElement.scrollWidth === 1440` (no
+  horizontal overflow), the session was live, and the runtime/status clusters wrapped as whole
+  rows inside the 554 px editor column.
+
+Executed results at the end of Milestone 3:
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Typecheck (frontend + API) | `npm run typecheck` | Pass |
+| Lint | `npm run lint` | Pass with the same 2 pre-existing `react-refresh` warnings |
+| Tests | `npm test` | Pass — 7 files, 68 tests (includes 7 terminal integration tests) |
+| API tests | `npm run test:api` | Pass — 12 tests |
+| Build | `npm run build` | Pass; terminal renderer isolated in a lazy chunk |
+| Dependency audit | `npm audit --omit=dev` | 0 vulnerabilities (`ws` upgraded to 8.22.2) |
+
+Known limits recorded at the end of Milestone 3:
+
+- The local terminal is genuine shell access with the operator's privileges. It is **not** a
+  sandbox and does not claim to be; the UI repeats this.
+- Verified on Windows only. On Linux/macOS `node-pty` has no prebuild and npm's allow-scripts
+  blocks its build script, so those platforms are unverified here.
+- There is no installer or code signing; the user must start `npm run exec` and paste the
+  console token. Sessions do not survive a page reload or a service restart.
+- The cloud terminal is not implemented; the disabled Cloud control explains why.
+- Output is not persisted; scrollback lives in the mounted xterm instance only.
 
 

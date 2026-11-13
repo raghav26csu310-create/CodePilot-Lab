@@ -163,6 +163,26 @@ ESLint ignores `dist/` and `node_modules/`.
   get a dark global fallback, but new UI should prefer `Select`. Verify the opened menu,
   not only the closed control.
 
+## Terminal (Milestone 3)
+
+- `server/terminal.mjs` hosts a real PTY (`node-pty`, ConPTY on Windows) on the loopback
+  sidecar; `server/index.mjs` exposes `GET /terminal/health` and the WebSocket upgrade at
+  `/terminal`. It is not part of `/run` and must never become an unauthenticated shell.
+- Guards: loopback bind, Origin allow-list, and a per-start pairing token printed only on the
+  service console. Tokens rotate on restart. The browser keeps the current token in
+  `sessionStorage` under `codepilot.terminal.token.v1`; never persist it to Dexie/localStorage.
+- Frames are JSON text: server `ready` / `output` / `exit` / `error`; client `input` /
+  `resize` / `cwd`. A `cwd` change validates the directory and restarts the shell there.
+  Windows kills use `taskkill /PID /T /F`.
+- Frontend lives in `src/features/terminal/`: `client.ts` (health + socket + typed frames),
+  `TerminalPanel.tsx` (mode, token, cwd, status, offline state) and `TerminalSurface.tsx`
+  (lazy xterm + FitAddon in its own chunk). The panel stays mounted while the bottom panel is
+  open so tab switches do not kill the shell.
+- Cloud mode has no runtime in this build: render the disabled control with its real reason,
+  never a simulated prompt.
+- Verified on Windows only. Linux/macOS lack `node-pty` prebuilds here and npm allow-scripts
+  blocks its install script.
+
 ## TypeScript / React landmines
 
 - `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`,

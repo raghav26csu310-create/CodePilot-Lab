@@ -171,6 +171,12 @@
   background-clip: content-box;
 }
 
+/* The terminal keeps its session while another bottom tab is shown. */
+.terminalHost {
+  height: 100%;
+  min-height: 0;
+}
+
 .empty {
   display: flex;
   flex-direction: column;
@@ -236,24 +242,6 @@
   font-size: 6.8px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-
-.disabledAction {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 27px;
-  margin-top: 8px;
-  padding-inline: 9px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-sm);
-  color: var(--text-3);
-  font-family: var(--font-mono);
-  font-size: 7.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 
 /* -------------------------------- Problems ------------------------------- */
