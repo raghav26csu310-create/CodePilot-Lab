@@ -213,6 +213,22 @@ ESLint ignores `dist/` and `node_modules/`.
 - Native OS pickers are browser-specific and were not automated here. Write-through was
   verified through an OPFS `FileSystemDirectoryHandle`; denial/revocation remain manual checks.
 
+## GitHub (Milestone 5 — configuration gate only)
+
+- GitHub actions are **not implemented**. There is no OAuth/install flow, repository,
+  branch, commit, push or pull-request route, and no GitHub token exists in the browser.
+- `server/api/src/github/status.ts` reports presence only: `configured`, `missing` variable
+  names, a `present` boolean map, and `actionsAvailable: false`. It must never return a
+  credential value, and `actionsAvailable` must stay false until a real action works.
+- `GET /api/github/status` is session-scoped (`required`). Keep it that way; configuration is
+  not anonymous information.
+- `src/features/github/` owns the typed client and `GithubPanel` in `/settings`. The only
+  control is `Re-check`; do not add a Connect button that has no backend.
+- The App private key belongs only in the API environment. Never write it or an installation
+  token to Dexie/`localStorage`, the bundle, logs or test fixtures that resemble real secrets.
+- Adding real integration requires a registered GitHub App plus the five `GITHUB_*` variables,
+  live install/callback validation and a real round trip before any claim is made.
+
 ## TypeScript / React landmines
 
 - `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`,

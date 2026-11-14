@@ -131,7 +131,10 @@ type RequestOptions = {
   signal?: AbortSignal
 }
 
-async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function requestJson<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
   const headers = new Headers()
   if (options.body !== undefined) {
     headers.set('Content-Type', 'application/json')

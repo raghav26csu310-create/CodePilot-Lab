@@ -2,14 +2,14 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Milestone 4 — device file access.** The workspace can open a real text
-file, import a folder or a `.zip` project archive, save a copy, export an archive, accept
-files dropped on the explorer, and reconnect a linked device folder from the dossier. Saves
-write the IndexedDB copy first and write through to a linked folder only when its handle
-grants read-write access; the two outcomes are reported separately. Milestones 1 (AI gateway
-and accounts), 2 (editor action bar, dropdown fix) and 3 (local terminal) are complete.
-`docs/technical-audit.md` §11–14 records the evidence, and `docs/session-handoff.md` is the
-current resume point. No deployment, PostgreSQL run or live model completion has happened yet.
+**Current milestone: Milestone 5 — GitHub, blocked at the configuration gate.** Settings now
+reads the real server-side GitHub App configuration: it lists the exact missing environment
+variables, or reports that credentials are present, and always states that install/OAuth and
+repository actions are not implemented. No GitHub connection is simulated. Milestones 1 (AI
+gateway and accounts), 2 (editor action bar, dropdown fix), 3 (local terminal) and 4 (device
+files) are complete. `docs/technical-audit.md` §11–15 records the evidence, and
+`docs/session-handoff.md` is the current resume point. No deployment, PostgreSQL run, GitHub
+round trip or live model completion has happened yet.
 
 **Previous milestone: Phase 7 — Public beta hardening.** The lab includes a
 static public site with honest SEO, a real feedback pipeline, automated tests, centralized
@@ -175,7 +175,8 @@ No paid dependency is required for the editor, execution, tracing, converter UI 
 grading, and the editor keeps working with no account and no AI provider. Managed CodePilot
 AI needs the API (`server/api`) running with a server-side provider configured; a local
 model (for example Ollama) or any OpenAI-compatible endpoint can instead be connected
-directly from Settings as the advanced mode.
+directly from Settings as the advanced mode. GitHub integration is not available: Settings
+shows the real configuration gate and no repository or commit action exists.
 
 ## Run
 
@@ -195,8 +196,8 @@ request is attempted.
 ```bash
 npm run typecheck    # frontend + API
 npm run lint
-npm test             # frontend (61 tests)
-npm run test:api     # API (12 tests)
+npm test             # frontend (80 tests)
+npm run test:api     # API (15 tests)
 npm run build
 npm run preview
 ```
@@ -277,8 +278,12 @@ src/
 
 ## Verification
 
-- `npm run typecheck`, `npm run lint`, `npm test` (77 frontend tests, 8 files), `npm run
-test:api` (12 tests) and `npm run build` pass.
+- `npm run typecheck`, `npm run lint`, `npm test` (80 frontend tests, 8 files), `npm run
+test:api` (15 tests) and `npm run build` pass.
+- Milestone 5 configuration-gate verification covered: signed-out status is not probed;
+  missing GitHub variables are listed by name; configured credentials report “present”
+  without returning a secret; Re-check issues a new real request; the panel never offers a
+  connect or repository action.
 - Milestone 4 verification covered: real single-file open into a project; browser-first save
   with a dirty buffer; ZIP export and CRC-checked re-import with identical content; dossier
   export; OPFS-handle relink with read-write permission and a matching device copy; honest

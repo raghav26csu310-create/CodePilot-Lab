@@ -52,6 +52,12 @@ const EnvSchema = z.object({
   MANAGED_AI_DAILY_REQUESTS: z.coerce.number().int().min(0).max(100_000).default(100),
   MANAGED_AI_MONTHLY_TOKENS: z.coerce.number().int().min(0).max(100_000_000).default(500_000),
   MANAGED_AI_FALLBACK_MODELS: csv,
+
+  GITHUB_APP_ID: z.string().default(''),
+  GITHUB_APP_PRIVATE_KEY: z.string().default(''),
+  GITHUB_CLIENT_ID: z.string().default(''),
+  GITHUB_CLIENT_SECRET: z.string().default(''),
+  GITHUB_CALLBACK_URL: z.string().default(''),
 })
 
 export type ServerEnv = z.infer<typeof EnvSchema>

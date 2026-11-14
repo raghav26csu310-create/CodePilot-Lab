@@ -20,7 +20,7 @@ separate what exists from what is still promised by the interface.
 | Is AI production-safe today? | **No.** The browser calls user-configured providers directly; BYO keys can be persisted in plaintext IndexedDB. |
 | Is the execution runner a sandbox? | **No.** It is a loopback-only, resource-limited local runner with process-tree kills and timeouts. Code runs with the operator's OS permissions. |
 | Is there a terminal? | **Yes, local only.** A guarded loopback PTY shipped in Milestone 3. The cloud terminal is still absent and rendered as unavailable. |
-| Is there GitHub integration? | **No.** No OAuth/App flow, token storage, clone, branch, commit, push or PR code exists. |
+| Is there GitHub integration? | **Configuration gate only.** `/settings` reports whether the five GitHub App variables are present on the API process, without returning values. No OAuth/install flow, token storage, clone, branch, commit, push or PR code exists. |
 | Can users edit their device files? | **Yes, with explicit permission.** Open/import, save through a linked folder that grants write access, Save As/export, archive import/export and drag-and-drop shipped in Milestone 4. IndexedDB remains authoritative; disk writes happen only through a granted handle. |
 | Is the product multi-user? | **No.** Projects, settings and practice data are browser-local. No accounts, sessions or server-side isolation are active. |
 | Is it production-ready? | **No.** It is a frontend beta. Public deployment, cloud AI, cloud files, terminal, GitHub and multi-user data isolation are not implemented or verified. |
@@ -1020,5 +1020,70 @@ parser, and the File System Access API is used directly where the browser expose
 - Archived content is the saved IndexedDB copy. Unsaved Monaco drafts are not exported.
 - This is still browser-local storage plus an optional device folder. There is no cloud file
   storage, cross-device sync or multi-user sharing.
+
+---
+
+## 15. Milestone 5 status (GitHub configuration gate)
+
+Full GitHub integration is **not implemented**. A registered GitHub App, its client secret,
+its private key and a callback URL are required before an install/OAuth round trip can be
+made, and none of them exist in this environment. The milestone therefore delivered an honest
+configuration gate plus the server-side scaffolding it needs, and stopped there.
+
+### What exists
+
+- `server/api/src/github/status.ts` (`describeGithubConfig`) checks the five App variables and
+  returns `configured`, `missing` (variable names only), a `present` boolean map,
+  `actionsAvailable: false` and a note. It returns **no credential value**.
+- `GET /api/github/status` is registered with auth mode `required`, so anonymous callers get
+  401. It is the only GitHub route; there is no connect, install, callback, repository,
+  commit, push or pull-request route.
+- `src/features/github/client.ts` types the response; `GithubPanel.tsx` renders it in
+  `/settings` beside the account panel. States: API unreachable, signed out, loading,
+  request error, not configured (missing names listed), credentials present. The only control
+  is `Re-check`, which performs a new real request.
+- `.env.example` documents `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_CLIENT_ID`,
+  `GITHUB_CLIENT_SECRET` and `GITHUB_CALLBACK_URL` with empty values and an explicit warning
+  that the integration is not implemented.
+
+### Tests
+
+`server/api/test/app.test.ts` adds three cases: 401 without a session; the complete
+missing-variable list and `actionsAvailable: false` on an unconfigured process; and a
+configured process that reports every flag true while the response body contains neither the
+fixture client secret nor the fixture private-key text.
+
+### Browser evidence (in-app 912×766)
+
+- Signed out: the panel asked the user to sign in and made no status request.
+- Signed in, empty API environment: badge `NOT CONFIGURED`, all five variable names listed,
+  and the note that the install flow and repository actions are not implemented.
+- API restarted with process-only test values: badge `CREDENTIALS PRESENT`, no variables
+  listed, and “Repository, commit and pull-request actions available: no.”
+- `Re-check` raised the observed `/api/github/status` request count from 1 to 2. The rendered
+  page contained neither the fixture client secret nor the private-key text. In the 912 px
+  viewport `documentElement.scrollWidth` stayed at 902.
+
+### Gates (Milestone 5)
+
+| Gate | Command | Result |
+| --- | --- | --- |
+| Typecheck (frontend + API) | `npm run typecheck` | Pass |
+| Lint | `npm run lint` | Pass with the same 2 pre-existing `react-refresh` warnings |
+| Tests | `npm test` | Pass — 8 files, 80 tests |
+| API tests | `npm run test:api` | Pass — 15 tests |
+| Build | `npm run build` | Pass with the existing large-chunk warnings |
+
+### Explicit non-claims
+
+- No GitHub App is registered here, no OAuth or install flow exists, and no installation token
+  has ever been minted.
+- No repository is listed, cloned, created or modified; no branch, commit, push or pull
+  request was made.
+- Possessing the five variables is not a working integration. `actionsAvailable` stays false
+  and the UI says the build does not connect to GitHub.
+- No GitHub token or private key is stored in the browser, IndexedDB, `localStorage` or logs.
+  The temporary verification values lived in one API process environment and are gone.
+- Token revocation, webhooks, permission scoping and account linking remain unimplemented.
 
 

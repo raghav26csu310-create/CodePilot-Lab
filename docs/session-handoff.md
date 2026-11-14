@@ -23,7 +23,7 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | 2 | `Select` scroll-close root cause, New Project dialog viewport, editor action bar | **Done and verified (§12)** |
 | 3 | Real terminal (local companion shipped; cloud mode rendered unavailable) | **Done and verified (§13)** |
 | 4 | Device file access (open/import/save/save-as/export/reconnect) | **Done and verified (§14)** |
-| 5 | GitHub integration (GitHub App, server-side key) | Not started — next; blocked on App credentials |
+| 5 | GitHub integration (GitHub App, server-side key) | **Configuration gate only (§15)** — integration blocked on App credentials |
 | 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | Not started — blocked on infrastructure |
 | 7 | End-to-end verification of the 17 journeys | Not started — GitHub/deployment journeys blocked |
 
@@ -45,6 +45,8 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
   model completion has ever run here.
 - Milestone 4 browser checks used stubbed native pickers plus a real OPFS
   `FileSystemDirectoryHandle`. Native OS picker prompts were never driven by automation.
+- Milestone 5 browser checks used fake GitHub values in one API process environment only.
+  They were never written to `.env` or disk, and that process is stopped.
 
 ## What Milestone 1 delivered
 
@@ -330,6 +332,39 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - Archives contain the saved IndexedDB copy; unsaved Monaco drafts are not included.
 - No cloud file storage, cross-device sync or multi-user sharing exists.
 
+## What Milestone 5 delivered (configuration gate only)
+
+Full GitHub integration needs a registered GitHub App, a client secret and a private key.
+None of those exist in this environment, so no OAuth, install, clone, branch, commit, push,
+pull-request or token-revocation action was built or claimed.
+
+What does exist and was verified:
+
+- `server/api/src/github/status.ts` checks the five GitHub App variables and returns only
+  presence flags and the names of missing variables. It never returns a value.
+- `GET /api/github/status` requires a session (`required`), so configuration is not exposed
+  to anonymous callers. It reports `actionsAvailable: false` even when credentials are
+  present, because no GitHub action exists.
+- `src/features/github/client.ts` and `GithubPanel.tsx` render the real state in `/settings`:
+  signed out, API unreachable, missing variables, or credentials present. The only control
+  is `Re-check`, which performs a real request.
+- `.env.example` lists the five variables with empty values and a warning not to advertise a
+  working connection.
+- API tests cover the 401, the full missing-variable list, the configured report, and the
+  absence of the fixture secret and private-key values from the response.
+
+Browser evidence:
+
+- Signed out: “Sign in to the CodePilot Cloud account above to check whether the API process
+  has GitHub App credentials.” No request was made.
+- Signed in with an empty API environment: badge `NOT CONFIGURED`, all five variable names
+  listed, note that the install flow is not implemented.
+- API restarted with test values: badge `CREDENTIALS PRESENT`, no variables listed, and
+  “Repository, commit and pull-request actions available: no.”
+- `Re-check` raised the real `/api/github/status` request count from 1 to 2. The page did not
+  contain the fixture client secret or private-key text. `scrollWidth` stayed at 902 in the
+  912 px viewport.
+
 ## Not verified — do not present as done
 
 - Any real model completion (managed or BYO). Routing, storage, quotas, error propagation
@@ -337,33 +372,43 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - A UI partial-output conversion caused by a real mid-stream failure (unit-tested only).
 - PostgreSQL persistence — PostgreSQL is not installed here.
 - Multi-instance rate limiting, deployment, TLS, secure cookies, CSP.
-- GitHub App, cloud storage, multi-user frontend.
+- Every GitHub action beyond reading configuration: no OAuth/install flow, repository
+  listing, clone, branch, commit, push, pull request or token revocation was built or tested
+  against GitHub. Cloud storage and a multi-user frontend are also absent.
 - Native OS picker prompts and explicit permission revocation for device files; write-through
   itself was verified through OPFS handles.
 - Cloud terminal: no per-user container/VM runtime exists in this environment.
 - The local PTY on Linux/macOS: no prebuild is installed and allow-scripts blocks compiling.
 - Email verification, password reset, MFA, account export UI.
 
-## Next task — Milestone 5 (GitHub), blocked on credentials
+## Next task — Milestone 5 (GitHub), blocked after the configuration gate
 
-Milestone 4 is complete and committed. The next milestone is GitHub integration, but this
-environment has no GitHub App registration, client ID/secret or private key, and no network
-identity that can register one. Do not fabricate a connection.
+The configuration gate is built, verified and committed. Full GitHub integration is still
+blocked: this environment has no GitHub App registration, client ID/secret or private key,
+and no network identity that could register one. Do not fabricate a connection.
 
-What can be done without credentials, and what must wait:
+What exists now:
 
-1. **Can be built now:** a settings/connection panel that reads a real server-side
-   configuration state and honestly reports “GitHub App not configured” with the missing
-   variables; typed server routes that validate configuration before any request; unit tests
-   for signature/state validation and for refusing unconfigured calls. No fake repos,
-   branches or commits.
-2. **Must wait for credentials:** install/callback flow, repository listing, clone/import,
-   branch/commit/push and PR actions. Each requires a live GitHub App and a real round trip.
-3. **Do not** store GitHub tokens in the browser, IndexedDB or logs. The audit decision is a
-   GitHub App with server-held private key and short-lived installation tokens.
+- `GET /api/github/status` (session required) reports presence flags for the five App
+  variables and the names of any that are missing. It never returns a value and always
+  reports `actionsAvailable: false`.
+- `/settings` renders the real state: signed out, API unreachable, not configured (with the
+  missing names) or credentials present. `Re-check` performs a real request.
+- `.env.example` documents the variables; API tests cover 401, the missing list, the
+  configured report and the absence of fixture secrets from the response.
 
-Terminal and device-file follow-ups (not Milestone 5 blockers): installer/signing, cloud
-terminal runtime, scrollback persistence, Linux/macOS PTY verification, and native-picker
+What remains blocked until credentials and a real round trip are available:
+
+1. Install/callback flow and state/signature validation against GitHub.
+2. Repository listing, clone/import, branch, commit, push and pull-request actions.
+3. Token revocation, webhook handling, permission scoping and account-linking UI.
+
+Rules for whoever picks this up: keep the GitHub App private key server-side, use short-lived
+installation tokens, never store a GitHub token in the browser, IndexedDB or logs, and do not
+turn `actionsAvailable` on until the action it describes really works.
+
+Terminal and device-file follow-ups (independent of GitHub): installer/signing, cloud terminal
+runtime, scrollback persistence, Linux/macOS PTY verification, and native-picker
 denial/revocation checks. `Format` remains limited to Monaco's bundled formatters, and Trace
 remains Python-only.
 
@@ -392,7 +437,7 @@ Local runtimes present on this machine: Python 3.14.5, Node v24.19.0, gcc (MSYS2
 
 | File | Purpose | Freshness |
 | --- | --- | --- |
-| `docs/technical-audit.md` | Audit, decisions, Milestone 1–4 status and evidence | Current |
+| `docs/technical-audit.md` | Audit, decisions, Milestone 1–5 status and evidence | Current |
 | `docs/ai-gateway.md` | Gateway setup, endpoints, route semantics, non-claims | Current |
 | `docs/architecture.md` | Browser/editor architecture | Stale for backend; banner added |
 | `docs/security.md` | Security posture | Stale for backend; banner added |

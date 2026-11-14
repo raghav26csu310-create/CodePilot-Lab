@@ -1,4 +1,4 @@
-import { KeyRound, Laptop, Radio, ShieldCheck, UserRound } from 'lucide-react'
+import { GitBranch, KeyRound, Laptop, Radio, ShieldCheck, UserRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 import { Badge } from '../../design-system/primitives/Badge'
@@ -8,6 +8,7 @@ import { useGateway } from '../copilot/gateway/store'
 import { ProviderSettingsForm } from '../copilot/ProviderSettingsForm'
 import { providerLabel, usesGateway } from '../copilot/providerPresets'
 import { useAiSettings } from '../copilot/settingsStore'
+import { GithubPanel } from '../github/GithubPanel'
 import styles from './AiSettingsPage.module.css'
 
 export function AiSettingsPage() {
@@ -75,6 +76,14 @@ export function AiSettingsPage() {
               CodePilot Cloud account
             </h2>
             <GatewayAccountPanel />
+          </div>
+
+          <div className={styles.panel}>
+            <h2>
+              <GitBranch size={15} />
+              GitHub integration
+            </h2>
+            <GithubPanel />
           </div>
 
           <div className={styles.panel}>
