@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { toPublicUser } from '../auth/authService.ts'
 import { clearSessionCookie, parseCookies, serializeSessionCookie } from '../auth/cookies.ts'
 import { emailRateKey } from '../auth/authService.ts'
+import { buildAccountExport } from '../services/accountExport.ts'
 import { readJsonBody } from '../http/body.ts'
 import { enforceLimit } from '../http/limits.ts'
 import { requireUser } from '../http/router.ts'
@@ -91,6 +92,19 @@ export function registerAuthRoutes(router: Router): void {
   router.add('GET', '/api/account', 'required', async (ctx) => {
     const { user } = requireUser(ctx)
     sendJson(ctx.res, 200, { user: toPublicUser(user) })
+  })
+
+  router.add('GET', '/api/account/export', 'required', async (ctx) => {
+    const { user } = requireUser(ctx)
+    const payload = await buildAccountExport({
+      store: ctx.store,
+      ai: ctx.ai,
+      user: toPublicUser(user),
+      now: ctx.now(),
+    })
+    sendJson(ctx.res, 200, payload, {
+      'Content-Disposition': `attachment; filename="codepilot-account-${user.id}.json"`,
+    })
   })
 
   router.add('PATCH', '/api/account', 'required', async (ctx) => {

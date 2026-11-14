@@ -24,8 +24,8 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | 3 | Real terminal (local companion shipped; cloud mode rendered unavailable) | **Done and verified (§13)** |
 | 4 | Device file access (open/import/save/save-as/export/reconnect) | **Done and verified (§14)** |
 | 5 | GitHub integration (GitHub App, server-side key) | **Configuration gate only (§15)** — integration blocked on App credentials |
-| 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | Not started — blocked on infrastructure |
-| 7 | End-to-end verification of the 17 journeys | Not started — GitHub/deployment journeys blocked |
+| 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | **Account export + isolation evidence (§16)** — PostgreSQL/deployment blocked |
+| 7 | End-to-end verification of the 17 journeys | In progress — GitHub/deployment journeys blocked |
 
 ## Environment state at wrap-up
 
@@ -47,6 +47,8 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
   `FileSystemDirectoryHandle`. Native OS picker prompts were never driven by automation.
 - Milestone 5 browser checks used fake GitHub values in one API process environment only.
   They were never written to `.env` or disk, and that process is stopped.
+- The Milestone 6 export fixture account and its server project were deleted through the real
+  API; the in-memory store is empty again.
 
 ## What Milestone 1 delivered
 
@@ -364,6 +366,60 @@ Browser evidence:
 - `Re-check` raised the real `/api/github/status` request count from 1 to 2. The page did not
   contain the fixture client secret or private-key text. `scrollWidth` stayed at 902 in the
   912 px viewport.
+
+## What Milestone 6 delivered (account export and isolation evidence)
+
+The full milestone needs PostgreSQL, hosting and a deployment target. PostgreSQL is not
+installed here and there is no hosting, so durable multi-instance persistence and deployment
+remain blocked. The parts that can be proven against the real router were completed:
+
+- `GET /api/account/export` (session required) returns a JSON attachment containing the
+  caller's profile, server-side projects with file contents, settings, AI usage/quota and the
+  public AI connection metadata. It omits password hashes, session tokens, encrypted provider
+  keys and server configuration, and lists those exclusions in `notIncluded`.
+- `server/api/src/services/accountExport.ts` assembles the export from user-scoped store
+  methods only, so a guessed id cannot pull another account's rows.
+- `/settings` now offers `Export my data` in the account panel. It downloads the API response
+  as a file and reports the real filename and byte size. There is no client-side
+  reconstruction and no local storage write.
+- API tests now prove: two accounts cannot read each other's project or files (404), an AI
+  credential saved by one account is absent from the other's status, the export contains the
+  owner's project/file and `keyLast4` only, it contains no secret/hash/token text or the other
+  account's email, and deleting the account revokes its session while leaving the other
+  account intact.
+
+Browser evidence (1000×700 in-app viewport at verification time):
+
+- Created an account, then a server project with `main.py` and a BYO connection through the
+  real API. `Export my data` produced a real browser download:
+  `codepilot-account-573f4937-….json`, 1,499 bytes.
+- The downloaded JSON contained the profile, `Export fixture`, `main.py`, settings
+  (`aiMode: "byo"`), usage/quota and `keyLast4: "port"` with `hasKey: true`. It contained
+  neither the fixture API key, `passwordHash`, `tokenHash` nor `encryptedApiKey`.
+- The panel reported `Exported …json · 1,499 B`; `documentElement.scrollWidth` was 990 in a
+  1000 px viewport.
+- Deleting that account through the real `DELETE /api/account` returned 200; a following
+  export and project list returned 401. The browser download was the only copy of the export.
+
+### Gates (Milestone 6 partial)
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` (frontend + API) | pass |
+| `npm run lint` | pass, same 2 pre-existing `react-refresh` warnings |
+| `npm test` | 84/84, 8 files |
+| `npm run test:api` | 19/19 |
+| `npm run build` | pass (existing large-chunk warnings) |
+
+### Milestone 6 limits
+
+- No PostgreSQL process exists here. The PostgreSQL schema and `pgStore` remain unapplied and
+  untested against a live server; all route tests use the in-memory store.
+- No deployment, TLS, secure-cookie production run, shared rate-limit store, monitoring or
+  scheduled backup exists. The account export is a user-facing data download, not a backup.
+- The frontend's real projects still live in IndexedDB and are not uploaded to the API. The
+  export covers server-side account data only; browser projects are exported separately as a
+  project archive from the workspace.
 
 ## Not verified — do not present as done
 

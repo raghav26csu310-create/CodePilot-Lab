@@ -1,8 +1,12 @@
-import { CircleAlert, Loader2, LogIn, LogOut, UserPlus } from 'lucide-react'
+import { CircleAlert, Download, Loader2, LogIn, LogOut, UserPlus } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
 import { Button } from '../../../design-system/primitives/Button'
-import { describeGatewayError, GatewayError } from './client'
+import {
+  describeGatewayError,
+  exportAccountData,
+  GatewayError,
+} from './client'
 import { gatewayRegister, gatewaySignIn, gatewaySignOut, useGateway } from './store'
 import styles from './AccountPanel.module.css'
 
@@ -22,6 +26,9 @@ export function GatewayAccountPanel() {
   const [displayName, setDisplayName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [exportResult, setExportResult] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const signedIn = gateway.user !== null
 
@@ -59,6 +66,35 @@ export function GatewayAccountPanel() {
       setError(cause instanceof Error ? cause.message : 'Sign out failed.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const saveExport = async () => {
+    if (exporting) return
+    setExporting(true)
+    setExportError(null)
+    setExportResult(null)
+    try {
+      const { filename, blob } = await exportAccountData()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setExportResult(`Exported ${filename} · ${blob.size.toLocaleString()} B`)
+    } catch (cause) {
+      setExportError(
+        cause instanceof GatewayError
+          ? describeGatewayError(cause)
+          : cause instanceof Error
+            ? cause.message
+            : 'The account export failed.',
+      )
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -112,6 +148,35 @@ export function GatewayAccountPanel() {
             </div>
           </dl>
         ) : null}
+
+        <div className={styles.export}>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void saveExport()}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <Loader2 size={14} className={styles.spin} />
+            ) : (
+              <Download size={14} />
+            )}
+            Export my data
+          </Button>
+          {exportResult ? <p className={styles.foot}>{exportResult}</p> : null}
+          {exportError ? (
+            <p className={styles.error} role="alert">
+              <CircleAlert size={13} />
+              {exportError}
+            </p>
+          ) : null}
+        </div>
+
+        <p className={styles.foot}>
+          The export contains this account&apos;s server-side profile, projects, settings and AI
+          usage. Password hashes, session tokens and provider keys are never included.
+        </p>
 
         <p className={styles.foot}>
           {gateway.status?.usageNote ??

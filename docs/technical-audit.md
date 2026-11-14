@@ -1086,4 +1086,73 @@ fixture client secret nor the fixture private-key text.
   The temporary verification values lived in one API process environment and are gone.
 - Token revocation, webhooks, permission scoping and account linking remain unimplemented.
 
+---
+
+## 16. Milestone 6 status (account export, isolation evidence, blocked infrastructure)
+
+Milestone 6 as planned requires PostgreSQL, hosting and a deployment target. None of those
+exist in this environment: Docker's daemon is not running and no PostgreSQL server is
+installed. Durable persistence and deployment therefore remain blocked. The milestone's
+testable exit criteria were completed against the real HTTP router and in-memory store.
+
+### Implemented
+
+- `GET /api/account/export` (auth mode `required`) returns a JSON attachment with the caller's
+  profile, server-side projects and file contents, settings, AI usage/quota and the public AI
+  connection metadata (`hasKey`, `keyLast4`, provider, label, base URL, model, verification
+  time). Password hashes, session tokens, encrypted provider keys and server configuration are
+  excluded, and the payload states the exclusions in `notIncluded`.
+- `server/api/src/services/accountExport.ts` builds the payload only from user-scoped store
+  methods. A guessed project id cannot contribute another account's rows.
+- The settings account panel has an `Export my data` control that downloads the real response
+  and reports the actual filename and byte count. It does not rebuild the export client-side
+  and does not write it to IndexedDB or `localStorage`.
+
+### Isolation and deletion evidence (API tests)
+
+- The first account creates a project and file; the second account receives 404 when it asks
+  for that project's files.
+- The first account saves a BYO credential; the second account's `/api/ai/status` still reports
+  `connection: null` and contains no key text.
+- The first account's export contains its project, file content and `keyLast4`, and contains
+  no `sk-…` fixture secret, `passwordHash`, `tokenHash`, `encryptedApiKey` or second-account
+  email. The second account's export contains an empty project list and no first-account
+  project or file name.
+- Deleting the first account returns 200, revokes its session (subsequent export is 401) and
+  leaves the second account able to list its own (empty) projects.
+
+### Browser evidence
+
+- A real account, server project (`main.py`) and BYO connection were created through the API.
+  `Export my data` produced a completed 1,499-byte download named
+  `codepilot-account-573f4937-….json`.
+- The downloaded JSON contained the project, its file content, settings and `keyLast4: "port"`;
+  it contained none of the fixture secret or hash/token fields.
+- The panel showed `Exported …json · 1,499 B`. `documentElement.scrollWidth` was 990 at a
+  1,000 px viewport.
+- `DELETE /api/account` returned 200, and the follow-up export and project list both returned
+  401. The fixture account was removed; the in-memory store is empty.
+
+### Gates
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` (frontend + API) | Pass |
+| `npm run lint` | Pass with the same 2 pre-existing `react-refresh` warnings |
+| `npm test` | Pass — 8 files, 84 tests |
+| `npm run test:api` | Pass — 19 tests |
+| `npm run build` | Pass with the existing large-chunk warnings |
+
+### Explicit non-claims and remaining work
+
+- **PostgreSQL is not running.** The migration and `pgStore` remain unverified against a live
+  server; every route test uses the in-memory store, which is lost on restart.
+- No production deployment, TLS termination, secure-cookie run, shared rate-limit store,
+  monitoring, alerting or scheduled backup exists.
+- The account export is a user data download, not a backup/restore system.
+- Browser projects are still IndexedDB-local and are not synchronized to the API. Project
+  archives are the separate browser-side export path.
+- Email verification, password reset, MFA and an account-deletion UI remain absent; deletion
+  exists and is tested at the API level.
+
 

@@ -221,6 +221,95 @@ describe('project isolation and CSRF', () => {
     })
     expect(response.status).toBe(400)
   })
+
+  it('stores a file for the first account only', async () => {
+    const save = await request(base, `/api/projects/${aliceProjectId}/files`, {
+      method: 'POST',
+      cookie: aliceCookie,
+      body: { path: 'main.py', content: 'print("owner")\n' },
+    })
+    expect(save.status).toBe(200)
+
+    const bobRead = await request(base, `/api/projects/${aliceProjectId}/files`, {
+      cookie: bobCookie,
+    })
+    expect(bobRead.status).toBe(404)
+  })
+
+  it('stores a BYO credential for the first account only', async () => {
+    const secret = 'sk-fixture-secret-do-not-export'
+    const save = await request(base, '/api/ai/connection', {
+      method: 'PUT',
+      cookie: aliceCookie,
+      body: {
+        provider: 'openai-compatible',
+        label: 'Fixture provider',
+        baseUrl: 'https://provider.example/v1',
+        model: 'fixture-model',
+        apiKey: secret,
+      },
+    })
+    expect(save.status).toBe(200)
+
+    const bobStatus = await request(base, '/api/ai/status', { cookie: bobCookie })
+    expect(bobStatus.status).toBe(200)
+    const bobText = await bobStatus.text()
+    expect(bobText).toContain('"connection":null')
+    expect(bobText).not.toContain(secret)
+  })
+
+  it('exports the authenticated account without credentials or other users', async () => {
+    const response = await request(base, '/api/account/export', { cookie: aliceCookie })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-disposition')).toContain(
+      'attachment; filename="codepilot-account-',
+    )
+
+    const text = await response.text()
+    const payload = JSON.parse(text) as {
+      user: { email: string }
+      projects: Array<{ name: string; files: Array<{ path: string; content: string }> }>
+      ai: { connection: { keyLast4: string; hasKey: boolean } | null }
+      notIncluded: string[]
+    }
+
+    expect(payload.user.email).toBe('owner@example.test')
+    expect(payload.projects).toHaveLength(1)
+    expect(payload.projects[0]?.name).toBe('Owner project')
+    expect(payload.projects[0]?.files).toEqual([
+      expect.objectContaining({ path: 'main.py', content: 'print("owner")\n' }),
+    ])
+    expect(payload.ai.connection?.hasKey).toBe(true)
+    expect(payload.ai.connection?.keyLast4).toBe('port')
+
+    expect(text).not.toContain('sk-fixture-secret-do-not-export')
+    expect(text).not.toContain('encryptedApiKey')
+    expect(text).not.toContain('passwordHash')
+    expect(text).not.toContain('tokenHash')
+    expect(text).not.toContain('other@example.test')
+
+    const bobExport = await request(base, '/api/account/export', { cookie: bobCookie })
+    const bobText = await bobExport.text()
+    expect(bobText).toContain('"projects":[]')
+    expect(bobText).not.toContain('Owner project')
+    expect(bobText).not.toContain('main.py')
+  })
+
+  it('deletes the account and revokes its session', async () => {
+    const deletion = await request(base, '/api/account', {
+      method: 'DELETE',
+      cookie: aliceCookie,
+      body: { password: 'correct horse battery staple' },
+    })
+    expect(deletion.status).toBe(200)
+
+    const after = await request(base, '/api/account/export', { cookie: aliceCookie })
+    expect(after.status).toBe(401)
+
+    const bobProjects = await request(base, '/api/projects', { cookie: bobCookie })
+    const bobPayload = (await bobProjects.json()) as { projects: unknown[] }
+    expect(bobPayload.projects).toEqual([])
+  })
 })
 
 describe('managed AI streaming and quota', () => {

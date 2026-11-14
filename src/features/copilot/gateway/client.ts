@@ -256,6 +256,38 @@ export async function signOutOfGateway(): Promise<void> {
   await requestJson<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
 }
 
+/**
+ * Download the authenticated user's server-side data as JSON. The API decides
+ * the filename; the browser only turns the response bytes into a file the user
+ * saves. Nothing is written to IndexedDB or localStorage.
+ */
+export async function exportAccountData(): Promise<{ filename: string; blob: Blob }> {
+  let response: Response
+  try {
+    response = await fetch(`${gatewayBaseUrl()}/api/account/export`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+  } catch (cause) {
+    throw new AiError(
+      'network',
+      'The CodePilot API could not be reached, so the export was not downloaded.',
+      { cause },
+    )
+  }
+
+  if (!response.ok) {
+    throw await gatewayHttpError(response)
+  }
+
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const match = /filename="([^"]+)"/i.exec(disposition)
+  return {
+    filename: match?.[1] ?? 'codepilot-account.json',
+    blob: await response.blob(),
+  }
+}
+
 export async function setGatewayMode(mode: 'managed' | 'byo'): Promise<GatewayStatus> {
   const payload = await requestJson<{ status: GatewayStatus }>('/api/ai/mode', {
     method: 'POST',

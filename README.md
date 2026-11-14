@@ -2,12 +2,13 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Milestone 5 — GitHub, blocked at the configuration gate.** Settings now
-reads the real server-side GitHub App configuration: it lists the exact missing environment
-variables, or reports that credentials are present, and always states that install/OAuth and
-repository actions are not implemented. No GitHub connection is simulated. Milestones 1 (AI
-gateway and accounts), 2 (editor action bar, dropdown fix), 3 (local terminal) and 4 (device
-files) are complete. `docs/technical-audit.md` §11–15 records the evidence, and
+**Current milestone: Milestone 6 — account export, with production infrastructure blocked.**
+The settings account panel can download the account's real server-side data as JSON, and the
+API tests prove two accounts cannot read each other's projects, files or AI credentials and
+that deletion revokes the session. PostgreSQL, hosting, TLS, monitoring and backups are still
+absent, so durability and deployment are not claimed. Milestones 1 (AI gateway and accounts),
+2 (editor action bar, dropdown fix), 3 (local terminal), 4 (device files) and 5 (GitHub
+configuration gate) are complete. `docs/technical-audit.md` §11–16 records the evidence, and
 `docs/session-handoff.md` is the current resume point. No deployment, PostgreSQL run, GitHub
 round trip or live model completion has happened yet.
 
@@ -196,8 +197,8 @@ request is attempted.
 ```bash
 npm run typecheck    # frontend + API
 npm run lint
-npm test             # frontend (80 tests)
-npm run test:api     # API (15 tests)
+npm test             # frontend (84 tests)
+npm run test:api     # API (19 tests)
 npm run build
 npm run preview
 ```
@@ -278,8 +279,12 @@ src/
 
 ## Verification
 
-- `npm run typecheck`, `npm run lint`, `npm test` (80 frontend tests, 8 files), `npm run
-test:api` (15 tests) and `npm run build` pass.
+- `npm run typecheck`, `npm run lint`, `npm test` (84 frontend tests, 8 files), `npm run
+test:api` (19 tests) and `npm run build` pass.
+- Milestone 6 verification covered: a real account export download (1,499 bytes) containing
+  the server project, file content, settings and `keyLast4` but no secret, hash or token text;
+  two-account isolation for projects, files and AI credentials; and deletion revoking the
+  session while the other account remains intact. PostgreSQL and deployment were not run.
 - Milestone 5 configuration-gate verification covered: signed-out status is not probed;
   missing GitHub variables are listed by name; configured credentials report “present”
   without returning a secret; Re-check issues a new real request; the panel never offers a

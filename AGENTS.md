@@ -229,6 +229,19 @@ ESLint ignores `dist/` and `node_modules/`.
 - Adding real integration requires a registered GitHub App plus the five `GITHUB_*` variables,
   live install/callback validation and a real round trip before any claim is made.
 
+## Account data (Milestone 6)
+
+- `GET /api/account/export` is session-scoped and built only from user-scoped store methods
+  (`server/api/src/services/accountExport.ts`). A guessed id must never contribute another
+  account's rows.
+- The export may contain the profile, server-side projects/files, settings, AI usage/quota and
+  public AI connection metadata (`hasKey`, `keyLast4`). It must never contain `passwordHash`,
+  a session token/hash, `encryptedApiKey` or server configuration.
+- `Export my data` in `/settings` downloads the real response and reports the real filename and
+  byte size. Do not rebuild the export in the client or mirror it into IndexedDB/localStorage.
+- PostgreSQL and deployment are still unavailable here: do not claim durable persistence,
+  backups or a production deployment from a successful memory-store test.
+
 ## TypeScript / React landmines
 
 - `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`,
