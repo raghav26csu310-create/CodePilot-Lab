@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown } from 'lucide-react'
 
+import { placeMenu } from './selectPlacement'
 import styles from './Select.module.css'
 
 export type SelectOption = {
@@ -70,17 +71,16 @@ export function Select({
       return
     }
     const rect = button.getBoundingClientRect()
-    const viewportPadding = 12
-    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
-    const spaceAbove = rect.top - viewportPadding
-    const placeAbove = spaceBelow < 180 && spaceAbove > spaceBelow
-    const maxHeight = Math.min(340, Math.max(140, placeAbove ? spaceAbove : spaceBelow))
+    const placement = placeMenu(
+      { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width },
+      { width: window.innerWidth, height: window.innerHeight },
+    )
 
     setPosition({
-      left: Math.min(Math.max(viewportPadding, rect.left), window.innerWidth - rect.width - viewportPadding),
-      top: placeAbove ? Math.max(viewportPadding, rect.top - Math.min(maxHeight, 340) - 6) : rect.bottom + 6,
-      width: Math.max(rect.width, 220),
-      maxHeight,
+      left: placement.left,
+      top: placement.top,
+      width: placement.width,
+      maxHeight: placement.maxHeight,
     })
   }, [])
 
