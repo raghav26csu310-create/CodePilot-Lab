@@ -46,6 +46,13 @@ export const CAPABILITIES: CapabilityMeta[] = [
     placeholder: 'Anything specific to focus the review on? (optional)',
   },
   {
+    id: 'refactor',
+    label: 'Refactor',
+    short: 'Refactor',
+    description: 'Restructure the selected code without changing its observable behaviour.',
+    placeholder: 'Describe the refactor you want, or leave blank for a behaviour-preserving pass…',
+  },
+  {
     id: 'tests',
     label: 'Generate tests',
     short: 'Tests',
@@ -102,6 +109,8 @@ const CAPABILITY_GUIDANCE: Record<CapabilityId, string> = {
     'Write code that fits the existing project: same language, module style, naming and imports. Keep it runnable, with no placeholder TODOs unless the user asked for a skeleton. Prefer a complete file proposal when creating a new file.',
   review:
     'Review the supplied code. Report concrete findings grouped as Bugs, Readability, Performance and Security. Each finding needs a file path and line reference when available. Do not invent problems to pad the list; say when a category is clean.',
+  refactor:
+    'Refactor the supplied code without changing observable behaviour. Preserve the public interface, error behaviour, ordering and comments that carry meaning. State what improved and why, list the behaviour that must stay identical, and propose the complete refactored file so the change can be reviewed as a diff.',
   tests:
     'Design tests for the supplied code. List cases as a table or bullets with input, expected outcome and why it matters. Cover unhappy paths and edge cases, not only the happy path. If the user asks for test code, propose a complete test file that matches the project conventions.',
   learn:
@@ -214,6 +223,10 @@ export function buildUserPrompt(input: PromptInput): string {
       return 'Inspect the supplied diagnostics and explain the root cause with a concrete fix.'
     case 'review':
       return 'Review the shared code and report concrete findings.'
+    case 'refactor':
+      return input.context.selection
+        ? 'Refactor the selected code without changing its behaviour.'
+        : 'Refactor the shared file without changing its behaviour.'
     case 'tests':
       return 'Suggest test cases and edge cases for the shared code.'
     case 'generate':

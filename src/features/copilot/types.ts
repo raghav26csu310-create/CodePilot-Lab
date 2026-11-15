@@ -56,6 +56,7 @@ export type CapabilityId =
   | 'debug'
   | 'generate'
   | 'review'
+  | 'refactor'
   | 'tests'
   | 'learn'
 

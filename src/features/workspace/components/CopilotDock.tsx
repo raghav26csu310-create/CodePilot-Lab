@@ -23,6 +23,7 @@ import {
   Square,
   Trash2,
   Wand2,
+  Wrench,
   X,
 } from 'lucide-react'
 import {
@@ -65,6 +66,7 @@ const CAPABILITY_ICONS: Record<CapabilityId, typeof Sparkles> = {
   debug: Bug,
   generate: Wand2,
   review: ShieldCheck,
+  refactor: Wrench,
   tests: FlaskConical,
   learn: GraduationCap,
 }
