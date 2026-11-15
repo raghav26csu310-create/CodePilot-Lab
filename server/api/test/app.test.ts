@@ -502,3 +502,128 @@ describe('GitHub configuration gate', () => {
     }
   })
 })
+
+describe('session management', () => {
+  let sessionApp: RunningApp
+  let sessionBase = ''
+  const password = 'correct horse battery staple'
+
+  beforeAll(async () => {
+    sessionApp = await createApp({ config: testConfig(), store: new MemoryStore() })
+    sessionBase = await listen(sessionApp)
+  })
+
+  afterAll(async () => {
+    if (sessionApp) {
+      await sessionApp.close()
+    }
+  })
+
+  async function register(email: string): Promise<string> {
+    const response = await request(sessionBase, '/api/auth/register', {
+      method: 'POST',
+      body: { email, password, displayName: email.split('@')[0] },
+    })
+    expect(response.status).toBe(201)
+    return cookieFrom(response)
+  }
+
+  async function login(email: string): Promise<string> {
+    const response = await request(sessionBase, '/api/auth/login', {
+      method: 'POST',
+      body: { email, password },
+    })
+    expect(response.status).toBe(200)
+    return cookieFrom(response)
+  }
+
+  type SessionsPayload = {
+    currentSessionId: string | null
+    sessions: Array<{ id: string; createdAt: number; lastSeenAt: number; expiresAt: number }>
+  }
+
+  it('lists only this account sessions without token hashes', async () => {
+    const first = await register('sessions-a@example.test')
+    const second = await login('sessions-a@example.test')
+
+    const response = await request(sessionBase, '/api/account/sessions', { cookie: second })
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    const payload = JSON.parse(text) as SessionsPayload
+
+    expect(payload.sessions).toHaveLength(2)
+    expect(payload.currentSessionId).not.toBeNull()
+    expect(payload.sessions.map((session) => session.id)).toContain(payload.currentSessionId)
+    expect(text).not.toContain('tokenHash')
+    expect(text).not.toContain('token_hash')
+    for (const session of payload.sessions) {
+      expect(typeof session.createdAt).toBe('number')
+      expect(typeof session.lastSeenAt).toBe('number')
+      expect(typeof session.expiresAt).toBe('number')
+    }
+
+    // Another account can neither see nor revoke these sessions.
+    const bobCookie = await register('sessions-b@example.test')
+    const bobSessions = await request(sessionBase, '/api/account/sessions', { cookie: bobCookie })
+    const bobPayload = (await bobSessions.json()) as SessionsPayload
+    expect(bobPayload.sessions).toHaveLength(1)
+
+    const foreignRevoke = await request(
+      sessionBase,
+      `/api/account/sessions/${payload.sessions[0]?.id ?? 'missing'}`,
+      { method: 'DELETE', cookie: bobCookie },
+    )
+    expect(foreignRevoke.status).toBe(404)
+
+    const firstStillValid = await request(sessionBase, '/api/auth/session', { cookie: first })
+    const firstPayload = (await firstStillValid.json()) as { user: { email: string } | null }
+    expect(firstPayload.user?.email).toBe('sessions-a@example.test')
+  })
+
+  it('revokes one named session and revokes every other session', async () => {
+    const owner = await login('sessions-a@example.test')
+    const listed = await request(sessionBase, '/api/account/sessions', { cookie: owner })
+    const before = (await listed.json()) as SessionsPayload
+    const other = before.sessions.find((session) => session.id !== before.currentSessionId)
+    expect(other).toBeDefined()
+
+    const revoke = await request(sessionBase, `/api/account/sessions/${other?.id}`, {
+      method: 'DELETE',
+      cookie: owner,
+    })
+    expect(revoke.status).toBe(200)
+
+    const afterRevoke = await request(sessionBase, '/api/account/sessions', { cookie: owner })
+    const afterRevokePayload = (await afterRevoke.json()) as SessionsPayload
+    expect(afterRevokePayload.sessions.map((session) => session.id)).not.toContain(other?.id)
+
+    // A second live session, then revoke-others keeps the caller signed in.
+    await login('sessions-a@example.test')
+    const revokeOthers = await request(sessionBase, '/api/account/sessions/revoke-others', {
+      method: 'POST',
+      cookie: owner,
+    })
+    expect(revokeOthers.status).toBe(200)
+    const revokeOthersPayload = (await revokeOthers.json()) as { revoked: number }
+    expect(revokeOthersPayload.revoked).toBeGreaterThan(0)
+
+    const remaining = await request(sessionBase, '/api/account/sessions', { cookie: owner })
+    const remainingPayload = (await remaining.json()) as SessionsPayload
+    expect(remainingPayload.sessions).toHaveLength(1)
+    expect(remainingPayload.sessions[0]?.id).toBe(remainingPayload.currentSessionId)
+  })
+
+  it('includes session metadata in the account export without secrets', async () => {
+    const cookie = await login('sessions-a@example.test')
+    const response = await request(sessionBase, '/api/account/export', { cookie })
+    expect(response.status).toBe(200)
+    const text = await response.text()
+    const payload = JSON.parse(text) as {
+      sessions: Array<{ id: string; createdAt: number }>
+    }
+    expect(Array.isArray(payload.sessions)).toBe(true)
+    expect(payload.sessions.length).toBeGreaterThan(0)
+    expect(text).not.toContain('tokenHash')
+    expect(text).not.toContain('passwordHash')
+  })
+})

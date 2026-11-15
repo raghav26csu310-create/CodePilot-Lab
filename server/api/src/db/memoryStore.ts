@@ -169,6 +169,31 @@ export class MemoryStore implements Store {
     return removed
   }
 
+  async listSessions(userId: string): Promise<SessionRecord[]> {
+    return [...this.sessions.values()]
+      .filter((session) => session.userId === userId)
+      .sort((a, b) => b.lastSeenAt - a.lastSeenAt)
+      .map(clone)
+  }
+
+  async deleteSessionForUser(userId: string, sessionId: string): Promise<boolean> {
+    const session = this.sessions.get(sessionId)
+    if (!session || session.userId !== userId) return false
+    this.sessions.delete(sessionId)
+    return true
+  }
+
+  async deleteOtherSessions(userId: string, keepSessionId: string): Promise<number> {
+    let removed = 0
+    for (const [id, session] of this.sessions) {
+      if (session.userId === userId && id !== keepSessionId) {
+        this.sessions.delete(id)
+        removed += 1
+      }
+    }
+    return removed
+  }
+
   async listProjects(userId: string): Promise<ProjectRecord[]> {
     return [...this.projects.values()]
       .filter((project) => project.userId === userId)

@@ -171,11 +171,14 @@ export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
   return req.socket.remoteAddress ?? 'unknown'
 }
 
-export function requireUser(ctx: RequestContext): { user: NonNullable<RequestContext['user']> } {
+export function requireUser(ctx: RequestContext): {
+  user: NonNullable<RequestContext['user']>
+  session: RequestContext['session']
+} {
   if (!ctx.user) {
     throw unauthorized()
   }
-  return { user: ctx.user }
+  return { user: ctx.user, session: ctx.session }
 }
 
 export { notFound }

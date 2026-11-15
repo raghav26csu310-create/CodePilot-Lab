@@ -5,6 +5,7 @@ import { clearSessionCookie, parseCookies, serializeSessionCookie } from '../aut
 import { emailRateKey } from '../auth/authService.ts'
 import { buildAccountExport } from '../services/accountExport.ts'
 import { readJsonBody } from '../http/body.ts'
+import { unauthorized } from '../http/errors.ts'
 import { enforceLimit } from '../http/limits.ts'
 import { requireUser } from '../http/router.ts'
 import { sendJson } from '../http/respond.ts'
@@ -105,6 +106,31 @@ export function registerAuthRoutes(router: Router): void {
     sendJson(ctx.res, 200, payload, {
       'Content-Disposition': `attachment; filename="codepilot-account-${user.id}.json"`,
     })
+  })
+
+  router.add('GET', '/api/account/sessions', 'required', async (ctx) => {
+    const { user, session } = requireUser(ctx)
+    const sessions = await ctx.auth.listSessions(user.id)
+    sendJson(ctx.res, 200, {
+      currentSessionId: session?.id ?? null,
+      sessions,
+    })
+  })
+
+  router.add('DELETE', '/api/account/sessions/:sessionId', 'required', async (ctx) => {
+    const { user } = requireUser(ctx)
+    enforceLimit(ctx, 'general', `sessions:${user.id}`)
+    const sessionId = ctx.params.sessionId ?? ''
+    await ctx.auth.revokeSession(user.id, sessionId)
+    sendJson(ctx.res, 200, { ok: true })
+  })
+
+  router.add('POST', '/api/account/sessions/revoke-others', 'required', async (ctx) => {
+    const { user, session } = requireUser(ctx)
+    enforceLimit(ctx, 'general', `sessions:${user.id}`)
+    if (!session) throw unauthorized('Sign in again to manage sessions.')
+    const revoked = await ctx.auth.revokeOtherSessions(user.id, session.id)
+    sendJson(ctx.res, 200, { ok: true, revoked })
   })
 
   router.add('PATCH', '/api/account', 'required', async (ctx) => {

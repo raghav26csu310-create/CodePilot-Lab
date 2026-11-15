@@ -43,6 +43,8 @@ export type AccountExport = {
     preferredMode: AiStatus['preferredMode']
     note: string
   }
+  /** Session metadata the account owns: timestamps only, never token hashes. */
+  sessions: Array<{ id: string; createdAt: number; lastSeenAt: number; expiresAt: number }>
   notIncluded: string[]
 }
 
@@ -61,10 +63,11 @@ export async function buildAccountExport(options: {
 }): Promise<AccountExport> {
   const { store, ai, user, now } = options
 
-  const [projects, settingsRecord, status] = await Promise.all([
+  const [projects, settingsRecord, status, sessions] = await Promise.all([
     store.listProjects(user.id),
     store.getSettings(user.id),
     ai.getStatus(user.id),
+    store.listSessions(user.id),
   ])
 
   const exportedProjects: AccountExportProject[] = []
@@ -102,6 +105,12 @@ export async function buildAccountExport(options: {
       preferredMode: status.preferredMode,
       note: status.usageNote,
     },
+    sessions: sessions.map((session) => ({
+      id: session.id,
+      createdAt: session.createdAt,
+      lastSeenAt: session.lastSeenAt,
+      expiresAt: session.expiresAt,
+    })),
     notIncluded: [...ACCOUNT_EXPORT_EXCLUSIONS],
   }
 }

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { Store } from '../db/store.ts'
 import type { SessionRecord, UserRecord } from '../db/types.ts'
-import { ApiError, badRequest, conflict, unauthorized } from '../http/errors.ts'
+import { ApiError, badRequest, conflict, notFound, unauthorized } from '../http/errors.ts'
 import { hashSessionToken, newId, newSessionToken } from '../security/ids.ts'
 import {
   DUMMY_PASSWORD_HASH,
@@ -34,6 +34,14 @@ export type AuthServiceOptions = {
   store: Store
   sessionTtlDays: number
   now?: () => number
+}
+
+/** Session metadata safe to return to its owner. Token hashes never leave the store. */
+export type PublicSession = {
+  id: string
+  createdAt: number
+  lastSeenAt: number
+  expiresAt: number
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -154,6 +162,27 @@ export class AuthService {
     const valid = await verifyPassword(password, user.passwordHash)
     if (!valid) throw unauthorized('The password is incorrect.')
     await this.store.deleteUser(userId)
+  }
+
+  async listSessions(userId: string): Promise<PublicSession[]> {
+    const sessions = await this.store.listSessions(userId)
+    return sessions.map((session) => ({
+      id: session.id,
+      createdAt: session.createdAt,
+      lastSeenAt: session.lastSeenAt,
+      expiresAt: session.expiresAt,
+    }))
+  }
+
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    const removed = await this.store.deleteSessionForUser(userId, sessionId)
+    if (!removed) {
+      throw notFound('That session is not part of this account.')
+    }
+  }
+
+  async revokeOtherSessions(userId: string, currentSessionId: string): Promise<number> {
+    return this.store.deleteOtherSessions(userId, currentSessionId)
   }
 
   async updateProfile(userId: string, displayNameInput: string): Promise<PublicUser> {

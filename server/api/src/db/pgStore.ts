@@ -244,6 +244,37 @@ export class PgStore implements Store {
     return result.rowCount ?? 0
   }
 
+  async listSessions(userId: string): Promise<SessionRecord[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM sessions WHERE user_id = $1 ORDER BY last_seen_at DESC',
+      [userId],
+    )
+    return result.rows.map((row) => ({
+      id: row.id as string,
+      userId: row.user_id as string,
+      tokenHash: row.token_hash as string,
+      createdAt: ms(row.created_at),
+      expiresAt: ms(row.expires_at),
+      lastSeenAt: ms(row.last_seen_at),
+    }))
+  }
+
+  async deleteSessionForUser(userId: string, sessionId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      'DELETE FROM sessions WHERE id = $1 AND user_id = $2',
+      [sessionId, userId],
+    )
+    return (result.rowCount ?? 0) > 0
+  }
+
+  async deleteOtherSessions(userId: string, keepSessionId: string): Promise<number> {
+    const result = await this.pool.query(
+      'DELETE FROM sessions WHERE user_id = $1 AND id <> $2',
+      [userId, keepSessionId],
+    )
+    return result.rowCount ?? 0
+  }
+
   async listProjects(userId: string): Promise<ProjectRecord[]> {
     const result = await this.pool.query(
       'SELECT * FROM projects WHERE user_id = $1 ORDER BY updated_at DESC',

@@ -42,6 +42,12 @@ export type Store = {
   touchSession(id: string, at: number): Promise<void>
   deleteSession(id: string): Promise<void>
   deleteExpiredSessions(now: number): Promise<number>
+  /** Sessions owned by one account, newest first. Never leaves the store with token hashes. */
+  listSessions(userId: string): Promise<SessionRecord[]>
+  /** Revokes one session only when it belongs to the account. */
+  deleteSessionForUser(userId: string, sessionId: string): Promise<boolean>
+  /** Revokes every session of the account except the one making the request. */
+  deleteOtherSessions(userId: string, keepSessionId: string): Promise<number>
 
   listProjects(userId: string): Promise<ProjectRecord[]>
   createProject(userId: string, input: ProjectInput): Promise<ProjectRecord>
