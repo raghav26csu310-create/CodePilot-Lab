@@ -16,18 +16,16 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
 ## Current session state
 
-- Status: the active editor-formatting milestone is complete and verified.
-- Files touched: `src/features/editor/formatting/prettier.ts`,
-  `src/features/editor/formatting/prettier.test.ts`,
-  `src/features/editor/editorPreferences.ts`,
-  `src/features/workspace/components/EditorArea.tsx`,
-  `src/features/workspace/components/MonacoWorkbench.tsx`, and the added `prettier`
-  dependency.
-- Gate: `npm run typecheck`, `npm run lint`, `npm test -- --run`, and
-  `npm run test:api -- --run` all pass.
-- Unresolved items: none in this patch; the next milestone is whichever project task the
-  user selects from the current map.
-- Next task: continue with the next milestone or resume a separate user-requested fix.
+- Status: all in-repo milestone work that can be executed without external infrastructure is
+  complete and verified.
+- Files touched: the completed milestone files under the editor, workspace, API, gateway,
+  terminal, device-file, and export/isolation flows, plus the Prettier formatting support.
+- Gate: `npm run typecheck`, `npm run lint`, `npm test -- --run`, `npm run test:api -- --run`,
+  and `npm run build` all pass.
+- Unresolved items: only external production dependencies remain: GitHub App credentials,
+  PostgreSQL deployment, hosting, provider credentials, and live deployment smoke tests.
+- Next task: use the remaining external blockers as the only unresolved path to a full
+  production-grade result; the codebase itself is now in an honest, verified state.
 
 ## Milestone map
 
