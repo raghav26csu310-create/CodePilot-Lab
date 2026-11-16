@@ -34,7 +34,8 @@ import { Link } from 'react-router-dom'
 import { clampFontSize } from '../../editor/editorPreferences'
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { useCopilot } from '../../copilot/CopilotContext'
-import { languageForPath, supportsDocumentFormatting } from '../../editor/languageRegistry'
+import { languageForPath } from '../../editor/languageRegistry'
+import { isPrettierSupported, unsupportedLanguageLabel } from '../../editor/formatting/prettier'
 import { projectLanguageForMonaco } from '../../editor/projectLanguages'
 import { saveBinaryFile, saveTextFile } from '../../../lib/diskAccess'
 import { archiveFileName, createProjectArchive } from '../../../lib/projectArchive'
@@ -489,9 +490,14 @@ function EditorSurface({
   const runtime = projectLanguageForMonaco(language.id)?.runtime ?? null
   const canRun = tab.status === 'ready' && runtime !== null
   const canTrace = tab.status === 'ready' && runtime === 'python'
-  const canFormat = supportsDocumentFormatting(language.id)
+  const canFormat = isPrettierSupported(tab.path)
 
-  const setPreference = (patch: { fontSize?: number; minimap?: boolean; wordWrap?: boolean }) => {
+  const setPreference = (patch: {
+    fontSize?: number
+    minimap?: boolean
+    wordWrap?: boolean
+    formatOnSave?: boolean
+  }) => {
     dispatch({ type: 'ui/set-editor-preference', patch })
   }
 
@@ -683,6 +689,12 @@ function EditorSurface({
       onSelect: () => setPreference({ minimap: !preferences.minimap }),
     },
     {
+      id: 'format-on-save',
+      label: 'Format on save · Prettier',
+      checked: preferences.formatOnSave,
+      onSelect: () => setPreference({ formatOnSave: !preferences.formatOnSave }),
+    },
+    {
       id: 'theme',
       label: `Theme · ${preferences.theme === 'midnight' ? 'Midnight' : 'Graphite'}`,
       onSelect: cycleTheme,
@@ -843,8 +855,8 @@ function EditorSurface({
             className={styles.surfaceButton}
             disabled={tab.status !== 'ready'}
             onClick={formatActive}
-            title={`Format the live buffer · Shift+Alt+F${
-              canFormat ? '' : ` — ${language.label} has no document formatter in this build`
+            title={`Format the live buffer with Prettier · Shift+Alt+F${
+              canFormat ? '' : ` — ${unsupportedLanguageLabel(tab.path) ?? language.label} is not supported by Prettier`
             }`}
           >
             <AlignLeft size={13} aria-hidden="true" />

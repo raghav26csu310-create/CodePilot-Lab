@@ -5,6 +5,10 @@ export type EditorPreferences = {
   minimap: boolean
   wordWrap: boolean
   theme: EditorThemeId
+  /** Runs Prettier before writing the file. */
+  formatOnSave: boolean
+  /** Default formatter for supported files. */
+  formatter: 'prettier'
 }
 
 export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
@@ -12,6 +16,8 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   minimap: true,
   wordWrap: false,
   theme: 'midnight',
+  formatOnSave: false,
+  formatter: 'prettier',
 }
 
 const STORAGE_KEY = 'codepilot.workspace.editor.v1'
@@ -59,6 +65,11 @@ export function readEditorPreferences(): EditorPreferences {
         candidate.theme === 'graphite' || candidate.theme === 'midnight'
           ? candidate.theme
           : DEFAULT_EDITOR_PREFERENCES.theme,
+      formatOnSave:
+        typeof candidate.formatOnSave === 'boolean'
+          ? candidate.formatOnSave
+          : DEFAULT_EDITOR_PREFERENCES.formatOnSave,
+      formatter: 'prettier',
     }
   } catch {
     return DEFAULT_EDITOR_PREFERENCES

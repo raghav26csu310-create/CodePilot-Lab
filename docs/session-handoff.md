@@ -16,12 +16,18 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
 ## Current session state
 
-- Status: a nullability fix in the Monaco save shortcut was applied and verified.
-- Files touched: `src/features/workspace/components/MonacoWorkbench.tsx`.
-- Gate: `npm run typecheck` passes; frontend test suite passes.
-- Unresolved items: none for this task; the next milestone remains whichever work the user
-  selects from the project map.
-- Next task: continue from the current milestone map or resume the next user-requested fix.
+- Status: the active editor-formatting milestone is complete and verified.
+- Files touched: `src/features/editor/formatting/prettier.ts`,
+  `src/features/editor/formatting/prettier.test.ts`,
+  `src/features/editor/editorPreferences.ts`,
+  `src/features/workspace/components/EditorArea.tsx`,
+  `src/features/workspace/components/MonacoWorkbench.tsx`, and the added `prettier`
+  dependency.
+- Gate: `npm run typecheck`, `npm run lint`, `npm test -- --run`, and
+  `npm run test:api -- --run` all pass.
+- Unresolved items: none in this patch; the next milestone is whichever project task the
+  user selects from the current map.
+- Next task: continue with the next milestone or resume a separate user-requested fix.
 
 ## Milestone map
 
