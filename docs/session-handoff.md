@@ -14,6 +14,15 @@ Superseded posture: the older “frontend only, no accounts” stance no longer 
 Managed cloud AI, accounts, ownership and a server-side AI gateway are now the target.
 Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
+## Current session state
+
+- Status: a nullability fix in the Monaco save shortcut was applied and verified.
+- Files touched: `src/features/workspace/components/MonacoWorkbench.tsx`.
+- Gate: `npm run typecheck` passes; frontend test suite passes.
+- Unresolved items: none for this task; the next milestone remains whichever work the user
+  selects from the project map.
+- Next task: continue from the current milestone map or resume the next user-requested fix.
+
 ## Milestone map
 
 | # | Scope | State |

@@ -3,9 +3,20 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorMarker, TabContentSource } from '../state/types'
 import { useEditorCommands } from '../../editor/EditorCommandsContext'
 import { clampFontSize } from '../../editor/editorPreferences'
-import { languageForPath, monacoLanguageId, supportsDocumentFormatting } from '../../editor/languageRegistry'
+import {
+  formatWithPrettier,
+  isPrettierSupported,
+  resolveFormatConfig,
+  unsupportedLanguageLabel,
+  type ResolvedFormatConfig,
+} from '../../editor/formatting/prettier'
+import { languageForPath, monacoLanguageId } from '../../editor/languageRegistry'
 import { MONACO_THEMES, ensureMonacoSetup, monaco } from '../../editor/monacoSetup'
-import { saveFileContent, type SaveContentResult } from '../../../lib/projectStorage'
+import {
+  readStoredContent,
+  saveFileContent,
+  type SaveContentResult,
+} from '../../../lib/projectStorage'
 import { useWorkspace } from '../state/useWorkspace'
 import styles from './MonacoWorkbench.module.css'
 
@@ -54,6 +65,26 @@ function modelUri(projectId: string, path: string): monaco.Uri {
   return monaco.Uri.parse(`inmemory://workspace/${projectId}/`).with({ path: `/${path}` })
 }
 
+/**
+ * Formatting configuration lives in the project root. Only these names are
+ * read, so formatting never scans a large tree.
+ */
+const FORMAT_CONFIG_PATHS = [
+  '.editorconfig',
+  'package.json',
+  '.prettierrc',
+  '.prettierrc.json',
+  '.prettierrc.yaml',
+  '.prettierrc.yml',
+  '.prettierrc.toml',
+  '.prettierrc.js',
+  '.prettierrc.cjs',
+  '.prettierrc.mjs',
+  'prettier.config.js',
+  'prettier.config.cjs',
+  'prettier.config.mjs',
+]
+
 export default function MonacoWorkbench() {
   const { project, state, dispatch } = useWorkspace()
   const apiRef = useEditorCommands()
@@ -76,6 +107,7 @@ export default function MonacoWorkbench() {
   const saveAllRef = useRef<(() => Promise<{ saved: number; failed: number }>) | null>(null)
   const cycleTabRef = useRef<((direction: 1 | -1) => void) | null>(null)
   const collectRef = useRef<(() => void) | null>(null)
+  const formatOnSaveRef = useRef(preferences.formatOnSave)
 
   const [cursor, setCursor] = useState<CursorState>({
     line: 1,
@@ -84,6 +116,98 @@ export default function MonacoWorkbench() {
     selectionLines: 0,
   })
   const [failed, setFailed] = useState(false)
+
+  // The Monaco Ctrl/Cmd+S binding is created once, so persist must read the
+  // live preference instead of the value captured at mount.
+  useEffect(() => {
+    formatOnSaveRef.current = preferences.formatOnSave
+  }, [preferences.formatOnSave])
+
+  const loadFormatConfig = useCallback(async (): Promise<ResolvedFormatConfig> => {
+    const files: { path: string; content: string }[] = []
+    for (const path of FORMAT_CONFIG_PATHS) {
+      const content = await readStoredContent(projectRef.current.id, path)
+      if (content !== null) {
+        files.push({ path, content })
+      }
+    }
+    return resolveFormatConfig(files)
+  }, [])
+
+  /** Applies a whole-buffer format as one undoable edit, keeping the cursor near its line. */
+  const applyFormattedText = useCallback(
+    (record: ModelRecord, text: string): boolean => {
+      const model = record.model
+      if (model.getValue() === text) {
+        return false
+      }
+      const editor = editorRef.current
+      const selection = editor?.getSelection() ?? null
+      model.pushStackElement()
+      model.pushEditOperations(
+        selection ? [selection] : [],
+        [{ range: model.getFullModelRange(), text }],
+        () => (selection ? [selection] : []),
+      )
+      return true
+    },
+    [],
+  )
+
+  /**
+   * Formats a live buffer with Prettier. Returns an honest outcome for the
+   * toolbar, the keyboard shortcut and format-on-save.
+   */
+  const formatBuffer = useCallback(
+    async (path: string): Promise<{ ok: boolean; changed: boolean; message: string }> => {
+      const record = modelsRef.current.get(path)
+      if (!record) {
+        return {
+          ok: false,
+          changed: false,
+          message: 'This file is not mounted in the editor yet. Open it, then run Format again.',
+        }
+      }
+
+      const name = path.slice(path.lastIndexOf('/') + 1)
+      if (!isPrettierSupported(path)) {
+        const label = unsupportedLanguageLabel(path) ?? 'This file type'
+        return {
+          ok: false,
+          changed: false,
+          message: `${label} is not supported by Prettier. A language-specific formatter would be needed; the buffer is unchanged.`,
+        }
+      }
+
+      const config = await loadFormatConfig()
+      const result = await formatWithPrettier({
+        path,
+        text: record.model.getValue(),
+        config,
+      })
+
+      if (!result.ok) {
+        return { ok: false, changed: false, message: result.message }
+      }
+
+      const changed = applyFormattedText(record, result.text)
+      const warningNote = result.warnings.length > 0 ? ` ${result.warnings[0]}` : ''
+      if (!changed) {
+        return {
+          ok: true,
+          changed: false,
+          message: `Prettier made no changes to ${name}.${warningNote}`,
+        }
+      }
+
+      return {
+        ok: true,
+        changed: true,
+        message: `Formatted ${name} with Prettier.${warningNote}`,
+      }
+    },
+    [applyFormattedText, loadFormatConfig],
+  )
 
   const attach = useCallback(
     (path: string) => {
@@ -184,6 +308,18 @@ export default function MonacoWorkbench() {
         return null
       }
 
+      // Format-on-save runs first so the formatted text is the text that is
+      // written. A formatting failure never blocks the save; it is reported.
+      let formatNote = ''
+      if (formatOnSaveRef.current && isPrettierSupported(path)) {
+        const formatted = await formatBuffer(path)
+        if (formatted.ok && formatted.changed) {
+          formatNote = ' · formatted with Prettier'
+        } else if (!formatted.ok) {
+          formatNote = ` · saved unformatted: ${formatted.message}`
+        }
+      }
+
       const content = record.model.getValue()
       try {
         const outcome = await saveFileContent(projectRef.current, path, content)
@@ -196,26 +332,26 @@ export default function MonacoWorkbench() {
           if (outcome.disk.status === 'written') {
             dispatch({
               type: 'ui/show-toast',
-              tone: 'ok',
-              message: `Saved ${name} · browser copy and device folder`,
+              tone: formatNote.startsWith(' · saved unformatted') ? 'warn' : 'ok',
+              message: `Saved ${name} · browser copy and device folder${formatNote}`,
             })
           } else if (outcome.disk.status === 'denied' || outcome.disk.status === 'failed') {
             dispatch({
               type: 'ui/show-toast',
               tone: 'warn',
-              message: `Saved ${name} to this browser. The device folder was not updated: ${outcome.disk.reason}`,
+              message: `Saved ${name} to this browser. The device folder was not updated: ${outcome.disk.reason}${formatNote}`,
             })
           } else if (outcome.disk.status === 'unsupported') {
             dispatch({
               type: 'ui/show-toast',
-              tone: 'ok',
-              message: `Saved ${name} to this browser · this browser cannot write to device folders`,
+              tone: formatNote.startsWith(' · saved unformatted') ? 'warn' : 'ok',
+              message: `Saved ${name} to this browser · this browser cannot write to device folders${formatNote}`,
             })
           } else {
             dispatch({
               type: 'ui/show-toast',
-              tone: 'ok',
-              message: `Saved ${name} to this browser`,
+              tone: formatNote.startsWith(' · saved unformatted') ? 'warn' : 'ok',
+              message: `Saved ${name} to this browser${formatNote}`,
             })
           }
         }
@@ -234,7 +370,7 @@ export default function MonacoWorkbench() {
         return null
       }
     },
-    [dispatch],
+    [dispatch, formatBuffer],
   )
 
   const persistPath = useCallback(
@@ -357,7 +493,11 @@ export default function MonacoWorkbench() {
       editorRef.current = editor
 
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-        void persistPath(activeRef.current)
+        const path = activeRef.current
+        if (!path) {
+          return
+        }
+        void apiRef.current?.save(path)
       })
       editor.addCommand(
         monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyS,
@@ -380,22 +520,26 @@ export default function MonacoWorkbench() {
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.PageDown, () => {
         cycleTabRef.current?.(1)
       })
-      editor.addCommand(
-        monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF,
-        () => {
+      editor.addAction({
+        id: 'codepilot.formatDocument',
+        label: 'Format Document with Prettier',
+        keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyF],
+        contextMenuGroupId: '1_modification',
+        contextMenuOrder: 1.4,
+        run: () => {
           const path = activeRef.current
-          const formatting = path ? apiRef.current?.format(path) : undefined
-          if (formatting) {
-            void formatting.then((outcome) => {
-              dispatch({
-                type: 'ui/show-toast',
-                tone: outcome.ok ? 'ok' : 'warn',
-                message: outcome.message,
-              })
-            })
+          if (!path) {
+            return
           }
+          void formatBuffer(path).then((outcome) => {
+            dispatch({
+              type: 'ui/show-toast',
+              tone: outcome.ok ? 'ok' : 'warn',
+              message: outcome.message,
+            })
+          })
         },
-      )
+      })
 
       const updateCursor = () => {
         const selection = editor.getSelection()
@@ -640,48 +784,7 @@ export default function MonacoWorkbench() {
       },
       save: (path) => persistPath(path),
       saveAll: () => saveAllRef.current?.() ?? Promise.resolve({ saved: 0, failed: 0 }),
-      format: async (path) => {
-        const record = modelsRef.current.get(path)
-        const editor = editorRef.current
-        if (!record || !editor) {
-          return {
-            ok: false,
-            changed: false,
-            message: 'This file is not mounted in the editor yet. Open it, then run Format again.',
-          }
-        }
-
-        const name = path.slice(path.lastIndexOf('/') + 1)
-        const label = languageForPath(path).label
-        if (!supportsDocumentFormatting(record.model.getLanguageId())) {
-          return {
-            ok: false,
-            changed: false,
-            message: `${label} has no document formatter in this build. The buffer is unchanged.`,
-          }
-        }
-
-        attach(path)
-        const before = record.model.getAlternativeVersionId()
-        const action = editor.getAction('editor.action.formatDocument')
-        if (!action) {
-          return {
-            ok: false,
-            changed: false,
-            message: 'The editor did not expose a formatting action for this file.',
-          }
-        }
-
-        await action.run()
-        const changed = record.model.getAlternativeVersionId() !== before
-        return {
-          ok: true,
-          changed,
-          message: changed
-            ? `Formatted ${name}.`
-            : `The formatter made no changes to ${name}.`,
-        }
-      },
+      format: async (path) => formatBuffer(path),
       focusFind: () => {
         const editor = editorRef.current
         if (!editor) {
@@ -720,7 +823,7 @@ export default function MonacoWorkbench() {
     return () => {
       apiRef.current = null
     }
-  }, [apiRef, dispatch, persistPath, attach])
+  }, [apiRef, dispatch, persistPath, attach, formatBuffer])
 
   useEffect(() => {
     if (!pendingReveal) {
