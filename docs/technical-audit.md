@@ -8,6 +8,10 @@ separate what exists from what is still promised by the interface.
 > This document reports only what was inspected or executed. It does not claim that a
 > deployed service, a real terminal, GitHub integration, multi-user isolation, or a
 > production AI gateway exists. Where a capability is absent, that is stated as absent.
+>
+> The verdict below is the original pre-Milestone-1 snapshot, not a live status page.
+> Later implementation and verification updates are recorded in §§10–16; see §15 for
+> the current GitHub integration and its live-verification limits.
 
 ---
 
@@ -20,7 +24,7 @@ separate what exists from what is still promised by the interface.
 | Is AI production-safe today? | **No.** The browser calls user-configured providers directly; BYO keys can be persisted in plaintext IndexedDB. |
 | Is the execution runner a sandbox? | **No.** It is a loopback-only, resource-limited local runner with process-tree kills and timeouts. Code runs with the operator's OS permissions. |
 | Is there a terminal? | **Yes, local only.** A guarded loopback PTY shipped in Milestone 3. The cloud terminal is still absent and rendered as unavailable. |
-| Is there GitHub integration? | **Configuration gate only.** `/settings` reports whether the five GitHub App variables are present on the API process, without returning values. No OAuth/install flow, token storage, clone, branch, commit, push or PR code exists. |
+| Is there GitHub integration? | **At audit time: configuration gate only.** The current local Git/GitHub CLI implementation and its live-verification limits are recorded in §15. |
 | Can users edit their device files? | **Yes, with explicit permission.** Open/import, save through a linked folder that grants write access, Save As/export, archive import/export and drag-and-drop shipped in Milestone 4. IndexedDB remains authoritative; disk writes happen only through a granted handle. |
 | Is the product multi-user? | **No.** Projects, settings and practice data are browser-local. No accounts, sessions or server-side isolation are active. |
 | Is it production-ready? | **No.** It is a frontend beta. Public deployment, cloud AI, cloud files, terminal, GitHub and multi-user data isolation are not implemented or verified. |
@@ -184,20 +188,21 @@ the server (existing `CredentialCipher`) when the user opts in; direct browser t
 only as an explicitly labelled advanced/local mode, with a clear warning and no false claim
 of secure storage. Remove the IndexedDB plaintext key path or gate it behind Developer Mode.
 
-### C4 — GitHub integration is entirely absent (Critical for the stated product)
+### C4 — GitHub integration was absent at the audit baseline (Critical for the stated product)
 
-**Current state.** No `octokit`, OAuth callback, GitHub App, token storage, repository
+**Audit-time state.** No `octokit`, OAuth callback, GitHub App, token storage, repository
 listing, clone, branch, commit, push, pull, history or pull-request code exists in `src/` or
 `server/`. `docs/` only mentions GitHub as a hosting option.
 
-**Root cause.** The integration was never in the Phase 1–7 scope. Nothing currently
-pretends it exists, which is correct, but the new mission requires it.
+**Root cause at audit time.** The integration was not in the Phase 1–7 scope. Nothing then
+pretended it existed, which was correct, but the subsequent mission required it.
 
-**Remediation.** Milestone 5. Recommended: a GitHub App with short-lived installation tokens,
+**Original recommendation (superseded).** Milestone 5 was initially proposed as a GitHub App
+with short-lived installation tokens,
 server-side private key, minimum permissions (`contents`, `metadata`, and pull requests only
 if PR workflows are in scope), verified connection state from a real API call, and no token
-in the browser. A plain OAuth App is an alternative but yields long-lived user tokens and
-coarser permissions; the App is the better default.
+in the browser. The implemented, user-selected local Git + GitHub CLI device-flow design and
+its limitations are documented in §15.
 
 ### H1 — AI has no gateway, managed mode, quotas or cost control (High)
 
@@ -659,7 +664,7 @@ real and tested.
 | Decision | Choice | Consequence |
 | --- | --- | --- |
 | Terminal | **Local companion + cloud terminal, both** | Milestone 3 must ship both modes behind one UI with an explicit mode badge. The local PTY companion and the isolated cloud PTY are separate services; neither is the existing `/run` endpoint. |
-| GitHub | **GitHub App** | Short-lived installation tokens, server-side private key, minimum permissions (`contents`, `metadata`, and pull requests only if PR workflows are in scope). No token in the browser or logs. |
+| GitHub | **Local Git + GitHub CLI device flow** | User-selected for Phase 3; implementation status and unverified live actions are in §15. This supersedes the initial GitHub App recommendation. |
 | AI default | **Managed CodePilot AI first, BYO second** | The gateway is the default preset. The direct browser provider remains an explicitly labelled advanced/local fallback, not the primary path. |
 | Terminal cloud infrastructure | Deferred to Milestone 3 execution | Requires container/VM infrastructure and is not available in this environment. |
 
@@ -1023,68 +1028,49 @@ parser, and the File System Access API is used directly where the browser expose
 
 ---
 
-## 15. Milestone 5 status (GitHub configuration gate)
+## 15. Milestone 5 status (local GitHub CLI integration)
 
-Full GitHub integration is **not implemented**. A registered GitHub App, its client secret,
-its private key and a callback URL are required before an install/OAuth round trip can be
-made, and none of them exist in this environment. The milestone therefore delivered an honest
-configuration gate plus the server-side scaffolding it needs, and stopped there.
+The original API-side GitHub configuration gate has been superseded. GitHub OAuth is delegated
+to the installed GitHub CLI's device flow, and Git/GitHub operations run through the existing
+loopback companion. No CodePilot callback URL, GitHub App, API-held token or browser-held
+GitHub access token is required.
 
-### What exists
+### Implemented
 
-- `server/api/src/github/status.ts` (`describeGithubConfig`) checks the five App variables and
-  returns `configured`, `missing` (variable names only), a `present` boolean map,
-  `actionsAvailable: false` and a note. It returns **no credential value**.
-- `GET /api/github/status` is registered with auth mode `required`, so anonymous callers get
-  401. It is the only GitHub route; there is no connect, install, callback, repository,
-  commit, push or pull-request route.
-- `src/features/github/client.ts` types the response; `GithubPanel.tsx` renders it in
-  `/settings` beside the account panel. States: API unreachable, signed out, loading,
-  request error, not configured (missing names listed), credentials present. The only control
-  is `Re-check`, which performs a new real request.
-- `.env.example` documents `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_CLIENT_ID`,
-  `GITHUB_CLIENT_SECRET` and `GITHUB_CALLBACK_URL` with empty values and an explicit warning
-  that the integration is not implemented.
+- `server/githubBridge.mjs` serves `/github/*` and `/git/*` from the local sidecar. Requests
+  require an exact allow-listed browser `Origin` and the per-start terminal pairing token in
+  `X-CodePilot-Pairing`. CORS permits that header; the existing pairing token remains in
+  tab-only `sessionStorage`.
+- GitHub CLI status checks the installed CLI, actual `gh auth status`, and a whitelisted
+  public profile response. Authentication uses
+  `gh auth login --hostname github.com --git-protocol https --web --expiring`; the user runs this in a
+  local terminal and confirms with Re-check. GitHub CLI uses the OS credential store when
+  available and can fall back to its config file. Disconnect calls `gh auth logout` locally;
+  that does not revoke the OAuth grant at GitHub.
+- Repository list/search, create and clone invoke `gh` with separate arguments. The browser
+  never receives an access token; the CLI owns its credential storage.
+- Git features include status, branch list/switch/create, stage/unstage, diffs, commit,
+  fetch/pull/push and bounded history. A repository root must be entered as an explicit
+  absolute OS path. Branches and file pathspecs are validated, command output is capped, and
+  remote operations are restricted to a GitHub HTTPS or SSH `origin`.
+- The Settings GitHub panel exposes connection, repository and source-control controls. It
+  explains the local-path boundary; a cloned repository must still be imported through the
+  existing Workspace → Import folder flow to appear in the browser project picker.
+- The previous API GitHub route, App variables and configuration-only tests were removed to
+  avoid advertising a second, disconnected integration.
 
-### Tests
+### Verification and limitations
 
-`server/api/test/app.test.ts` adds three cases: 401 without a session; the complete
-missing-variable list and `actionsAvailable: false` on an unconfigured process; and a
-configured process that reports every flag true while the response body contains neither the
-fixture client secret nor the fixture private-key text.
-
-### Browser evidence (in-app 912×766)
-
-- Signed out: the panel asked the user to sign in and made no status request.
-- Signed in, empty API environment: badge `NOT CONFIGURED`, all five variable names listed,
-  and the note that the install flow and repository actions are not implemented.
-- API restarted with process-only test values: badge `CREDENTIALS PRESENT`, no variables
-  listed, and “Repository, commit and pull-request actions available: no.”
-- `Re-check` raised the observed `/api/github/status` request count from 1 to 2. The rendered
-  page contained neither the fixture client secret nor the private-key text. In the 912 px
-  viewport `documentElement.scrollWidth` stayed at 902.
-
-### Gates (Milestone 5)
-
-| Gate | Command | Result |
-| --- | --- | --- |
-| Typecheck (frontend + API) | `npm run typecheck` | Pass |
-| Lint | `npm run lint` | Pass with the same 2 pre-existing `react-refresh` warnings |
-| Tests | `npm test` | Pass — 8 files, 80 tests |
-| API tests | `npm run test:api` | Pass — 15 tests |
-| Build | `npm run build` | Pass with the existing large-chunk warnings |
-
-### Explicit non-claims
-
-- No GitHub App is registered here, no OAuth or install flow exists, and no installation token
-  has ever been minted.
-- No repository is listed, cloned, created or modified; no branch, commit, push or pull
-  request was made.
-- Possessing the five variables is not a working integration. `actionsAvailable` stays false
-  and the UI says the build does not connect to GitHub.
-- No GitHub token or private key is stored in the browser, IndexedDB, `localStorage` or logs.
-  The temporary verification values lived in one API process environment and are gone.
-- Token revocation, webhooks, permission scoping and account linking remain unimplemented.
+- `server/githubBridge.test.mjs` covers origin/pairing rejection, actual temporary-repository
+  status/stage/diff/branch/commit/history operations, path traversal rejection and a mocked
+  unauthenticated GitHub CLI status.
+- Git 2.55.0 is installed. `gh` is not installed in this environment, so live device
+  authorization, profile lookup, repository listing/creation/cloning, remote operations and
+  credential expiry have not been verified. No GitHub Developer Settings callback is needed
+  for the selected CLI flow.
+- Git is user-local and not a hardened sandbox: selected repositories may have local hooks,
+  and GitHub CLI uses its own platform credential storage. The UI discloses the local machine
+  and path scope; no operation is reported successful before the CLI returns success.
 
 ---
 

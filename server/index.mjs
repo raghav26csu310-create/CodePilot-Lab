@@ -22,6 +22,7 @@ import {
   traceCode,
 } from './executor.mjs'
 import { PROBLEM_IDS, PROBLEM_SETS } from './problems.mjs'
+import { createGithubBridge } from './githubBridge.mjs'
 import { createTerminalHub } from './terminal.mjs'
 
 const PORT = Number(process.env.EXEC_PORT || 5310)
@@ -63,6 +64,12 @@ function isLoopbackHost(host) {
  * the service console until the operator pastes it into the UI.
  */
 const terminal = createTerminalHub({ origins: ALLOWED_ORIGINS })
+const githubBridge = createGithubBridge({
+  pairingToken: terminal.describe().token,
+  origins: ALLOWED_ORIGINS,
+  readJsonBody,
+  sendJson,
+})
 
 function authorized(request) {
   if (isLoopbackHost(HOST)) {
@@ -82,7 +89,7 @@ function applyCors(request, response) {
     response.setHeader('Vary', 'Origin')
   }
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CodePilot-Pairing')
   response.setHeader('Access-Control-Max-Age', '600')
   // Chrome Private Network Access preflights loopback requests from a public
   // HTTPS page. Only answer when the calling origin is explicitly allowed.
@@ -173,6 +180,10 @@ const server = createServer(async (request, response) => {
   }
 
   try {
+    if (await githubBridge.handle(request, response, url)) {
+      return
+    }
+
     if (request.method === 'GET' && url.pathname === '/health') {
       sendJson(response, 200, await healthReport())
       return
@@ -295,6 +306,7 @@ server.on('error', (error) => {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     cancelAllJobs()
+    githubBridge.closeAll()
     terminal.closeAll()
     server.close(() => process.exit(0))
     // Do not leave a hung keep-alive connection holding the process open.

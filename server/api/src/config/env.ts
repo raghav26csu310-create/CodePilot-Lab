@@ -63,11 +63,6 @@ const EnvSchema = z.object({
   MANAGED_AI_MONTHLY_TOKENS: z.coerce.number().int().min(0).max(100_000_000).default(500_000),
   MANAGED_AI_FALLBACK_MODELS: csv,
 
-  GITHUB_APP_ID: z.string().default(''),
-  GITHUB_APP_PRIVATE_KEY: z.string().default(''),
-  GITHUB_CLIENT_ID: z.string().default(''),
-  GITHUB_CLIENT_SECRET: z.string().default(''),
-  GITHUB_CALLBACK_URL: z.string().default(''),
 })
 
 export type ServerEnv = z.infer<typeof EnvSchema>
@@ -197,15 +192,6 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
   } catch {
     if (managedAiValues.some((value) => value.trim())) {
       throw new ConfigurationError('MANAGED_AI_BASE_URL must be a valid http(s) URL.')
-    }
-  }
-
-  if (parsed.GITHUB_CALLBACK_URL) {
-    try {
-      const callbackUrl = new URL(parsed.GITHUB_CALLBACK_URL)
-      if (!['http:', 'https:'].includes(callbackUrl.protocol)) throw new Error('protocol')
-    } catch {
-      throw new ConfigurationError('GITHUB_CALLBACK_URL must be a valid http(s) URL.')
     }
   }
 

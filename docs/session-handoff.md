@@ -36,16 +36,20 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
 ## Current session state
 
-- Status: the repository is still in a verified state, with a targeted parser hardening fix
-  applied for proposal-attribute escapes and unsafe dot-segment paths.
-- Files touched: the proposal parser (`src/features/copilot/proposals.ts`), its regression tests
-  (`src/features/converter/diff.test.ts`), and this handoff note.
-- Gate: `npm test -- --run` passes with the new regression checks, and the wider frontend
-  suite remains green.
-- Unresolved items: only external production dependencies remain: GitHub App credentials,
-  PostgreSQL deployment, hosting, provider credentials, and live deployment smoke tests.
-- Next task: preserve the current verified baseline while addressing any additional real-world
-  edge cases surfaced by broader runtime validation or external service wiring.
+- Status: Phase 3 local Git/GitHub CLI integration is implemented and verified; this handoff
+  records the final validation for its commit.
+- The previous API GitHub configuration gate was removed. The local sidecar now checks GitHub
+  CLI authentication and exposes guarded repository and Git operations.
+- The UI requires the per-start sidecar pairing token and an explicit absolute repository path.
+  GitHub CLI access tokens remain under CLI-managed local storage and never enter browser code.
+- `npm run verify` passes: 130 frontend/sidecar tests, 30 API tests, typecheck, lint and build.
+  Lint retains the two existing React Fast Refresh warnings; the build retains its existing
+  large-chunk warnings. `git diff --check` passes.
+- Browser smoke checks paired the current sidecar, displayed the real `gh`-missing state, and
+  loaded this repository's actual Git status without staging or changing files.
+- GitHub CLI is not installed here, so no live auth or remote GitHub action has been verified.
+- Next: install GitHub CLI and complete its device flow, then verify real repository/remote
+  operations with a user-authorized test repository.
 
 ## Milestone map
 
@@ -56,14 +60,16 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | 2 | `Select` scroll-close root cause, New Project dialog viewport, editor action bar | **Done and verified (§12)** |
 | 3 | Real terminal (local companion shipped; cloud mode rendered unavailable) | **Done and verified (§13)** |
 | 4 | Device file access (open/import/save/save-as/export/reconnect) | **Done and verified (§14)** |
-| 5 | GitHub integration (GitHub App, server-side key) | **Configuration gate only (§15)** — integration blocked on App credentials |
+| 5 | GitHub integration (local Git + GitHub CLI device flow) | **Implemented, live account verification pending (§15)** |
 | 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | **Account export + isolation evidence (§16)** — PostgreSQL/deployment blocked |
 | 7 | End-to-end verification of the 17 journeys | In progress — GitHub/deployment journeys blocked |
 
 ## Environment state at wrap-up
 
 - Node.js `v24.19.0`, npm project `codepilot-lab@0.7.0`.
-- Dev servers are **stopped**. Restart with three terminals:
+- Our temporary Vite/companion smoke-test servers are **stopped**. `npm run doctor` found
+  port 5173 occupied but its health endpoint unreachable; that listener was left untouched.
+  Ports 5310 and 8787 were available. Restart with three terminals:
   - `npm run api:dev` → API on `127.0.0.1:8787` (in-memory store, ephemeral credential key)
   - `npm run dev` → Vite on `http://localhost:5173`, proxies `/api` to the API
   - `npm run exec` → execution sidecar on `127.0.0.1:5310` (Run/Trace **and** the terminal).
@@ -78,8 +84,8 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
   model completion has ever run here.
 - Milestone 4 browser checks used stubbed native pickers plus a real OPFS
   `FileSystemDirectoryHandle`. Native OS picker prompts were never driven by automation.
-- Milestone 5 browser checks used fake GitHub values in one API process environment only.
-  They were never written to `.env` or disk, and that process is stopped.
+- GitHub CLI (`gh`) is not installed, and no live GitHub authentication or repository operation
+  has been performed.
 - The Milestone 6 export fixture account and its server project were deleted through the real
   API; the in-memory store is empty again.
 
@@ -367,38 +373,27 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - Archives contain the saved IndexedDB copy; unsaved Monaco drafts are not included.
 - No cloud file storage, cross-device sync or multi-user sharing exists.
 
-## What Milestone 5 delivered (configuration gate only)
+## What Milestone 5 delivered (local GitHub CLI integration)
 
-Full GitHub integration needs a registered GitHub App, a client secret and a private key.
-None of those exist in this environment, so no OAuth, install, clone, branch, commit, push,
-pull-request or token-revocation action was built or claimed.
-
-What does exist and was verified:
-
-- `server/api/src/github/status.ts` checks the five GitHub App variables and returns only
-  presence flags and the names of missing variables. It never returns a value.
-- `GET /api/github/status` requires a session (`required`), so configuration is not exposed
-  to anonymous callers. It reports `actionsAvailable: false` even when credentials are
-  present, because no GitHub action exists.
-- `src/features/github/client.ts` and `GithubPanel.tsx` render the real state in `/settings`:
-  signed out, API unreachable, missing variables, or credentials present. The only control
-  is `Re-check`, which performs a real request.
-- `.env.example` lists the five variables with empty values and a warning not to advertise a
-  working connection.
-- API tests cover the 401, the full missing-variable list, the configured report, and the
-  absence of the fixture secret and private-key values from the response.
-
-Browser evidence:
-
-- Signed out: “Sign in to the CodePilot Cloud account above to check whether the API process
-  has GitHub App credentials.” No request was made.
-- Signed in with an empty API environment: badge `NOT CONFIGURED`, all five variable names
-  listed, note that the install flow is not implemented.
-- API restarted with test values: badge `CREDENTIALS PRESENT`, no variables listed, and
-  “Repository, commit and pull-request actions available: no.”
-- `Re-check` raised the real `/api/github/status` request count from 1 to 2. The page did not
-  contain the fixture client secret or private-key text. `scrollWidth` stayed at 902 in the
-  912 px viewport.
+- `server/githubBridge.mjs` exposes GitHub CLI status, repository listing/search/create/clone,
+  and Git status, branches, stage/unstage, diffs, commits, fetch/pull/push and history.
+- Every sidecar GitHub/Git request requires an allow-listed Origin and the existing per-start
+  pairing token. Operations use argument arrays, explicit repository-root paths, validated
+  branch/file inputs, bounded command output, and GitHub-only remote URLs for network actions.
+- GitHub CLI device authentication uses
+  `gh auth login --hostname github.com --git-protocol https --web --expiring`. The browser only sees a
+  profile and authentication state; the CLI manages its credentials, using the OS credential
+  store when available and potentially falling back to its config file. Local disconnect
+  removes the CLI's stored login but does not revoke the OAuth grant at GitHub.
+- `/settings` includes a repository browser, create/clone actions and local source-control
+  controls. A cloned repository still must be added to the browser's project picker through
+  Workspace → Import folder; the OS path is never inferred from a browser directory handle.
+- The previous server API configuration endpoint and GitHub App environment variables were
+  removed because they represented a duplicate, disconnected architecture.
+- Tests cover origin/pairing denial, path traversal, status/stage/diff, branch, commit/history,
+  and a mocked unauthenticated GitHub CLI. Git 2.55.0 is installed; `gh` is absent, so live
+  OAuth, profile, repository and remote operations remain unverified. No callback URL or GitHub
+  Developer Settings setup is required for this CLI flow.
 
 ## What Milestone 6 delivered (account export and isolation evidence)
 
@@ -461,40 +456,47 @@ Browser evidence (1000×700 in-app viewport at verification time):
 - A UI partial-output conversion caused by a real mid-stream failure (unit-tested only).
 - PostgreSQL persistence — PostgreSQL is not installed here.
 - Multi-instance rate limiting, deployment, TLS, secure cookies, CSP.
-- Every GitHub action beyond reading configuration: no OAuth/install flow, repository
-  listing, clone, branch, commit, push, pull request or token revocation was built or tested
-  against GitHub. Cloud storage and a multi-user frontend are also absent.
+- Live GitHub device authorization and remote actions: `gh` is not installed. Local Git
+  status/stage/diff/branch/commit/history and remote-destination guards are covered in
+  temporary-repository tests, but no real clone, fetch, pull or push was attempted.
 - Native OS picker prompts and explicit permission revocation for device files; write-through
   itself was verified through OPFS handles.
 - Cloud terminal: no per-user container/VM runtime exists in this environment.
 - The local PTY on Linux/macOS: no prebuild is installed and allow-scripts blocks compiling.
 - Email verification, password reset, MFA, account export UI.
 
-## Next task — Milestone 5 (GitHub), blocked after the configuration gate
+## Next task — complete live verification for Milestone 5
 
-The configuration gate is built, verified and committed. Full GitHub integration is still
-blocked: this environment has no GitHub App registration, client ID/secret or private key,
-and no network identity that could register one. Do not fabricate a connection.
+The local Git/GitHub CLI integration is implemented and its offline/local behaviors are
+covered. No CodePilot OAuth callback or GitHub App is used. The remaining work is live
+verification after GitHub CLI is installed and the user completes device authorization.
 
-What exists now:
+Implemented now:
 
-- `GET /api/github/status` (session required) reports presence flags for the five App
-  variables and the names of any that are missing. It never returns a value and always
-  reports `actionsAvailable: false`.
-- `/settings` renders the real state: signed out, API unreachable, not configured (with the
-  missing names) or credentials present. `Re-check` performs a real request.
-- `.env.example` documents the variables; API tests cover 401, the missing list, the
-  configured report and the absence of fixture secrets from the response.
+- The local companion's `/github/*` and `/git/*` routes require a configured Origin and the
+  existing per-start pairing token; GitHub credentials are never returned to the browser or
+  stored in CodePilot storage.
+- The `/settings` GitHub panel checks the actual CLI profile, supports listing/searching,
+  creating and cloning repositories, and provides local Git status/branch/stage/unstage/diff/
+  commit/fetch/pull/push/history actions for a user-entered absolute path.
+- Local Git operations and remote URL/pairing/path guards have focused tests.
 
-What remains blocked until credentials and a real round trip are available:
+Live verification remains blocked until `gh` is installed and the user authorizes it:
 
-1. Install/callback flow and state/signature validation against GitHub.
-2. Repository listing, clone/import, branch, commit, push and pull-request actions.
-3. Token revocation, webhook handling, permission scoping and account-linking UI.
+1. Install GitHub CLI (Windows: `winget install --id GitHub.cli`), restart the terminal, and
+   check `gh --version`.
+2. Start the local companion (`npm run exec`, or `npm run dev:all`) and paste its pairing
+   token into Settings → GitHub.
+3. Run `gh auth login --hostname github.com --git-protocol https --web --expiring` in a local terminal,
+   complete the device flow, and press Re-check.
+4. Verify repository list/search and clone to a chosen OS path. Import that folder through
+   Workspace → Import folder if it should also appear in the CodePilot project picker.
+5. Test push/pull only on a user-authorized repository. No callback URL or GitHub Developer
+   Settings registration is required.
 
-Rules for whoever picks this up: keep the GitHub App private key server-side, use short-lived
-installation tokens, never store a GitHub token in the browser, IndexedDB or logs, and do not
-turn `actionsAvailable` on until the action it describes really works.
+Disconnect removes the local GitHub CLI login only; revoke the GitHub CLI OAuth grant separately
+from GitHub Settings if desired. GitHub CLI uses the OS credential store when available and
+may fall back to its config file; this limitation is disclosed in the UI.
 
 Terminal and device-file follow-ups (independent of GitHub): installer/signing, cloud terminal
 runtime, scrollback persistence, Linux/macOS PTY verification, and native-picker

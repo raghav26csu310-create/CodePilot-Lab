@@ -13,7 +13,6 @@ import { sendJson } from './http/respond.ts'
 import type { AppContext } from './http/types.ts'
 import { registerAiRoutes } from './routes/aiRoutes.ts'
 import { registerAuthRoutes } from './routes/authRoutes.ts'
-import { registerGithubRoutes } from './routes/githubRoutes.ts'
 import { registerHealthRoutes } from './routes/healthRoutes.ts'
 import { registerProjectRoutes } from './routes/projectRoutes.ts'
 import { registerSettingsRoutes } from './routes/settingsRoutes.ts'
@@ -102,7 +101,6 @@ export async function createApp(options: CreateAppOptions): Promise<RunningApp> 
   registerProjectRoutes(router)
   registerSettingsRoutes(router, settings)
   registerAiRoutes(router)
-  registerGithubRoutes(router)
 
   const server = createServer((req, res) => {
     void router.handle(context, req, res).catch((error: unknown) => {

@@ -213,21 +213,33 @@ ESLint ignores `dist/` and `node_modules/`.
 - Native OS pickers are browser-specific and were not automated here. Write-through was
   verified through an OPFS `FileSystemDirectoryHandle`; denial/revocation remain manual checks.
 
-## GitHub (Milestone 5 — configuration gate only)
+## GitHub (Milestone 5 — local CLI integration)
 
-- GitHub actions are **not implemented**. There is no OAuth/install flow, repository,
-  branch, commit, push or pull-request route, and no GitHub token exists in the browser.
-- `server/api/src/github/status.ts` reports presence only: `configured`, `missing` variable
-  names, a `present` boolean map, and `actionsAvailable: false`. It must never return a
-  credential value, and `actionsAvailable` must stay false until a real action works.
-- `GET /api/github/status` is session-scoped (`required`). Keep it that way; configuration is
-  not anonymous information.
-- `src/features/github/` owns the typed client and `GithubPanel` in `/settings`. The only
-  control is `Re-check`; do not add a Connect button that has no backend.
-- The App private key belongs only in the API environment. Never write it or an installation
-  token to Dexie/`localStorage`, the bundle, logs or test fixtures that resemble real secrets.
-- Adding real integration requires a registered GitHub App plus the five `GITHUB_*` variables,
-  live install/callback validation and a real round trip before any claim is made.
+- GitHub authentication and repository operations use the installed GitHub CLI (`gh`); Git
+  operations use the local Git CLI. The API server does not hold GitHub tokens and no
+  CodePilot OAuth callback or GitHub App registration is used.
+- `server/githubBridge.mjs` exposes `/github/*` and `/git/*` only through the loopback
+  companion. Every request requires an allow-listed `Origin` and the per-start pairing token
+  in `X-CodePilot-Pairing`; the token is shared with the terminal and stored in tab-only
+  `sessionStorage`.
+- Never return, persist in browser storage, or log GitHub access tokens. GitHub CLI owns
+  authentication and credential storage (OS credential store when available; the CLI may
+  fall back to its config file). The UI's login command is
+  `gh auth login --hostname github.com --git-protocol https --web --expiring`; users run it
+  locally and then re-check the real profile status. Expiring credentials are a CLI preference,
+  not guaranteed by GitHub.
+- Git repository operations require an explicit absolute repository-root path. Never infer a
+  host path from an IndexedDB record or `FileSystemDirectoryHandle`. Run commands with
+  argument arrays (never shell interpolation), validate branch/path inputs, and allow network
+  fetch/pull/push only when `origin` is a GitHub HTTPS or SSH URL.
+- Cloning writes to the user-provided local path. To add the clone to the browser project
+  picker, use the existing Workspace → Import folder flow.
+- The GitHub controls live in `src/features/github/GithubPanel.tsx` in `/settings`; report
+  missing Git or `gh`, failed auth, and network/merge errors honestly. No operation is claimed
+  unless its local CLI command succeeds.
+- This environment does not have `gh`; mocked CLI status and real temporary-repository Git
+  operations are tested, but live authentication, repository access, clone, push/pull and
+  credential expiry remain unverified. No callback URL is required for this selected flow.
 
 ## Account data (Milestone 6)
 
