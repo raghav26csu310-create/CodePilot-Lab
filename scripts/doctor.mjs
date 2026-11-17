@@ -25,13 +25,22 @@ function hasDependency(name) {
   }
 }
 
-function portOpen(port) {
+function canBind(port, host) {
   return new Promise((resolve) => {
     const tester = createServer()
-    tester.once('error', () => resolve(false))
+    tester.once('error', (error) => {
+      resolve(error.code !== 'EADDRINUSE' && error.code !== 'EACCES')
+    })
     tester.once('listening', () => tester.close(() => resolve(true)))
-    tester.listen(port, '127.0.0.1')
+    tester.listen(port, host)
   })
+}
+
+async function portOpen(port) {
+  if (!(await canBind(port, '127.0.0.1'))) {
+    return false
+  }
+  return canBind(port, '::1')
 }
 
 async function fetchJson(url) {

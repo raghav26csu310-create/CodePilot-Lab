@@ -522,8 +522,11 @@ export class AiService {
       // A usage write failure must not turn a successful answer into an error,
       // but it must be visible to the operator.
       console.error(
-        '[api] failed to record AI usage:',
-        error instanceof Error ? error.message : error,
+        JSON.stringify({
+          level: 'error',
+          event: 'ai.usage.record.failure',
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        }),
       )
     }
   }

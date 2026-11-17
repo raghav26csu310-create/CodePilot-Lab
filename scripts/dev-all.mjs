@@ -82,8 +82,16 @@ function isPortOpen(port) {
         resolve(false)
         return
       }
-      const needle = `:${port}`
-      const match = output.toLowerCase().includes(needle.toLowerCase())
+      const portPattern =
+        process.platform === 'win32'
+          ? new RegExp(`(?:\\]|\\b):${port}\\s`)
+          : new RegExp(`:${port}(?:\\s|$)`)
+      const match = output.split(/\r?\n/).some((line) => {
+        if (process.platform === 'win32' && !/\bLISTENING\b/i.test(line)) {
+          return false
+        }
+        return portPattern.test(line)
+      })
       resolve(match)
     })
   })

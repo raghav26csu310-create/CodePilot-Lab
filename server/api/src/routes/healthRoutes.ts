@@ -3,11 +3,33 @@ import type { AppContext } from '../http/types.ts'
 import type { Router } from '../http/router.ts'
 
 export function registerHealthRoutes(router: Router, version: string): void {
+  router.add('GET', '/api/health/live', 'public', async (ctx) => {
+    sendJson(ctx.res, 200, {
+      ok: true,
+      service: 'codepilot-api',
+      version,
+      time: new Date(ctx.now()).toISOString(),
+    })
+  })
+
+  router.add('GET', '/api/health/ready', 'public', async (ctx) => {
+    const database = await databaseStatus(ctx)
+    sendJson(ctx.res, database ? 200 : 503, healthPayload(ctx, version, database))
+  })
+
   router.add('GET', '/api/health', 'public', async (ctx) => {
-    const database = await ctx.store.ping()
+    const database = await databaseStatus(ctx)
     const payload = healthPayload(ctx, version, database)
     sendJson(ctx.res, database ? 200 : 503, payload)
   })
+}
+
+async function databaseStatus(ctx: AppContext): Promise<boolean> {
+  try {
+    return await ctx.store.ping()
+  } catch {
+    return false
+  }
 }
 
 function healthPayload(ctx: AppContext, version: string, database: boolean) {

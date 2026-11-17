@@ -9,6 +9,7 @@ import { MemoryStore } from './db/memoryStore.ts'
 import { PgStore } from './db/pgStore.ts'
 import type { Store } from './db/store.ts'
 import { Router } from './http/router.ts'
+import { sendJson } from './http/respond.ts'
 import type { AppContext } from './http/types.ts'
 import { registerAiRoutes } from './routes/aiRoutes.ts'
 import { registerAuthRoutes } from './routes/authRoutes.ts'
@@ -106,17 +107,21 @@ export async function createApp(options: CreateAppOptions): Promise<RunningApp> 
   const server = createServer((req, res) => {
     void router.handle(context, req, res).catch((error: unknown) => {
       console.error(
-        '[api] unhandled request failure:',
-        error instanceof Error ? error.message : error,
+        JSON.stringify({
+          level: 'error',
+          event: 'http.unhandled',
+          requestId: res.getHeader('X-Request-Id') ?? null,
+          method: req.method ?? 'GET',
+          path: safeRequestPath(req.url),
+          errorName: error instanceof Error ? error.name : 'UnknownError',
+        }),
       )
       if (!res.headersSent) {
-        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-        res.end(
-          JSON.stringify({
-            error: 'internal_error',
-            message: 'The API could not complete this request.',
-          }),
-        )
+        sendJson(res, 500, {
+          error: 'internal_error',
+          message: 'The API could not complete this request.',
+          requestId: res.getHeader('X-Request-Id') ?? null,
+        })
       } else if (!res.writableEnded) {
         res.end()
       }
@@ -139,5 +144,14 @@ export async function createApp(options: CreateAppOptions): Promise<RunningApp> 
       })
       await store.close()
     },
+  }
+}
+
+function safeRequestPath(requestUrl: string | undefined): string {
+  if (!requestUrl) return '/'
+  try {
+    return new URL(requestUrl, 'http://localhost').pathname
+  } catch {
+    return '/'
   }
 }

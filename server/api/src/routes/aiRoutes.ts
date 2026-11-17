@@ -123,7 +123,7 @@ export function registerAiRoutes(router: Router): void {
       )
     } catch (error) {
       if (!closed) {
-        const failure = describeFailure(error)
+        const failure = describeFailure(error, ctx.requestId)
         writeSse(ctx.res, { type: 'error', code: failure.code, message: failure.message })
       }
     } finally {
@@ -132,7 +132,7 @@ export function registerAiRoutes(router: Router): void {
   })
 }
 
-function describeFailure(error: unknown): { code: string; message: string } {
+function describeFailure(error: unknown, requestId?: string): { code: string; message: string } {
   if (error instanceof ApiError) {
     return { code: error.code, message: error.message }
   }
@@ -142,7 +142,14 @@ function describeFailure(error: unknown): { code: string; message: string } {
   if (error instanceof Error && error.name === 'AbortError') {
     return { code: 'aborted', message: 'The request was cancelled.' }
   }
-  console.error('[api] AI request failed:', error instanceof Error ? error.message : error)
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      event: 'ai.request.failure',
+      requestId: requestId ?? null,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    }),
+  )
   return {
     code: 'internal_error',
     message: 'The AI request failed before it could answer. Check the API console.',

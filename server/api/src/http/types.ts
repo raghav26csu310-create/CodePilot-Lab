@@ -27,6 +27,7 @@ export type RequestContext = AppContext & {
   req: IncomingMessage
   res: ServerResponse
   url: URL
+  requestId: string
   params: Record<string, string>
   user: UserRecord | null
   session: SessionRecord | null

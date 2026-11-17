@@ -13,7 +13,17 @@ readiness.
 - Added `npm run check`, `npm run verify`, and `npm run doctor` as the local validation/reporting flow.
 - Added VS Code tasks/launch/settings for the shared local dev workflow.
 - Verified result: `npm run check` and `npm run verify` pass; `npm run dev:all` reports a clear conflict when the shared environment already owns `:5173` instead of starting duplicate processes.
-- Remaining caveat: this machine currently has another process bound to `127.0.0.1:5173`, so a clean end-to-end start requires that port to be free.
+- Remaining caveat: this machine currently has an existing listener on `[::1]:5173`, so a clean end-to-end start requires that port to be free.
+
+## Current backend integration work
+
+- Status: the existing API composition and route modules were preserved; no duplicate backend was introduced.
+- The HTTP router now returns request-correlated error responses, logs structured request events without query strings or error messages, applies a shared API rate limit, and rejects malformed encoded path parameters as client errors.
+- Health endpoints now distinguish `/api/health/live` from dependency-backed `/api/health/ready`; `/api/health` remains backward-compatible.
+- API JSON bodies require `Content-Type: application/json`. Environment parsing rejects invalid boolean values, incomplete managed-AI configuration, malformed database URLs or encryption keys, non-canonical CORS origins, and non-loopback development binds.
+- The shared CodePilot API browser client now applies request deadlines and caller cancellation to JSON requests, account export, and AI streaming. Execution and terminal retain their separate typed clients because they are distinct local sidecars.
+- The development orchestrator and doctor now detect IPv6-only listeners as port conflicts; the existing port-5173 listener was not stopped or queried.
+- Verification: `npm run verify` passes (126 frontend tests, 32 API tests, typecheck, lint and build). Lint retains the two existing React Fast Refresh warnings; the build retains the existing large-chunk warnings.
 
 
 Turn CodePilot Lab into a usable, secure, scalable AI-native coding environment without

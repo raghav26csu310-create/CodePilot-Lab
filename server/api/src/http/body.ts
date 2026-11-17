@@ -10,6 +10,11 @@ export async function readJsonBody<T = unknown>(
   req: IncomingMessage,
   maxBytes: number,
 ): Promise<T> {
+  const contentType = req.headers['content-type']?.split(';', 1)[0]?.trim().toLowerCase()
+  if (contentType !== 'application/json') {
+    throw new ApiError(415, 'unsupported_media_type', 'Send this request with Content-Type: application/json.')
+  }
+
   const chunks: Buffer[] = []
   let size = 0
 

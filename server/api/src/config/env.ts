@@ -11,10 +11,17 @@ import { z } from 'zod'
  */
 
 const booleanish = z
-  .union([z.boolean(), z.string()])
+  .union([
+    z.boolean(),
+    z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(z.enum(['1', 'true', 'yes', 'on', '0', 'false', 'no', 'off'])),
+  ])
   .transform((value) => {
     if (typeof value === 'boolean') return value
-    return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
+    return ['1', 'true', 'yes', 'on'].includes(value)
   })
 
 const csv = z
@@ -29,11 +36,14 @@ const csv = z
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  API_HOST: z.string().default('127.0.0.1'),
+  API_HOST: z.string().trim().min(1).default('127.0.0.1'),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(8787),
   DATABASE_URL: z.string().default(''),
   CORS_ORIGINS: csv,
-  SESSION_COOKIE_NAME: z.string().min(1).max(64).default('codepilot_session'),
+  SESSION_COOKIE_NAME: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,64}$/)
+    .default('codepilot_session'),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
   SESSION_COOKIE_SECURE: booleanish.default(false),
   CREDENTIAL_ENCRYPTION_KEY: z.string().default(''),
@@ -112,15 +122,94 @@ export class ConfigurationError extends Error {
 export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = EnvSchema.parse(input)
   const isProduction = parsed.NODE_ENV === 'production'
+  if (
+    !isProduction &&
+    !['127.0.0.1', '::1', 'localhost'].includes(parsed.API_HOST.toLowerCase())
+  ) {
+    throw new ConfigurationError('API_HOST must be loopback in development and test.')
+  }
+
   const allowedOrigins =
     parsed.CORS_ORIGINS.length > 0 ? parsed.CORS_ORIGINS : isProduction ? [] : DEV_ORIGINS
 
-  if (allowedOrigins.some((origin) => origin === '*' || !/^https?:\/\//.test(origin))) {
+  for (const origin of allowedOrigins) {
+    let parsedOrigin: URL
+    try {
+      parsedOrigin = new URL(origin)
+    } catch {
+      throw new ConfigurationError(
+        'CORS_ORIGINS must list explicit http(s) origins. Wildcards are not accepted.',
+      )
+    }
+    if (
+      origin === '*' ||
+      !['http:', 'https:'].includes(parsedOrigin.protocol) ||
+      parsedOrigin.origin !== origin
+    ) {
+      throw new ConfigurationError(
+        'CORS_ORIGINS must list canonical http(s) origins without paths. Wildcards are not accepted.',
+      )
+    }
+  }
+
+  if (parsed.DATABASE_URL) {
+    let databaseUrl: URL
+    try {
+      databaseUrl = new URL(parsed.DATABASE_URL)
+    } catch {
+      throw new ConfigurationError('DATABASE_URL must be a valid PostgreSQL connection URL.')
+    }
+    if (!['postgres:', 'postgresql:'].includes(databaseUrl.protocol)) {
+      throw new ConfigurationError('DATABASE_URL must use the postgres:// or postgresql:// scheme.')
+    }
+  }
+
+  if (parsed.CREDENTIAL_ENCRYPTION_KEY) {
+    const key = parsed.CREDENTIAL_ENCRYPTION_KEY.trim()
+    const decodedKey = Buffer.from(key, 'base64')
+    if (
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(key) ||
+      decodedKey.length !== 32 ||
+      decodedKey.toString('base64').replace(/=+$/, '') !== key.replace(/=+$/, '')
+    ) {
+      throw new ConfigurationError(
+        'CREDENTIAL_ENCRYPTION_KEY must be 32 bytes encoded as base64.',
+      )
+    }
+  }
+
+  const managedAiValues = [
+    parsed.MANAGED_AI_BASE_URL,
+    parsed.MANAGED_AI_API_KEY,
+    parsed.MANAGED_AI_MODEL,
+  ]
+  if (managedAiValues.some((value) => value.trim()) && !managedAiValues.every((value) => value.trim())) {
     throw new ConfigurationError(
-      'CORS_ORIGINS must list explicit http(s) origins. Wildcards are not accepted.',
+      'MANAGED_AI_BASE_URL, MANAGED_AI_API_KEY and MANAGED_AI_MODEL must be configured together.',
     )
   }
 
+  try {
+    const managedUrl = new URL(parsed.MANAGED_AI_BASE_URL)
+    if (managedAiValues.some((value) => value.trim()) && !['http:', 'https:'].includes(managedUrl.protocol)) {
+      throw new Error('protocol')
+    }
+  } catch {
+    if (managedAiValues.some((value) => value.trim())) {
+      throw new ConfigurationError('MANAGED_AI_BASE_URL must be a valid http(s) URL.')
+    }
+  }
+
+  if (parsed.GITHUB_CALLBACK_URL) {
+    try {
+      const callbackUrl = new URL(parsed.GITHUB_CALLBACK_URL)
+      if (!['http:', 'https:'].includes(callbackUrl.protocol)) throw new Error('protocol')
+    } catch {
+      throw new ConfigurationError('GITHUB_CALLBACK_URL must be a valid http(s) URL.')
+    }
+  }
+
+  const managedProvider = parseManagedProvider(parsed.MANAGED_AI_PROVIDER)
   if (isProduction) {
     if (!parsed.DATABASE_URL) {
       throw new ConfigurationError('DATABASE_URL is required in production.')
@@ -136,6 +225,9 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
     if (!parsed.SESSION_COOKIE_SECURE) {
       throw new ConfigurationError('SESSION_COOKIE_SECURE must be enabled in production.')
     }
+    if (allowedOrigins.some((origin) => !origin.startsWith('https://'))) {
+      throw new ConfigurationError('Production CORS_ORIGINS must use HTTPS.')
+    }
   }
 
   const managedConfigured =
@@ -145,7 +237,7 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
 
   const managedAi: ManagedAiConfig | null = managedConfigured
     ? {
-        provider: parseManagedProvider(parsed.MANAGED_AI_PROVIDER),
+        provider: managedProvider,
         label: parsed.MANAGED_AI_LABEL.trim() || 'CodePilot AI',
         baseUrl: parsed.MANAGED_AI_BASE_URL.trim(),
         apiKey: parsed.MANAGED_AI_API_KEY.trim(),
@@ -171,7 +263,15 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
 export function loadDotEnv(path = '.env'): void {
   try {
     process.loadEnvFile(path)
-  } catch {
-    // No .env file: environment variables are authoritative.
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      error.code === 'ENOENT'
+    ) {
+      return
+    }
+    throw error
   }
 }

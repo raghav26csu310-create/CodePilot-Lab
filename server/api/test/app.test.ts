@@ -1,6 +1,6 @@
 import type { AddressInfo } from 'node:net'
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { createApp, type RunningApp } from '../src/app.ts'
 import { buildConfig, type AppConfig } from '../src/config/env.ts'
@@ -87,19 +87,85 @@ afterAll(async () => {
 
 describe('API health and sessions', () => {
   it('reports honest health with the in-memory store', async () => {
-    const response = await request(base, '/api/health')
-    expect(response.status).toBe(200)
-    const payload = (await response.json()) as {
-      ok: boolean
-      service: string
-      database: { engine: string; durable: boolean }
-      managedAi: { available: boolean }
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    try {
+      const response = await request(base, '/api/health')
+      expect(response.status).toBe(200)
+      expect(response.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/)
+      expect(response.headers.get('x-ratelimit-limit')).toBe('240')
+      const payload = (await response.json()) as {
+        ok: boolean
+        service: string
+        database: { engine: string; durable: boolean }
+        managedAi: { available: boolean }
+      }
+      expect(payload.ok).toBe(true)
+      expect(payload.service).toBe('codepilot-api')
+      expect(payload.database.engine).toBe('memory')
+      expect(payload.database.durable).toBe(false)
+      expect(payload.managedAi.available).toBe(false)
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      expect(
+        info.mock.calls.some(
+          ([line]) => typeof line === 'string' && line.includes('"event":"http.request"'),
+        ),
+      ).toBe(true)
+    } finally {
+      info.mockRestore()
     }
-    expect(payload.ok).toBe(true)
-    expect(payload.service).toBe('codepilot-api')
-    expect(payload.database.engine).toBe('memory')
-    expect(payload.database.durable).toBe(false)
-    expect(payload.managedAi.available).toBe(false)
+  })
+
+  it('separates liveness from dependency readiness', async () => {
+    const live = await request(base, '/api/health/live')
+    const ready = await request(base, '/api/health/ready')
+    expect(live.status).toBe(200)
+    expect(await live.json()).toMatchObject({
+      ok: true,
+      service: 'codepilot-api',
+    })
+    expect(ready.status).toBe(200)
+    expect(await ready.json()).toMatchObject({
+      ok: true,
+      database: { reachable: true },
+    })
+  })
+
+  it('keeps liveness healthy when the database is unavailable but marks readiness down', async () => {
+    const unavailableStore = new MemoryStore()
+    unavailableStore.ping = async () => false
+    const unavailableApp = await createApp({
+      config: testConfig(),
+      store: unavailableStore,
+    })
+    const unavailableBase = await listen(unavailableApp)
+
+    try {
+      expect((await request(unavailableBase, '/api/health/live')).status).toBe(200)
+      expect((await request(unavailableBase, '/api/health/ready')).status).toBe(503)
+      expect((await request(unavailableBase, '/api/health')).status).toBe(503)
+    } finally {
+      await unavailableApp.close()
+    }
+  })
+
+  it('returns a request-correlated JSON error for malformed encoded paths', async () => {
+    const response = await request(base, '/api/projects/%E0%A4%A')
+    const payload = (await response.json()) as { error: string; requestId: string }
+    expect(response.status).toBe(400)
+    expect(payload.error).toBe('invalid_path')
+    expect(payload.requestId).toBe(response.headers.get('x-request-id'))
+  })
+
+  it('rejects non-JSON request bodies with a structured error', async () => {
+    const response = await fetch(`${base}/api/auth/login`, {
+      method: 'POST',
+      headers: { Origin: ORIGIN, 'Content-Type': 'text/plain' },
+      body: 'not json',
+    })
+    const payload = (await response.json()) as { error: string; requestId: string }
+    expect(response.status).toBe(415)
+    expect(payload.error).toBe('unsupported_media_type')
+    expect(payload.requestId).toBe(response.headers.get('x-request-id'))
   })
 
   it('returns no user before sign-in', async () => {

@@ -129,6 +129,76 @@ type RequestOptions = {
   method?: string
   body?: unknown
   signal?: AbortSignal
+  timeoutMs?: number
+}
+
+const DEFAULT_API_TIMEOUT_MS = 15_000
+const ACCOUNT_EXPORT_TIMEOUT_MS = 30_000
+const CHAT_API_TIMEOUT_MS = 120_000
+
+type TimedSignal = {
+  signal: AbortSignal
+  timedOut: () => boolean
+  dispose: () => void
+}
+
+function createTimedSignal(signal: AbortSignal | undefined, timeoutMs: number): TimedSignal {
+  const controller = new AbortController()
+  let didTimeout = false
+  const abortFromCaller = () => controller.abort(signal?.reason)
+
+  if (signal?.aborted) {
+    abortFromCaller()
+  } else {
+    signal?.addEventListener('abort', abortFromCaller, { once: true })
+  }
+
+  const timer = globalThis.setTimeout(() => {
+    didTimeout = true
+    controller.abort()
+  }, timeoutMs)
+
+  return {
+    signal: controller.signal,
+    timedOut: () => didTimeout,
+    dispose: () => {
+      globalThis.clearTimeout(timer)
+      signal?.removeEventListener('abort', abortFromCaller)
+    },
+  }
+}
+
+async function fetchGatewayResponse(
+  path: string,
+  init: RequestInit,
+  signal?: AbortSignal,
+  timeoutMs = DEFAULT_API_TIMEOUT_MS,
+): Promise<{ response: Response; timedSignal: TimedSignal }> {
+  const timedSignal = createTimedSignal(signal, timeoutMs)
+  try {
+    const response = await fetch(`${gatewayBaseUrl()}${path}`, {
+      ...init,
+      credentials: 'include',
+      signal: timedSignal.signal,
+    })
+    return { response, timedSignal }
+  } catch (cause) {
+    timedSignal.dispose()
+    if (isAbortError(cause)) {
+      throw new AiError(
+        timedSignal.timedOut() ? 'timeout' : 'aborted',
+        timedSignal.timedOut()
+          ? `The CodePilot API did not answer within ${timeoutMs} ms.`
+          : 'The request was cancelled.',
+        { cause },
+      )
+    }
+    throw new AiError(
+      'network',
+      'The CodePilot API could not be reached. Start the API (npm run api:dev) or check the configured API URL.',
+      { cause },
+    )
+  }
 }
 
 export async function requestJson<T>(
@@ -140,38 +210,39 @@ export async function requestJson<T>(
     headers.set('Content-Type', 'application/json')
   }
 
-  let response: Response
-  try {
-    response = await fetch(`${gatewayBaseUrl()}${path}`, {
+  const { response, timedSignal } = await fetchGatewayResponse(
+    path,
+    {
       method: options.method ?? 'GET',
       headers,
-      credentials: 'include',
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
-    })
-  } catch (cause) {
-    if (isAbortError(cause)) {
-      throw new AiError('aborted', 'The request was cancelled.', { cause })
-    }
-    throw new AiError(
-      'network',
-      'The CodePilot API could not be reached. Start the API (npm run api:dev) or check the configured API URL.',
-      { cause },
-    )
-  }
-
-  if (!response.ok) {
-    throw await gatewayHttpError(response)
-  }
-
+    },
+    options.signal,
+    options.timeoutMs,
+  )
   try {
+    if (!response.ok) {
+      throw await gatewayHttpError(response)
+    }
     return (await response.json()) as T
-  } catch {
+  } catch (cause) {
+    if (cause instanceof GatewayError) throw cause
+    if (isAbortError(cause)) {
+      throw new AiError(
+        timedSignal.timedOut() ? 'timeout' : 'aborted',
+        timedSignal.timedOut()
+          ? `The CodePilot API did not answer within ${options.timeoutMs ?? DEFAULT_API_TIMEOUT_MS} ms.`
+          : 'The request was cancelled.',
+        { cause },
+      )
+    }
     throw new GatewayError(
       'invalid_response',
       'The CodePilot API returned a response that is not JSON.',
       { status: response.status },
     )
+  } finally {
+    timedSignal.dispose()
   }
 }
 
@@ -261,30 +332,37 @@ export async function signOutOfGateway(): Promise<void> {
  * the filename; the browser only turns the response bytes into a file the user
  * saves. Nothing is written to IndexedDB or localStorage.
  */
-export async function exportAccountData(): Promise<{ filename: string; blob: Blob }> {
-  let response: Response
+export async function exportAccountData(
+  signal?: AbortSignal,
+): Promise<{ filename: string; blob: Blob }> {
+  const { response, timedSignal } = await fetchGatewayResponse(
+    '/api/account/export',
+    { method: 'GET' },
+    signal,
+    ACCOUNT_EXPORT_TIMEOUT_MS,
+  )
   try {
-    response = await fetch(`${gatewayBaseUrl()}/api/account/export`, {
-      method: 'GET',
-      credentials: 'include',
-    })
+    if (!response.ok) throw await gatewayHttpError(response)
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const match = /filename="([^"]+)"/i.exec(disposition)
+    return {
+      filename: match?.[1] ?? 'codepilot-account.json',
+      blob: await response.blob(),
+    }
   } catch (cause) {
-    throw new AiError(
-      'network',
-      'The CodePilot API could not be reached, so the export was not downloaded.',
-      { cause },
-    )
-  }
-
-  if (!response.ok) {
-    throw await gatewayHttpError(response)
-  }
-
-  const disposition = response.headers.get('Content-Disposition') ?? ''
-  const match = /filename="([^"]+)"/i.exec(disposition)
-  return {
-    filename: match?.[1] ?? 'codepilot-account.json',
-    blob: await response.blob(),
+    if (cause instanceof GatewayError || cause instanceof AiError) throw cause
+    if (isAbortError(cause)) {
+      throw new AiError(
+        timedSignal.timedOut() ? 'timeout' : 'aborted',
+        timedSignal.timedOut()
+          ? `The account export did not finish within ${ACCOUNT_EXPORT_TIMEOUT_MS} ms.`
+          : 'The account export was cancelled.',
+        { cause },
+      )
+    }
+    throw cause
+  } finally {
+    timedSignal.dispose()
   }
 }
 
@@ -366,12 +444,10 @@ type SseEvent =
  * caller.
  */
 export async function streamGatewayChat(input: GatewayChatInput): Promise<void> {
-  let response: Response
-  try {
-    response = await fetch(`${gatewayBaseUrl()}/api/ai/chat`, {
+  const { response, timedSignal } = await fetchGatewayResponse(
+    '/api/ai/chat',
+    {
       method: 'POST',
-      credentials: 'include',
-      signal: input.signal,
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify({
         mode: input.mode,
@@ -380,84 +456,92 @@ export async function streamGatewayChat(input: GatewayChatInput): Promise<void> 
         maxTokens: input.maxTokens,
         messages: input.turns.map((turn) => ({ role: turn.role, content: turn.content })),
       }),
+    },
+    input.signal,
+    CHAT_API_TIMEOUT_MS,
+  )
+  try {
+    if (!response.ok) {
+      throw await gatewayHttpError(response)
+    }
+
+    const contentType = response.headers.get('content-type') ?? ''
+    if (!contentType.includes('text/event-stream')) {
+      throw new GatewayError(
+        'invalid_response',
+        'The CodePilot API did not return an event stream. Check the API URL and that you are signed in.',
+        { status: response.status },
+      )
+    }
+
+    const state: { failure: GatewayError | null; completed: boolean } = {
+      failure: null,
+      completed: false,
+    }
+
+    await consumeLines(response, (line) => {
+      if (!line.startsWith('data:')) {
+        return
+      }
+      const payload = line.slice(5).trim()
+      if (!payload) {
+        return
+      }
+
+      let event: SseEvent
+      try {
+        event = JSON.parse(payload) as SseEvent
+      } catch {
+        return
+      }
+
+      switch (event.type) {
+        case 'meta':
+          input.onMeta?.({
+            mode: event.mode,
+            provider: event.provider,
+            model: event.model,
+            label: event.label,
+          })
+          break
+        case 'delta':
+          if (typeof event.text === 'string' && event.text.length > 0) {
+            input.onDelta(event.text)
+          }
+          break
+        case 'done':
+          state.completed = true
+          break
+        case 'error':
+          state.failure = new GatewayError(event.code, event.message)
+          break
+        default:
+          break
+      }
     })
+
+    if (state.failure) {
+      throw state.failure
+    }
+    if (!state.completed) {
+      throw new GatewayError(
+        'incomplete_stream',
+        'The stream ended before the API reported completion. Partial output is kept for review.',
+      )
+    }
   } catch (cause) {
+    if (cause instanceof AiError) throw cause
     if (isAbortError(cause)) {
-      throw new AiError('aborted', 'Generation stopped.', { cause })
+      throw new AiError(
+        timedSignal.timedOut() ? 'timeout' : 'aborted',
+        timedSignal.timedOut()
+          ? `The CodePilot AI stream did not complete within ${CHAT_API_TIMEOUT_MS} ms.`
+          : 'Generation stopped.',
+        { cause },
+      )
     }
-    throw new AiError(
-      'network',
-      'The CodePilot API could not be reached. Check that the API is running and that VITE_API_BASE_URL points at it.',
-      { cause },
-    )
-  }
-
-  if (!response.ok) {
-    throw await gatewayHttpError(response)
-  }
-
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!contentType.includes('text/event-stream')) {
-    throw new GatewayError(
-      'invalid_response',
-      'The CodePilot API did not return an event stream. Check the API URL and that you are signed in.',
-      { status: response.status },
-    )
-  }
-
-  const state: { failure: GatewayError | null; completed: boolean } = {
-    failure: null,
-    completed: false,
-  }
-
-  await consumeLines(response, (line) => {
-    if (!line.startsWith('data:')) {
-      return
-    }
-    const payload = line.slice(5).trim()
-    if (!payload) {
-      return
-    }
-
-    let event: SseEvent
-    try {
-      event = JSON.parse(payload) as SseEvent
-    } catch {
-      return
-    }
-
-    switch (event.type) {
-      case 'meta':
-        input.onMeta?.({
-          mode: event.mode,
-          provider: event.provider,
-          model: event.model,
-          label: event.label,
-        })
-        break
-      case 'delta':
-        if (typeof event.text === 'string' && event.text.length > 0) {
-          input.onDelta(event.text)
-        }
-        break
-      case 'done':
-        state.completed = true
-        break
-      case 'error':
-        state.failure = new GatewayError(event.code, event.message)
-        break
-      default:
-        break
-    }
-  })
-
-  if (state.failure) {
-    throw state.failure
-  }
-  if (!state.completed) {
-    throw new GatewayError(
-      'incomplete_stream',
-      'The stream ended before the API reported completion. Partial output is kept for review.',
-    )
+    throw cause
+  } finally {
+    timedSignal.dispose()
   }
 }

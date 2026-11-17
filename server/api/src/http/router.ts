@@ -1,7 +1,9 @@
+import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import { parseCookies } from '../auth/cookies.ts'
 import { ApiError, forbidden, notFound, unauthorized } from './errors.ts'
+import { enforceLimit } from './limits.ts'
 import { sendJson, setSecurityHeaders } from './respond.ts'
 import type {
   AppContext,
@@ -36,8 +38,10 @@ export class Router {
     req: IncomingMessage,
     res: ServerResponse,
   ): Promise<void> {
+    const requestId = randomUUID()
+    const startedAt = context.now()
+    res.setHeader('X-Request-Id', requestId)
     setSecurityHeaders(res)
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
     const origin = req.headers.origin
 
     if (origin && context.config.allowedOrigins.includes(origin)) {
@@ -46,6 +50,7 @@ export class Router {
       res.setHeader('Access-Control-Allow-Credentials', 'true')
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+      res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id')
       res.setHeader('Access-Control-Max-Age', '600')
     } else if (origin && context.config.allowedOrigins.length > 0) {
       res.setHeader('Vary', 'Origin')
@@ -53,7 +58,11 @@ export class Router {
 
     if (req.method === 'OPTIONS') {
       if (!origin || !context.config.allowedOrigins.includes(origin)) {
-        sendJson(res, 403, { error: 'forbidden', message: 'This origin is not allowed.' })
+        sendJson(res, 403, {
+          error: 'forbidden',
+          message: 'This origin is not allowed.',
+          requestId,
+        })
         return
       }
       res.writeHead(204)
@@ -61,16 +70,31 @@ export class Router {
       return
     }
 
-    const match = this.match(req.method ?? 'GET', url.pathname)
-    if (!match) {
-      sendJson(res, 404, {
-        error: 'not_found',
-        message: `No route for ${req.method} ${url.pathname}.`,
-      })
-      return
-    }
+    res.once('finish', () => {
+      const path = safePath(req.url)
+      const status = res.statusCode
+      const level = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info'
+      console[level](
+        JSON.stringify({
+          level,
+          event: 'http.request',
+          requestId,
+          method: req.method ?? 'GET',
+          path,
+          status,
+          durationMs: Math.max(0, context.now() - startedAt),
+        }),
+      )
+    })
 
     try {
+      const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+      const method = req.method ?? 'GET'
+      const match = this.match(method, url.pathname)
+      if (!match) {
+        throw notFound(`No route for ${method} ${url.pathname}.`)
+      }
+
       if (origin && !context.config.allowedOrigins.includes(origin)) {
         throw forbidden('This browser origin is not allowed to call the API.')
       }
@@ -86,7 +110,7 @@ export class Router {
       // CSRF defence: cookie-authenticated state changes must come from an
       // allow-listed origin. Missing Origin is acceptable only for anonymous
       // requests, which have no ambient credentials to abuse.
-      if (UNSAFE_METHODS.has(req.method ?? '') && user && !origin) {
+      if (UNSAFE_METHODS.has(method) && user && !origin) {
         throw forbidden('State-changing requests must include an allowed Origin header.')
       }
 
@@ -95,15 +119,17 @@ export class Router {
         req,
         res,
         url,
+        requestId,
         params: match.params,
-        user: match.auth === 'public' ? user : user,
+        user,
         session,
         ip: clientIp(req, context.config.TRUST_PROXY),
       }
 
+      enforceLimit(requestContext, 'general', user?.id ?? requestContext.ip)
       await match.handler(requestContext)
     } catch (error) {
-      handleError(res, error)
+      handleError(res, error, requestId)
     }
   }
 
@@ -120,7 +146,11 @@ export class Router {
         const expected = route.segments[index]!
         const actual = parts[index]!
         if (expected.startsWith(':')) {
-          params[expected.slice(1)] = decodeURIComponent(actual)
+          try {
+            params[expected.slice(1)] = decodeURIComponent(actual)
+          } catch {
+            throw new ApiError(400, 'invalid_path', 'The request path contains invalid encoding.')
+          }
         } else if (expected !== actual) {
           ok = false
           break
@@ -134,7 +164,7 @@ export class Router {
   }
 }
 
-function handleError(res: ServerResponse, error: unknown): void {
+function handleError(res: ServerResponse, error: unknown, requestId: string): void {
   if (res.headersSent) {
     // A streaming handler already owns the response.
     if (!res.writableEnded) {
@@ -147,16 +177,34 @@ function handleError(res: ServerResponse, error: unknown): void {
     sendJson(res, error.status, {
       error: error.code,
       message: error.message,
+      requestId,
       ...(error.details === undefined ? {} : { details: error.details }),
     })
     return
   }
 
-  console.error('[api] unexpected request failure:', error instanceof Error ? error.message : error)
+  console.error(
+    JSON.stringify({
+      level: 'error',
+      event: 'http.request.failure',
+      requestId,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    }),
+  )
   sendJson(res, 500, {
     error: 'internal_error',
-    message: 'The API could not complete this request. Check the server console.',
+    message: 'The API could not complete this request.',
+    requestId,
   })
+}
+
+function safePath(requestUrl: string | undefined): string {
+  if (!requestUrl) return '/'
+  try {
+    return new URL(requestUrl, 'http://localhost').pathname
+  } catch {
+    return '/'
+  }
 }
 
 export function clientIp(req: IncomingMessage, trustProxy: boolean): string {
