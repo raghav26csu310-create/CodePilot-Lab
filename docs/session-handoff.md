@@ -16,16 +16,16 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
 ## Current session state
 
-- Status: all in-repo milestone work that can be executed without external infrastructure is
-  complete and verified.
-- Files touched: the completed milestone files under the editor, workspace, API, gateway,
-  terminal, device-file, and export/isolation flows, plus the Prettier formatting support.
-- Gate: `npm run typecheck`, `npm run lint`, `npm test -- --run`, `npm run test:api -- --run`,
-  and `npm run build` all pass.
+- Status: the repository is still in a verified state, with a targeted parser hardening fix
+  applied for proposal-attribute escapes and unsafe dot-segment paths.
+- Files touched: the proposal parser (`src/features/copilot/proposals.ts`), its regression tests
+  (`src/features/converter/diff.test.ts`), and this handoff note.
+- Gate: `npm test -- --run` passes with the new regression checks, and the wider frontend
+  suite remains green.
 - Unresolved items: only external production dependencies remain: GitHub App credentials,
   PostgreSQL deployment, hosting, provider credentials, and live deployment smoke tests.
-- Next task: use the remaining external blockers as the only unresolved path to a full
-  production-grade result; the codebase itself is now in an honest, verified state.
+- Next task: preserve the current verified baseline while addressing any additional real-world
+  edge cases surfaced by broader runtime validation or external service wiring.
 
 ## Milestone map
 

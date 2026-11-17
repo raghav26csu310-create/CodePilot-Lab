@@ -9,13 +9,21 @@ export type ParsedMessage = {
 }
 
 const OPEN_FENCE = /^(`{3,})codepilot\b(.*)$/i
-const ATTRIBUTE = /([a-zA-Z][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))/g
+const ATTRIBUTE = /([a-zA-Z][\w-]*)\s*=\s*(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([^\s]+))/g
+
+function decodeAttributeValue(value: string): string {
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\(["'\\])/g, '$1')
+}
 
 function parseAttributes(raw: string): Record<string, string> {
   const attributes: Record<string, string> = {}
   for (const match of raw.matchAll(ATTRIBUTE)) {
     const key = match[1]?.toLocaleLowerCase()
-    const value = match[2] ?? match[3] ?? match[4] ?? ''
+    const value = decodeAttributeValue(match[2] ?? match[3] ?? match[4] ?? '')
     if (key) {
       attributes[key] = value
     }
@@ -37,22 +45,37 @@ export function validateProposalPath(path: string): string | null {
   if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) {
     return 'Absolute paths are not allowed; use a path relative to the project root.'
   }
-  if (normalized.split('/').some((segment) => segment === '..')) {
-    return 'The proposal path escapes the project root.'
+
+  const segments = normalized.split('/')
+  if (segments.some((segment) => segment === '.' || segment === '..')) {
+    return segmentError(normalized)
   }
-  if (normalized.split('/').some((segment) => segment.trim().length === 0)) {
+  if (segments.some((segment) => segment.trim().length === 0)) {
     return 'The proposal path has an empty segment.'
   }
 
   return null
 }
 
+function segmentError(path: string): string {
+  const normalized = path.replace(/\\/g, '/')
+  if (normalized.split('/').includes('..')) {
+    return 'The proposal path escapes the project root.'
+  }
+  return 'The proposal path contains a dot segment that resolves to the current directory.'
+}
+
 export function normalizeProposalPath(path: string): string {
-  return path
+  const normalized = path
     .trim()
     .replace(/\\/g, '/')
     .replace(/^\.\//, '')
     .replace(/^\/+/, '')
+
+  return normalized
+    .split('/')
+    .filter((segment) => segment.length > 0 && segment !== '.')
+    .join('/')
 }
 
 function readFence(lines: string[], start: number): { end: number; body: string[] } | null {

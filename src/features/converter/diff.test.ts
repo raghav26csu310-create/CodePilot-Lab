@@ -38,9 +38,10 @@ describe('validateProposalPath', () => {
     expect(validateProposalPath('README.md')).toBeNull()
   })
 
-  it('rejects traversal, absolute paths and empty segments', () => {
+  it('rejects traversal, absolute paths, dot segments and empty segments', () => {
     expect(validateProposalPath('../escape.py')).toMatch(/escapes/)
     expect(validateProposalPath('/etc/passwd')).toMatch(/Absolute/)
+    expect(validateProposalPath('src/./main.py')).toMatch(/dot segment|current directory/)
     expect(validateProposalPath('a//b.py')).toMatch(/empty segment/)
     expect(validateProposalPath('a\u0000b')).toMatch(/control/)
   })
@@ -81,6 +82,13 @@ describe('parseProposals', () => {
     )
     expect(parsed.proposals[0]?.invalidReason).toBeTruthy()
     expect(parsed.proposals[0]?.mode).toBe('replace')
+  })
+
+  it('keeps escaped quotes in attribute values', () => {
+    const parsed = parseProposals(
+      ['```codepilot path="src/main.py" mode="replace" summary="Said \\"hello\\""', 'print(1)', '```'].join('\n'),
+    )
+    expect(parsed.proposals[0]?.summary).toBe('Said "hello"')
   })
 
   it('still surfaces an unterminated block', () => {
