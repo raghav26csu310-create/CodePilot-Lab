@@ -3,9 +3,7 @@ import type { AiProviderPreset, AiSettings } from './types'
 /**
  * Provider presets. The default is managed CodePilot AI through the API
  * gateway: the browser holds no provider key and ordinary users never see a
- * base URL. The remaining presets are the explicit local/BYO fallback — a local
- * Ollama server, OpenAI-compatible endpoints (DeepSeek, OpenAI, OpenRouter,
- * Groq), and local OpenAI-compatible servers (LM Studio, llama.cpp).
+ * base URL. BYO providers are configured and called by the authenticated API.
  */
 export const PROVIDER_PRESETS: AiProviderPreset[] = [
   {
@@ -126,9 +124,10 @@ export function isManagedPreset(settings: AiSettings): boolean {
   return presetById(settings.preset)?.kind === 'gateway'
 }
 
-/** True when requests leave through the CodePilot API rather than this browser. */
+/** AI requests are always routed through the CodePilot API. */
 export function usesGateway(settings: AiSettings): boolean {
-  return settings.route === 'gateway'
+  void settings
+  return true
 }
 
 /**

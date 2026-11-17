@@ -5,8 +5,8 @@ import { Badge } from '../../design-system/primitives/Badge'
 import { Button } from '../../design-system/primitives/Button'
 import { GatewayAccountPanel } from '../copilot/gateway/AccountPanel'
 import { useGateway } from '../copilot/gateway/store'
-import { ProviderSettingsForm } from '../copilot/ProviderSettingsForm'
-import { providerLabel, usesGateway } from '../copilot/providerPresets'
+import { ProviderManager } from '../copilot/ProviderManager'
+import { usesGateway } from '../copilot/providerPresets'
 import { useAiSettings } from '../copilot/settingsStore'
 import { GithubPanel } from '../github/GithubPanel'
 import styles from './AiSettingsPage.module.css'
@@ -56,9 +56,9 @@ export function AiSettingsPage() {
             AI &amp; credentials
           </h1>
           <p className={styles.lead}>
-            CodePilot AI runs through the CodePilot API: your account authenticates the request and
-            provider keys stay on the server. A local or bring-your-own endpoint remains available
-            as an explicitly labelled advanced mode.
+            Manage several real providers through the authenticated CodePilot API. Provider
+            credentials are encrypted server-side, and requests stream through provider-specific
+            adapters.
           </p>
         </div>
         <Badge tone={status === 'verified' ? 'live' : 'planned'}>{badge}</Badge>
@@ -66,7 +66,7 @@ export function AiSettingsPage() {
 
       <div className={styles.grid}>
         <div className={styles.formCard}>
-          <ProviderSettingsForm />
+          <ProviderManager />
         </div>
 
         <aside className={styles.side}>
@@ -101,9 +101,8 @@ export function AiSettingsPage() {
                 the last four characters are returned.
               </li>
               <li>
-                Direct browser mode still exists as an advanced fallback. In that mode the key lives
-                in tab memory by default, and “remember” writes it in plaintext to this
-                browser&apos;s IndexedDB.
+                Provider keys are never stored in browser storage. Legacy keys in AI settings are
+                removed when settings load.
               </li>
               <li>
                 No key is present in the repository or the production bundle. Nothing is sent until
@@ -118,13 +117,13 @@ export function AiSettingsPage() {
               What “verified” means
             </h2>
             <p>
-              The gateway is only shown as available after a real status request succeeded in this
-              session. A direct provider is only marked verified after a real request listed models
-              or a completed chat response. Saving settings clears that claim.
+              A provider is only marked connected after its real model-list test succeeds. Test
+              time, result and message are shown for each saved provider.
             </p>
             <p>
-              Quotas are enforced by the API. When the managed daily or monthly limit is reached the
-              request fails with the real reason; nothing is retried automatically.
+              Managed quotas are enforced by the API. Configured fallback providers are attempted
+              only before any response text has been streamed; cancellation and partial output are
+              never retried.
             </p>
           </div>
 
@@ -134,10 +133,8 @@ export function AiSettingsPage() {
               Local-first options
             </h2>
             <p>
-              Ollama, LM Studio and llama.cpp run on this machine and need no account. They remain
-              supported as the advanced direct mode; remote OpenAI-compatible providers work too,
-              but the browser makes a cross-origin request, so the provider or a proxy must allow
-              it.
+              Ollama is called by the local API at its configured server URL. Start Ollama before
+              testing; installing a model does not mean the service is running.
             </p>
             <Button to="/workspace" variant="secondary" size="sm">
               Open a workspace
@@ -156,7 +153,10 @@ export function AiSettingsPage() {
               </div>
               <div>
                 <dt>Preset</dt>
-                <dd>{providerLabel(snapshot.settings)}</dd>
+                <dd>
+                  {gateway.status?.connection?.label ??
+                    (gateway.status?.managed.available ? gateway.status.managed.label : 'not selected')}
+                </dd>
               </div>
               <div>
                 <dt>Model</dt>
@@ -170,13 +170,7 @@ export function AiSettingsPage() {
               <div>
                 <dt>Key in this browser</dt>
                 <dd>
-                  {routed
-                    ? 'none'
-                    : snapshot.settings.apiKey
-                      ? snapshot.settings.rememberKey
-                        ? 'saved (plaintext IndexedDB)'
-                        : 'memory only'
-                      : 'none'}
+                  none
                 </dd>
               </div>
             </dl>

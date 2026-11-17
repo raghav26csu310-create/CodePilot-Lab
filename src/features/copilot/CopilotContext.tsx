@@ -13,6 +13,7 @@ import { createStoredEntry, loadFileContent } from '../../lib/projectStorage'
 import { useEditorCommands } from '../editor/EditorCommandsContext'
 import { buildContextBundle, DEFAULT_CONTEXT_OPTIONS, summarizeContext } from './context'
 import { AiError, describeAiError, toAiError } from './errors'
+import { useGateway } from './gateway/store'
 import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { isConfigured, providerLabel } from './providerPresets'
 import { adapterForSettings } from './providers'
@@ -106,6 +107,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   const { project, state, dispatch } = useWorkspace()
   const commands = useEditorCommands()
   const { settings, loaded, lastTest } = useAiSettings()
+  const gateway = useGateway()
 
   const [messages, setMessages] = useState<CopilotMessage[]>([])
   const [generating, setGenerating] = useState(false)
@@ -124,7 +126,30 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   const abortRef = useRef<AbortController | null>(null)
   const busyRef = useRef(false)
 
-  const signature = `${settings.provider}|${settings.baseUrl}|${settings.model}|${settings.apiKey}`
+  const activeConnection = gateway.status?.connection ?? null
+  const activeProviderLabel =
+    activeConnection?.label ??
+    (gateway.status?.managed.available
+      ? gateway.status.managed.label
+      : providerLabel(settings))
+  const activeModel =
+    activeConnection?.model ?? gateway.status?.managed.model ?? settings.model
+  const configured =
+    settings.route === 'gateway'
+      ? gateway.status !== null &&
+        (gateway.status.managed.available || gateway.status.connections.length > 0)
+      : isConfigured(settings)
+  const signature = [
+    settings.provider,
+    settings.route,
+    settings.baseUrl,
+    settings.model,
+    gateway.status?.defaultProviderId ?? '',
+    gateway.status?.fallbackProviderId ?? '',
+    activeConnection?.id ?? '',
+    activeConnection?.updatedAt ?? '',
+    gateway.status?.managed.model ?? '',
+  ].join('|')
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
@@ -211,7 +236,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       const usedCapability = override?.capability ?? capability
       const usedLevel = override?.level ?? level
 
-      if (!loaded || !isConfigured(settings)) {
+      if (!loaded || !configured) {
         setStatusError({
           message:
             'No provider and model are configured. Open AI provider settings, choose a provider, and save a model before sending. Nothing was sent.',
@@ -267,8 +292,8 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
           level: usedLevel,
           contextSummary: null,
           proposals: [],
-          providerLabel: providerLabel(settings),
-          model: settings.model,
+          providerLabel: activeProviderLabel,
+          model: activeModel,
         }
 
         const prior = messages
@@ -340,6 +365,22 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
             onDelta: (chunk) => {
               buffer += chunk
               scheduleFlush()
+            },
+            onMeta: (meta) => {
+              setMessages((previous) =>
+                previous.map((message) =>
+                  message.id === assistantId
+                    ? { ...message, providerLabel: meta.label, model: meta.model }
+                    : message,
+                ),
+              )
+            },
+            onUsage: (usage) => {
+              setMessages((previous) =>
+                previous.map((message) =>
+                  message.id === assistantId ? { ...message, usage } : message,
+                ),
+              )
             },
           })
 
@@ -438,6 +479,9 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       messages,
       contextOptions,
       commands,
+      configured,
+      activeProviderLabel,
+      activeModel,
       signature,
     ],
   )
@@ -634,11 +678,13 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
 
   const verified =
     (verifiedSignature !== null && verifiedSignature === signature) ||
-    (loaded && lastTest?.ok === true && lastTest.baseUrl === settings.baseUrl)
+    (loaded && lastTest?.ok === true && lastTest.baseUrl === settings.baseUrl) ||
+    gateway.status?.managed.available === true ||
+    activeConnection?.verifiedAt !== null && activeConnection?.verifiedAt !== undefined
 
   const status: CopilotStatus = generating
     ? 'generating'
-    : !isConfigured(settings)
+    : !configured
       ? 'unconfigured'
       : statusError?.kind === 'rate-limit'
         ? 'rate-limited'
@@ -656,9 +702,9 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       generating,
       status,
       statusError,
-      providerLabel: providerLabel(settings),
-      model: settings.model,
-      configured: isConfigured(settings),
+      providerLabel: activeProviderLabel,
+      model: activeModel,
+      configured,
       verified,
       capability,
       setCapability,
@@ -687,8 +733,10 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       generating,
       status,
       statusError,
-      settings,
       verified,
+      activeProviderLabel,
+      activeModel,
+      configured,
       capability,
       level,
       contextOptions,

@@ -26,7 +26,8 @@ export type GatewayUser = {
 }
 
 export type GatewayConnection = {
-  provider: string
+  id: string
+  provider: GatewayProviderId
   providerLabel: string
   label: string
   baseUrl: string
@@ -35,7 +36,18 @@ export type GatewayConnection = {
   keyLast4: string
   verifiedAt: number | null
   updatedAt: number
+  lastTestAt: number | null
+  lastTestOk: boolean | null
+  lastTestMessage: string | null
 }
+
+export type GatewayProviderId =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'ollama'
+  | 'deepseek'
+  | 'openai-compatible'
 
 export type GatewayUsage = {
   requests: number
@@ -54,6 +66,9 @@ export type GatewayStatus = {
     limits: { dailyRequests: number; monthlyTokens: number }
   }
   connection: GatewayConnection | null
+  connections: GatewayConnection[]
+  defaultProviderId: string | null
+  fallbackProviderId: string | null
   usage: { today: GatewayUsage; month: GatewayUsage }
   quota: {
     managedDailyRequests: number
@@ -300,6 +315,14 @@ export async function fetchGatewayStatus(signal?: AbortSignal): Promise<GatewayS
   return payload.status
 }
 
+export async function fetchGatewayConnections(signal?: AbortSignal): Promise<{
+  connections: GatewayConnection[]
+  defaultProviderId: string | null
+  fallbackProviderId: string | null
+}> {
+  return requestJson('/api/ai/connections', { signal })
+}
+
 export async function signInWithGateway(input: {
   email: string
   password: string
@@ -375,22 +398,37 @@ export async function setGatewayMode(mode: 'managed' | 'byo'): Promise<GatewaySt
 }
 
 export async function saveGatewayConnection(input: {
-  provider: 'ollama' | 'deepseek' | 'openai-compatible'
+  id?: string
+  provider: GatewayProviderId
   label?: string
   baseUrl: string
   model: string
   apiKey?: string
-}): Promise<GatewayStatus> {
-  const payload = await requestJson<{ status: GatewayStatus }>('/api/ai/connection', {
-    method: 'PUT',
+}): Promise<{ connection: GatewayConnection; status: GatewayStatus }> {
+  const path = input.id
+    ? `/api/ai/connections/${encodeURIComponent(input.id)}`
+    : '/api/ai/connections'
+  return requestJson<{ connection: GatewayConnection; status: GatewayStatus }>(path, {
+    method: input.id ? 'PUT' : 'POST',
     body: input,
   })
+}
+
+export async function deleteGatewayConnection(connectionId: string): Promise<GatewayStatus> {
+  const payload = await requestJson<{ status: GatewayStatus }>(
+    `/api/ai/connections/${encodeURIComponent(connectionId)}`,
+    { method: 'DELETE' },
+  )
   return payload.status
 }
 
-export async function deleteGatewayConnection(): Promise<GatewayStatus> {
-  const payload = await requestJson<{ status: GatewayStatus }>('/api/ai/connection', {
-    method: 'DELETE',
+export async function setGatewayProviderPreferences(input: {
+  defaultProviderId: string | null
+  fallbackProviderId: string | null
+}): Promise<GatewayStatus> {
+  const payload = await requestJson<{ status: GatewayStatus }>('/api/ai/preferences', {
+    method: 'PUT',
+    body: input,
   })
   return payload.status
 }
@@ -408,7 +446,8 @@ export type GatewayTestResult = {
 
 export async function testGatewayConnection(input: {
   mode?: 'managed' | 'byo'
-  provider?: 'ollama' | 'deepseek' | 'openai-compatible'
+  connectionId?: string
+  provider?: GatewayProviderId
   baseUrl?: string
   model?: string
   apiKey?: string
@@ -420,6 +459,16 @@ export async function testGatewayConnection(input: {
   return payload.result
 }
 
+export async function testSavedGatewayConnection(connectionId: string): Promise<{
+  result: GatewayTestResult
+  status: GatewayStatus
+}> {
+  return requestJson(
+    `/api/ai/connections/${encodeURIComponent(connectionId)}/test`,
+    { method: 'POST', body: {} },
+  )
+}
+
 export type GatewayChatInput = {
   turns: AiChatTurn[]
   mode?: 'managed' | 'byo'
@@ -429,12 +478,27 @@ export type GatewayChatInput = {
   signal: AbortSignal
   onDelta: (chunk: string) => void
   onMeta?: (meta: { mode: 'managed' | 'byo'; provider: string; model: string; label: string }) => void
+  onUsage?: (usage: GatewayChatUsage) => void
+}
+
+export type GatewayChatUsage = {
+  promptTokens: number | null
+  completionTokens: number | null
+  estimatedTokens: number
+  source: 'provider' | 'estimate'
 }
 
 type SseEvent =
   | { type: 'meta'; mode: 'managed' | 'byo'; provider: string; model: string; label: string }
   | { type: 'delta'; text: string }
-  | { type: 'done'; completionChars: number; promptChars: number; latencyMs: number; estimatedTokens: number }
+  | {
+      type: 'done'
+      completionChars: number
+      promptChars: number
+      latencyMs: number
+      estimatedTokens: number
+      usage?: GatewayChatUsage
+    }
   | { type: 'error'; code: string; message: string }
 
 /**
@@ -511,6 +575,7 @@ export async function streamGatewayChat(input: GatewayChatInput): Promise<void> 
           break
         case 'done':
           state.completed = true
+          if (event.usage) input.onUsage?.(event.usage)
           break
         case 'error':
           state.failure = new GatewayError(event.code, event.message)

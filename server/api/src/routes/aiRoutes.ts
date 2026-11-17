@@ -12,7 +12,8 @@ import { parseWith } from '../http/validate.ts'
 import type { ChatMessage } from '../ai/providers.ts'
 
 const ConnectionSchema = z.object({
-  provider: z.enum(['ollama', 'deepseek', 'openai-compatible']),
+  id: z.string().min(1).max(200).optional(),
+  provider: z.enum(['openai', 'anthropic', 'gemini', 'ollama', 'deepseek', 'openai-compatible']),
   label: z.string().max(80).optional(),
   baseUrl: z.string().min(1).max(2_000),
   model: z.string().min(1).max(200),
@@ -20,8 +21,9 @@ const ConnectionSchema = z.object({
 })
 
 const TestSchema = z.object({
+  connectionId: z.string().min(1).max(200).optional(),
   mode: z.enum(['managed', 'byo']).optional(),
-  provider: z.enum(['ollama', 'deepseek', 'openai-compatible']).optional(),
+  provider: z.enum(['openai', 'anthropic', 'gemini', 'ollama', 'deepseek', 'openai-compatible']).optional(),
   label: z.string().max(80).optional(),
   baseUrl: z.string().max(2_000).optional(),
   model: z.string().max(200).optional(),
@@ -30,6 +32,11 @@ const TestSchema = z.object({
 
 const ModeSchema = z.object({
   mode: z.enum(['managed', 'byo']),
+})
+
+const ProviderPreferencesSchema = z.object({
+  defaultProviderId: z.string().min(1).max(200).nullable(),
+  fallbackProviderId: z.string().min(1).max(200).nullable(),
 })
 
 const ChatSchema = z.object({
@@ -54,6 +61,15 @@ export function registerAiRoutes(router: Router): void {
     sendJson(ctx.res, 200, { status })
   })
 
+  router.add('GET', '/api/ai/connections', 'required', async (ctx) => {
+    const status = await ctx.ai.getStatus(ctx.user!.id)
+    sendJson(ctx.res, 200, {
+      connections: status.connections,
+      defaultProviderId: status.defaultProviderId,
+      fallbackProviderId: status.fallbackProviderId,
+    })
+  })
+
   router.add('GET', '/api/ai/usage', 'required', async (ctx) => {
     const status = await ctx.ai.getStatus(ctx.user!.id)
     sendJson(ctx.res, 200, {
@@ -70,6 +86,48 @@ export function registerAiRoutes(router: Router): void {
     sendJson(ctx.res, 200, { status })
   })
 
+  router.add('PUT', '/api/ai/preferences', 'required', async (ctx) => {
+    const body = parseWith(
+      ProviderPreferencesSchema,
+      await readJsonBody(ctx.req, ctx.config.MAX_BODY_BYTES),
+    )
+    await ctx.ai.setProviderPreferences(ctx.user!.id, body)
+    const status = await ctx.ai.getStatus(ctx.user!.id)
+    sendJson(ctx.res, 200, { status })
+  })
+
+  router.add('POST', '/api/ai/connections', 'required', async (ctx) => {
+    const body = parseWith(ConnectionSchema, await readJsonBody(ctx.req, ctx.config.MAX_BODY_BYTES))
+    const connection = await ctx.ai.saveConnection(ctx.user!.id, body)
+    const status = await ctx.ai.getStatus(ctx.user!.id)
+    sendJson(ctx.res, 201, { connection, status })
+  })
+
+  router.add('PUT', '/api/ai/connections/:connectionId', 'required', async (ctx) => {
+    const body = parseWith(ConnectionSchema, await readJsonBody(ctx.req, ctx.config.MAX_BODY_BYTES))
+    const connection = await ctx.ai.saveConnection(ctx.user!.id, {
+      ...body,
+      id: ctx.params.connectionId,
+    })
+    const status = await ctx.ai.getStatus(ctx.user!.id)
+    sendJson(ctx.res, 200, { connection, status })
+  })
+
+  router.add('DELETE', '/api/ai/connections/:connectionId', 'required', async (ctx) => {
+    await ctx.ai.deleteConnection(ctx.user!.id, ctx.params.connectionId ?? '')
+    const status = await ctx.ai.getStatus(ctx.user!.id)
+    sendJson(ctx.res, 200, { status })
+  })
+
+  router.add('POST', '/api/ai/connections/:connectionId/test', 'required', async (ctx) => {
+    enforceLimit(ctx, 'connectionTest', ctx.user!.id)
+    const result = await ctx.ai.testConnection(ctx.user!.id, {
+      connectionId: ctx.params.connectionId,
+    })
+    const status = await ctx.ai.getStatus(ctx.user!.id)
+    sendJson(ctx.res, 200, { result, status })
+  })
+
   router.add('PUT', '/api/ai/connection', 'required', async (ctx) => {
     const body = parseWith(ConnectionSchema, await readJsonBody(ctx.req, ctx.config.MAX_BODY_BYTES))
     // The key is accepted here and written straight into the encrypted store.
@@ -80,7 +138,10 @@ export function registerAiRoutes(router: Router): void {
   })
 
   router.add('DELETE', '/api/ai/connection', 'required', async (ctx) => {
-    await ctx.ai.deleteConnection(ctx.user!.id)
+    const currentStatus = await ctx.ai.getStatus(ctx.user!.id)
+    if (currentStatus.connection) {
+      await ctx.ai.deleteConnection(ctx.user!.id, currentStatus.connection.id)
+    }
     const status = await ctx.ai.getStatus(ctx.user!.id)
     sendJson(ctx.res, 200, { status })
   })

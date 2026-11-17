@@ -20,9 +20,17 @@ import {
   type StreamResult,
 } from './providers.ts'
 
-const PROVIDER_IDS: AiProviderId[] = ['ollama', 'deepseek', 'openai-compatible']
+const PROVIDER_IDS: AiProviderId[] = [
+  'openai',
+  'anthropic',
+  'gemini',
+  'ollama',
+  'deepseek',
+  'openai-compatible',
+]
 
 export type PublicConnection = {
+  id: string
   provider: AiProviderId
   providerLabel: string
   label: string
@@ -32,6 +40,9 @@ export type PublicConnection = {
   keyLast4: string
   verifiedAt: number | null
   updatedAt: number
+  lastTestAt: number | null
+  lastTestOk: boolean | null
+  lastTestMessage: string | null
 }
 
 export type AiStatus = {
@@ -44,6 +55,9 @@ export type AiStatus = {
     limits: { dailyRequests: number; monthlyTokens: number }
   }
   connection: PublicConnection | null
+  connections: PublicConnection[]
+  defaultProviderId: string | null
+  fallbackProviderId: string | null
   usage: UsageSummary
   quota: {
     managedDailyRequests: number
@@ -57,6 +71,7 @@ export type AiStatus = {
 }
 
 export type ConnectionInput = {
+  id?: string
   provider: string
   label?: string
   baseUrl: string
@@ -65,6 +80,7 @@ export type ConnectionInput = {
 }
 
 export type TestInput = {
+  connectionId?: string
   mode?: 'managed' | 'byo'
   provider?: string
   label?: string
@@ -92,6 +108,11 @@ export type ChatInput = {
   maxTokens?: number
 }
 
+export type ProviderPreferencesInput = {
+  defaultProviderId: string | null
+  fallbackProviderId: string | null
+}
+
 export type ChatStreamEvent =
   | { type: 'meta'; mode: AiUsageMode; provider: string; model: string; label: string }
   | { type: 'delta'; text: string }
@@ -101,6 +122,12 @@ export type ChatStreamEvent =
       promptChars: number
       latencyMs: number
       estimatedTokens: number
+      usage: {
+        promptTokens: number | null
+        completionTokens: number | null
+        estimatedTokens: number
+        source: 'provider' | 'estimate'
+      }
     }
 
 export type ChatHooks = {
@@ -139,8 +166,8 @@ export class AiService {
   }
 
   async getStatus(userId: string): Promise<AiStatus> {
-    const [connection, usage, settingsRecord] = await Promise.all([
-      this.store.getAiConnection(userId),
+    const [connections, usage, settingsRecord] = await Promise.all([
+      this.store.listAiConnections(userId),
       this.usageSummary(userId),
       this.store.getSettings(userId),
     ])
@@ -151,9 +178,19 @@ export class AiService {
 
     const managed = this.config.managedAi
     const managedAvailable = managed !== null
-    const byoAvailable = connection !== null
+    const publicConnections = connections.map(toPublicConnection)
+    const preferences = resolvedPreferences(
+      settingsRecord?.settings ?? {},
+      connections,
+    )
+    const defaultConnection = preferences.defaultProviderId
+      ? connections.find((connection) => connection.id === preferences.defaultProviderId) ?? null
+      : null
+    const byoAvailable = connections.length > 0
 
-    const defaultMode: AiUsageMode | 'none' = preferredMode
+    const defaultMode: AiUsageMode | 'none' = preferences.defaultProviderId
+      ? 'byo'
+      : preferredMode
       ? this.modeAvailable(preferredMode, managedAvailable, byoAvailable)
         ? preferredMode
         : managedAvailable
@@ -182,7 +219,10 @@ export class AiService {
           : 'Managed CodePilot AI is not configured on this server. Connect a personal provider to use AI features.',
         limits,
       },
-      connection: connection ? toPublicConnection(connection) : null,
+      connection: defaultConnection ? toPublicConnection(defaultConnection) : null,
+      connections: publicConnections,
+      defaultProviderId: preferences.defaultProviderId,
+      fallbackProviderId: preferences.fallbackProviderId,
       usage,
       quota: {
         managedDailyRequests: limits.dailyRequests,
@@ -223,7 +263,18 @@ export class AiService {
       throw badRequest('Choose a model name between 1 and 200 characters.')
     }
     const label = (input.label?.trim() || PROVIDER_LABELS[provider]).slice(0, 80)
-    const existing = await this.store.getAiConnection(userId)
+    const [existingConnections, previousSettings] = await Promise.all([
+      this.store.listAiConnections(userId),
+      this.store.getSettings(userId),
+    ])
+    const previousPreferences = resolvedPreferences(
+      previousSettings?.settings ?? {},
+      existingConnections,
+    )
+    const existing = input.id ? await this.store.getAiConnection(userId, input.id) : null
+    if (input.id && !existing) {
+      throw badRequest('That provider configuration was not found for this account.')
+    }
 
     let apiKey = (input.apiKey ?? '').trim()
     if (!apiKey && existing) {
@@ -234,13 +285,13 @@ export class AiService {
       }
     }
 
-    if (provider === 'deepseek' && !apiKey) {
-      throw badRequest('DeepSeek requires an API key. The key is stored encrypted, never returned.')
+    if (requiresApiKey(provider) && !apiKey) {
+      throw badRequest(`${PROVIDER_LABELS[provider]} requires an API key. The key is stored encrypted, never returned.`)
     }
 
     const updatedAt = this.now()
     const record = await this.store.upsertAiConnection(userId, {
-      id: newId(),
+      id: existing?.id ?? newId(),
       provider,
       label,
       baseUrl,
@@ -252,15 +303,71 @@ export class AiService {
 
     // Connecting a personal provider is an explicit choice to use it.
     await this.setPreferredMode(userId, 'byo')
+    await this.setProviderPreferences(userId, {
+      defaultProviderId: previousPreferences.defaultProviderId ?? record.id,
+      fallbackProviderId: previousPreferences.fallbackProviderId,
+    })
     return toPublicConnection(record)
   }
 
-  async deleteConnection(userId: string): Promise<void> {
-    await this.store.deleteAiConnection(userId)
-    const existing = await this.store.getSettings(userId)
-    if (existing?.settings.aiMode === 'byo') {
-      await this.store.putSettings(userId, { ...existing.settings, aiMode: 'managed' })
+  async deleteConnection(userId: string, connectionId: string): Promise<void> {
+    const deleted = await this.store.deleteAiConnection(userId, connectionId)
+    if (!deleted) throw badRequest('That provider configuration was not found for this account.')
+    const [settings, connections] = await Promise.all([
+      this.store.getSettings(userId),
+      this.store.listAiConnections(userId),
+    ])
+    const current = settings?.settings ?? {}
+    const ids = new Set(connections.map((connection) => connection.id))
+    const oldDefault =
+      typeof current.aiDefaultProviderId === 'string' ? current.aiDefaultProviderId : null
+    const oldFallback =
+      typeof current.aiFallbackProviderId === 'string' ? current.aiFallbackProviderId : null
+    const defaultProviderId =
+      oldDefault && ids.has(oldDefault)
+        ? oldDefault
+        : oldFallback && ids.has(oldFallback)
+          ? oldFallback
+          : (connections[0]?.id ?? null)
+    const fallbackProviderId =
+      oldFallback && oldFallback !== defaultProviderId && ids.has(oldFallback)
+        ? oldFallback
+        : null
+    await this.store.putSettings(userId, {
+      ...current,
+      aiDefaultProviderId: defaultProviderId,
+      aiFallbackProviderId: fallbackProviderId,
+      ...(!defaultProviderId && current.aiMode === 'byo'
+        ? { aiMode: 'managed' }
+        : {}),
+    })
+  }
+
+  async setProviderPreferences(
+    userId: string,
+    input: ProviderPreferencesInput,
+  ): Promise<void> {
+    const connections = await this.store.listAiConnections(userId)
+    const ids = new Set(connections.map((connection) => connection.id))
+    if (input.defaultProviderId && !ids.has(input.defaultProviderId)) {
+      throw badRequest('The selected default provider does not belong to this account.')
     }
+    if (input.fallbackProviderId && !ids.has(input.fallbackProviderId)) {
+      throw badRequest('The selected fallback provider does not belong to this account.')
+    }
+    if (!input.defaultProviderId && input.fallbackProviderId) {
+      throw badRequest('A fallback provider requires a default provider.')
+    }
+    if (input.defaultProviderId && input.defaultProviderId === input.fallbackProviderId) {
+      throw badRequest('The fallback provider must be different from the default provider.')
+    }
+    const existing = await this.store.getSettings(userId)
+    await this.store.putSettings(userId, {
+      ...(existing?.settings ?? {}),
+      aiMode: input.defaultProviderId ? 'byo' : 'managed',
+      aiDefaultProviderId: input.defaultProviderId,
+      aiFallbackProviderId: input.fallbackProviderId,
+    })
   }
 
   async testConnection(userId: string, input: TestInput): Promise<TestResult> {
@@ -269,58 +376,91 @@ export class AiService {
       return this.testManaged()
     }
 
-    const existing = await this.store.getAiConnection(userId)
-    const draft = input.baseUrl !== undefined || input.provider !== undefined || input.model !== undefined
+    const existing = input.connectionId
+      ? await this.store.getAiConnection(userId, input.connectionId)
+      : null
+    if (input.connectionId && !existing) {
+      throw badRequest('That provider configuration was not found for this account.')
+    }
+    const draft =
+      !existing ||
+      (input.provider !== undefined && input.provider !== existing.provider) ||
+      (input.label !== undefined && input.label.trim() !== existing.label) ||
+      (input.baseUrl !== undefined && input.baseUrl.trim() !== existing.baseUrl) ||
+      (input.model !== undefined && input.model.trim() !== existing.model) ||
+      Boolean(input.apiKey?.trim())
     const provider = parseProvider(input.provider ?? existing?.provider ?? 'openai-compatible')
     const baseUrlRaw = input.baseUrl ?? existing?.baseUrl ?? ''
     const model = (input.model ?? existing?.model ?? '').trim()
     if (!baseUrlRaw.trim()) {
       throw badRequest('Enter a base URL before testing the connection.')
     }
-    if (!model) {
-      throw badRequest('Choose a model before testing the connection.')
-    }
-    const baseUrl = await assertEndpointAllowed(
-      baseUrlRaw,
-      this.config.ALLOW_PRIVATE_AI_ENDPOINTS,
-    )
-
     let apiKey = (input.apiKey ?? '').trim()
-    if (!apiKey && existing && existing.provider === provider && existing.baseUrl === baseUrl) {
-      apiKey = this.cipher.decrypt(existing.encryptedApiKey)
-    }
-
     const startedAt = this.now()
+    let baseUrl = baseUrlRaw
     try {
+      baseUrl = await assertEndpointAllowed(
+        baseUrlRaw,
+        this.config.ALLOW_PRIVATE_AI_ENDPOINTS,
+      )
+      if (!apiKey && existing && existing.provider === provider && existing.baseUrl === baseUrl) {
+        apiKey = this.cipher.decrypt(existing.encryptedApiKey)
+      }
+      if (requiresApiKey(provider) && !apiKey) {
+        throw new ProviderError(
+          'invalid-settings',
+          `${PROVIDER_LABELS[provider]} requires an API key.`,
+        )
+      }
       const models = await this.providers.listModels({
         provider,
         baseUrl,
         apiKey,
         model,
       })
-      const latencyMs = this.now() - startedAt
-      if (!draft && existing) {
-        await this.store.markAiConnectionVerified(userId, this.now())
+      if (model && models.length > 0 && !models.includes(model)) {
+        throw new ProviderError(
+          'not-found',
+          `The provider responded, but the selected model "${model}" is not available.`,
+        )
       }
-      return {
+      const result: TestResult = {
         ok: true,
         mode: 'byo',
         label: input.label?.trim() || existing?.label || PROVIDER_LABELS[provider],
         baseUrl,
-        latencyMs,
+        latencyMs: this.now() - startedAt,
         models,
         message:
           models.length > 0
             ? `The endpoint answered with ${models.length} model${models.length === 1 ? '' : 's'}.`
             : 'The endpoint answered, but advertised no models.',
       }
+      if (!draft && existing) {
+        await this.store.markAiConnectionTest(userId, {
+          id: existing.id,
+          testedAt: this.now(),
+          ok: true,
+          message: result.message,
+        })
+      }
+      return result
     } catch (error) {
-      return providerFailure(error, {
+      const result = providerFailure(error, {
         mode: 'byo',
         label: input.label?.trim() || existing?.label || PROVIDER_LABELS[provider],
         baseUrl,
         latencyMs: this.now() - startedAt,
       })
+      if (!draft && existing) {
+        await this.store.markAiConnectionTest(userId, {
+          id: existing.id,
+          testedAt: this.now(),
+          ok: false,
+          message: redactSecret(result.message, apiKey),
+        })
+      }
+      return { ...result, message: redactSecret(result.message, apiKey) }
     }
   }
 
@@ -347,20 +487,24 @@ export class AiService {
             : `${managed.label} answered, but advertised no models.`,
       }
     } catch (error) {
-      return providerFailure(error, {
+      const result = providerFailure(error, {
         mode: 'managed',
         label: managed.label,
         baseUrl: managed.baseUrl,
         latencyMs: this.now() - startedAt,
       })
+      return { ...result, message: redactSecret(result.message, managed.apiKey) }
     }
   }
 
   async chat(userId: string, input: ChatInput, hooks: ChatHooks): Promise<void> {
     const messages = validateMessages(input, this.config)
-    const connection = await this.store.getAiConnection(userId)
+    const [connections, settingsRecord] = await Promise.all([
+      this.store.listAiConnections(userId),
+      this.store.getSettings(userId),
+    ])
     const managed = this.config.managedAi
-    const mode = await this.resolveMode(userId, input.mode, managed !== null, connection !== null)
+    const mode = await this.resolveMode(userId, input.mode, managed !== null, connections.length > 0)
 
     if (mode === 'managed') {
       if (!managed) {
@@ -373,38 +517,104 @@ export class AiService {
       if (!this.managedModelAllowed(managed, model)) {
         throw badRequest('That model is not served by the managed CodePilot AI.')
       }
-      await this.runProvider({
-        userId,
-        mode,
-        config: {
-          provider: managed.provider,
-          baseUrl: managed.baseUrl,
-          apiKey: managed.apiKey,
-          model,
-          temperature: clamp(input.temperature, 0, 1.5, DEFAULT_TEMPERATURE),
-          maxTokens: Math.round(clamp(input.maxTokens, 64, 16_384, DEFAULT_MAX_TOKENS)),
-        },
-        label: managed.label,
-        messages,
-        hooks,
-      })
+      try {
+        await this.runProvider({
+          userId,
+          mode,
+          config: {
+            provider: managed.provider,
+            baseUrl: managed.baseUrl,
+            apiKey: managed.apiKey,
+            model,
+            temperature: clamp(input.temperature, 0, 1.5, DEFAULT_TEMPERATURE),
+            maxTokens: Math.round(clamp(input.maxTokens, 64, 16_384, DEFAULT_MAX_TOKENS)),
+          },
+          label: managed.label,
+          messages,
+          hooks,
+        })
+      } catch (error) {
+        throw sanitizeProviderError(error, managed.apiKey)
+      }
       return
     }
 
-    if (!connection) {
+    if (connections.length === 0) {
       throw serviceUnavailable(
         'No AI provider is connected. Sign in and connect CodePilot AI or a personal provider in Settings.',
       )
     }
-    const apiKey = this.cipher.decrypt(connection.encryptedApiKey)
-    const model = input.model?.trim() || connection.model
-    if (!model) {
-      throw badRequest('The connected provider has no model selected.')
+    const preferences = resolvedPreferences(settingsRecord?.settings ?? {}, connections)
+    const primary =
+      connections.find((connection) => connection.id === preferences.defaultProviderId) ??
+      connections[0]
+    if (!primary) {
+      throw serviceUnavailable('No personal provider is connected for this account.')
     }
+    const fallback = connections.find(
+      (connection) => connection.id === preferences.fallbackProviderId,
+    )
+    let primaryDeltas = 0
+    try {
+      await this.runSavedProvider({
+        userId,
+        connection: primary,
+        messages,
+        input,
+        hooks,
+        onDelta: (text) => {
+          primaryDeltas += text.length
+          hooks.onEvent({ type: 'delta', text })
+        },
+      })
+    } catch (error) {
+      if (!fallback || primaryDeltas > 0 || !shouldFallback(error) || hooks.signal.aborted) {
+        throw sanitizeProviderError(error, this.cipher.decrypt(primary.encryptedApiKey))
+      }
+      try {
+        await this.runSavedProvider({
+          userId,
+          connection: fallback,
+          messages,
+          input,
+          hooks,
+          onDelta: (text) => hooks.onEvent({ type: 'delta', text }),
+        })
+      } catch (fallbackError) {
+        const first = sanitizeProviderError(error, this.cipher.decrypt(primary.encryptedApiKey))
+        const second = sanitizeProviderError(
+          fallbackError,
+          this.cipher.decrypt(fallback.encryptedApiKey),
+        )
+        if (first instanceof ProviderError && second instanceof ProviderError) {
+          throw new ProviderError(
+            second.code,
+            `Default provider ${primary.label} failed: ${first.message} Fallback provider ${fallback.label} failed: ${second.message}`,
+            second.status,
+          )
+        }
+        throw second
+      }
+    }
+  }
 
+  private async runSavedProvider(args: {
+    userId: string
+    connection: AiConnectionRecord
+    messages: ChatMessage[]
+    input: ChatInput
+    hooks: ChatHooks
+    onDelta: (text: string) => void
+  }): Promise<void> {
+    const { userId, connection, messages, input, hooks, onDelta } = args
+    const apiKey = this.cipher.decrypt(connection.encryptedApiKey)
+    const model = connection.model
+    if (!model) {
+      throw badRequest(`The ${connection.label} provider has no model selected.`)
+    }
     await this.runProvider({
       userId,
-      mode,
+      mode: 'byo',
       config: {
         provider: connection.provider,
         baseUrl: connection.baseUrl,
@@ -415,7 +625,13 @@ export class AiService {
       },
       label: connection.label,
       messages,
-      hooks,
+      hooks: { ...hooks, onEvent: (event) => {
+        if (event.type === 'delta') {
+          onDelta(event.text)
+        } else {
+          hooks.onEvent(event)
+        }
+      } },
     })
   }
 
@@ -487,6 +703,15 @@ export class AiService {
       promptChars,
       latencyMs,
       estimatedTokens,
+      usage: {
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        estimatedTokens,
+        source:
+          result.usage.promptTokens !== null && result.usage.completionTokens !== null
+            ? 'provider'
+            : 'estimate',
+      },
     })
   }
 
@@ -606,6 +831,7 @@ export class AiService {
 
 export function toPublicConnection(record: AiConnectionRecord): PublicConnection {
   return {
+    id: record.id,
     provider: record.provider,
     providerLabel: PROVIDER_LABELS[record.provider],
     label: record.label,
@@ -615,6 +841,9 @@ export function toPublicConnection(record: AiConnectionRecord): PublicConnection
     keyLast4: record.keyLast4,
     verifiedAt: record.verifiedAt,
     updatedAt: record.updatedAt,
+    lastTestAt: record.lastTestAt,
+    lastTestOk: record.lastTestOk,
+    lastTestMessage: record.lastTestMessage,
   }
 }
 
@@ -622,7 +851,53 @@ function parseProvider(value: string): AiProviderId {
   if (PROVIDER_IDS.includes(value as AiProviderId)) {
     return value as AiProviderId
   }
-  throw badRequest('Provider must be "ollama", "deepseek" or "openai-compatible".')
+  throw badRequest(
+    'Provider must be OpenAI, Anthropic, Google Gemini, Ollama, DeepSeek or OpenAI-compatible.',
+  )
+}
+
+function requiresApiKey(provider: AiProviderId): boolean {
+  return provider === 'openai' || provider === 'anthropic' || provider === 'gemini' || provider === 'deepseek'
+}
+
+function resolvedPreferences(
+  settings: Record<string, unknown>,
+  connections: AiConnectionRecord[],
+): ProviderPreferencesInput {
+  const ids = new Set(connections.map((connection) => connection.id))
+  const requestedDefault =
+    typeof settings.aiDefaultProviderId === 'string' ? settings.aiDefaultProviderId : null
+  const requestedFallback =
+    typeof settings.aiFallbackProviderId === 'string' ? settings.aiFallbackProviderId : null
+  const defaultWasSet = Object.prototype.hasOwnProperty.call(settings, 'aiDefaultProviderId')
+  const defaultProviderId = defaultWasSet
+    ? requestedDefault && ids.has(requestedDefault)
+      ? requestedDefault
+      : null
+    : (connections[0]?.id ?? null)
+  const fallbackProviderId =
+    requestedFallback &&
+    requestedFallback !== defaultProviderId &&
+    ids.has(requestedFallback)
+      ? requestedFallback
+      : null
+  return { defaultProviderId, fallbackProviderId }
+}
+
+function shouldFallback(error: unknown): boolean {
+  return (
+    error instanceof ProviderError &&
+    ['auth', 'rate-limit', 'network', 'timeout', 'not-found', 'provider'].includes(error.code)
+  )
+}
+
+function redactSecret(message: string, secret: string): string {
+  return secret ? message.replaceAll(secret, '[redacted]') : message
+}
+
+function sanitizeProviderError(error: unknown, secret: string): unknown {
+  if (!(error instanceof ProviderError)) return error
+  return new ProviderError(error.code, redactSecret(error.message, secret), error.status)
 }
 
 function validateMessages(input: ChatInput, config: AppConfig): ChatMessage[] {

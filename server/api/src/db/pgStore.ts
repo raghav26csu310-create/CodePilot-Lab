@@ -6,6 +6,7 @@ import {
   EMPTY_USAGE,
   type AiConnectionInput,
   type AiConnectionRecord,
+  type AiConnectionTestInput,
   type AiUsageEvent,
   type NewUserInput,
   type ProjectFileInput,
@@ -75,6 +76,9 @@ function mapConnection(row: QueryResultRow): AiConnectionRecord {
     createdAt: ms(row.created_at),
     updatedAt: ms(row.updated_at),
     verifiedAt: row.verified_at ? ms(row.verified_at) : null,
+    lastTestAt: row.last_test_at ? ms(row.last_test_at) : null,
+    lastTestOk: typeof row.last_test_ok === 'boolean' ? row.last_test_ok : null,
+    lastTestMessage: typeof row.last_test_message === 'string' ? row.last_test_message : null,
   }
 }
 
@@ -411,10 +415,22 @@ export class PgStore implements Store {
     }
   }
 
-  async getAiConnection(userId: string): Promise<AiConnectionRecord | null> {
-    const result = await this.pool.query('SELECT * FROM ai_connections WHERE user_id = $1', [
-      userId,
-    ])
+  async listAiConnections(userId: string): Promise<AiConnectionRecord[]> {
+    const result = await this.pool.query(
+      'SELECT * FROM ai_connections WHERE user_id = $1 ORDER BY updated_at DESC, id',
+      [userId],
+    )
+    return result.rows.map(mapConnection)
+  }
+
+  async getAiConnection(
+    userId: string,
+    connectionId: string,
+  ): Promise<AiConnectionRecord | null> {
+    const result = await this.pool.query(
+      'SELECT * FROM ai_connections WHERE user_id = $1 AND id = $2',
+      [userId, connectionId],
+    )
     return result.rows[0] ? mapConnection(result.rows[0]) : null
   }
 
@@ -426,7 +442,7 @@ export class PgStore implements Store {
       `INSERT INTO ai_connections
          (id, user_id, provider, label, base_url, model, encrypted_api_key, key_last4, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-       ON CONFLICT (user_id) DO UPDATE SET
+       ON CONFLICT (id) DO UPDATE SET
          provider = EXCLUDED.provider,
          label = EXCLUDED.label,
          base_url = EXCLUDED.base_url,
@@ -434,7 +450,11 @@ export class PgStore implements Store {
          encrypted_api_key = EXCLUDED.encrypted_api_key,
          key_last4 = EXCLUDED.key_last4,
          updated_at = EXCLUDED.updated_at,
-         verified_at = NULL
+         verified_at = NULL,
+         last_test_at = NULL,
+         last_test_ok = NULL,
+         last_test_message = NULL
+       WHERE ai_connections.user_id = EXCLUDED.user_id
        RETURNING *`,
       [
         input.id,
@@ -448,18 +468,30 @@ export class PgStore implements Store {
         new Date(input.createdAt),
       ],
     )
-    return mapConnection(result.rows[0]!)
+    if (!result.rows[0]) {
+      throw new Error('The provider connection does not belong to this account.')
+    }
+    return mapConnection(result.rows[0])
   }
 
-  async deleteAiConnection(userId: string): Promise<boolean> {
-    const result = await this.pool.query('DELETE FROM ai_connections WHERE user_id = $1', [userId])
+  async deleteAiConnection(userId: string, connectionId: string): Promise<boolean> {
+    const result = await this.pool.query(
+      'DELETE FROM ai_connections WHERE user_id = $1 AND id = $2',
+      [userId, connectionId],
+    )
     return (result.rowCount ?? 0) > 0
   }
 
-  async markAiConnectionVerified(userId: string, at: number): Promise<void> {
+  async markAiConnectionTest(userId: string, input: AiConnectionTestInput): Promise<void> {
     await this.pool.query(
-      'UPDATE ai_connections SET verified_at = $2, updated_at = $2 WHERE user_id = $1',
-      [userId, new Date(at)],
+      `UPDATE ai_connections
+       SET verified_at = CASE WHEN $3 THEN $2 ELSE NULL END,
+           last_test_at = $2,
+           last_test_ok = $3,
+           last_test_message = $4,
+           updated_at = $2
+       WHERE user_id = $1 AND id = $5`,
+      [userId, new Date(input.testedAt), input.ok, input.message.slice(0, 500), input.id],
     )
   }
 

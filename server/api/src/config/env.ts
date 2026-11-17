@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { AiProviderId } from '../db/types.ts'
 /**
  * Server configuration. Everything here is process-level and never reaches the
  * browser: provider credentials, the database URL and the cookie/encryption
@@ -67,7 +68,7 @@ const EnvSchema = z.object({
 
 export type ServerEnv = z.infer<typeof EnvSchema>
 
-export type ManagedAiProviderId = 'ollama' | 'deepseek' | 'openai-compatible'
+export type ManagedAiProviderId = AiProviderId
 
 export type ManagedAiConfig = {
   provider: ManagedAiProviderId
@@ -81,11 +82,18 @@ export type ManagedAiConfig = {
 }
 
 function parseManagedProvider(value: string): ManagedAiProviderId {
-  if (value === 'ollama' || value === 'deepseek' || value === 'openai-compatible') {
+  if (
+    value === 'openai' ||
+    value === 'anthropic' ||
+    value === 'gemini' ||
+    value === 'ollama' ||
+    value === 'deepseek' ||
+    value === 'openai-compatible'
+  ) {
     return value
   }
   throw new ConfigurationError(
-    'MANAGED_AI_PROVIDER must be "ollama", "deepseek" or "openai-compatible".',
+    'MANAGED_AI_PROVIDER must be OpenAI, Anthropic, Google Gemini, Ollama, DeepSeek or OpenAI-compatible.',
   )
 }
 

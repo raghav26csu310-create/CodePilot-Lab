@@ -1,22 +1,24 @@
 # Security notes
 
-> **Status note (2026-11-12):** an account API now exists under `server/api` (sessions,
-> scrypt password hashes, AES-256-GCM provider credentials, per-user isolation). The
-> “no backend” statements below describe the earlier browser-only build and are superseded
-> for anything that goes through the gateway. See [`technical-audit.md`](./technical-audit.md)
-> §11 and [`ai-gateway.md`](./ai-gateway.md). Client-side storage of a direct-provider key
-> remains plaintext IndexedDB when the user opts in, and the UI says so.
+> **Status note (2026-11-17):** the authenticated API under `server/api` owns accounts,
+> per-user provider configurations and AES-256-GCM encrypted BYO credentials. Provider keys
+> are not stored in browser settings; legacy keys are removed when settings load. See
+> [`technical-audit.md`](./technical-audit.md) §17 and [`ai-gateway.md`](./ai-gateway.md).
 
 This document describes the public-beta security posture. It does not claim that the local
 execution service is a sandbox.
 
 ## Data and secrets
 
-- No API key is compiled into the bundle. Keys are typed at runtime, live in memory by
-  default, and reach IndexedDB only when “remember in this browser” is checked.
-- Provider settings persist under the Dexie `settings` key `copilot.provider.v1`.
+- No provider key is compiled into the bundle or saved to browser storage. BYO keys are
+  submitted to the authenticated API, encrypted at rest, and only key presence / last four
+  characters are returned. In development, the encryption key is ephemeral unless
+  `CREDENTIAL_ENCRYPTION_KEY` is configured.
+- Non-secret UI preferences persist under the Dexie `settings` key `copilot.provider.v1`;
+  legacy provider keys are stripped during load/migration.
 - Feedback never includes project contents, API keys or analytics identifiers.
-- There is no application backend, no server-side session and no account database.
+- The API provides session-cookie authentication; development defaults to an in-memory
+  account store, which is not durable.
 - The frontend does not use `dangerouslySetInnerHTML`, `innerHTML`, `eval` or `new Function`.
   Model prose is rendered as text/Markdown through the existing renderer, not raw HTML.
 

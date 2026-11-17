@@ -2,61 +2,49 @@ import { isIP } from 'node:net'
 import { lookup } from 'node:dns/promises'
 
 import type { AiProviderId } from '../db/types.ts'
+import { anthropicProviderAdapter } from './providerAdapters/anthropic.ts'
+import { geminiProviderAdapter } from './providerAdapters/gemini.ts'
+import {
+  deepSeekProviderAdapter,
+  openAiCompatibleProviderAdapter,
+  openAiProviderAdapter,
+} from './providerAdapters/openAiCompatible.ts'
+import { ollamaProviderAdapter } from './providerAdapters/ollama.ts'
+import {
+  ProviderError,
+  type ChatMessage,
+  type ProviderAdapter,
+  type ProviderConfig,
+  type ProviderStreamOptions,
+  type ProviderTransport,
+  type StreamResult,
+} from './providerTypes.ts'
 
-export type ChatMessage = {
-  role: 'system' | 'user' | 'assistant'
-  content: string
-}
-
-export type ProviderConfig = {
-  provider: AiProviderId
-  baseUrl: string
-  apiKey: string
-  model: string
-  temperature?: number
-  maxTokens?: number
-}
-
-export type ProviderUsage = {
-  promptTokens: number | null
-  completionTokens: number | null
-}
-
-export type StreamResult = {
-  completionChars: number
-  usage: ProviderUsage
-}
-
-export type ProviderFailure = {
-  code:
-    | 'aborted'
-    | 'auth'
-    | 'rate-limit'
-    | 'network'
-    | 'timeout'
-    | 'not-found'
-    | 'provider'
-    | 'invalid-endpoint'
-  status: number | null
-  message: string
-}
-
-export class ProviderError extends Error {
-  code: ProviderFailure['code']
-  status: number | null
-
-  constructor(code: ProviderFailure['code'], message: string, status: number | null = null) {
-    super(message)
-    this.name = 'ProviderError'
-    this.code = code
-    this.status = status
-  }
-}
+export {
+  ProviderError,
+  type ChatMessage,
+  type ProviderConfig,
+  type ProviderFailure,
+  type ProviderUsage,
+  type StreamResult,
+} from './providerTypes.ts'
 
 export const PROVIDER_LABELS: Record<AiProviderId, string> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  gemini: 'Google Gemini',
   ollama: 'Ollama',
   deepseek: 'DeepSeek',
   'openai-compatible': 'OpenAI-compatible',
+}
+
+const PROVIDER_ADAPTERS: Record<AiProviderId, ProviderAdapter> = {
+  openai: openAiProviderAdapter,
+  anthropic: anthropicProviderAdapter,
+  gemini: geminiProviderAdapter,
+  ollama: ollamaProviderAdapter,
+  deepseek: deepSeekProviderAdapter,
+  'openai-compatible': openAiCompatibleProviderAdapter,
 }
 
 type ProviderOptions = {
@@ -65,236 +53,60 @@ type ProviderOptions = {
   timeoutMs: number
 }
 
-type StreamOptions = {
-  signal: AbortSignal
-  onDelta: (text: string) => void
-}
-
 /**
- * Server-side provider transport. It is the only place that sees a provider API
- * key, and it never logs or returns the key. Both adapters stream text deltas;
- * native `ollama` uses NDJSON and `openai-compatible` (including DeepSeek) uses
- * SSE.
+ * Shared API-facing interface. Each vendor adapter owns its model, request,
+ * authentication-header, and streaming protocol; this client owns endpoint
+ * validation, deadlines, and provider error classification.
  */
 export class ProviderClient {
   private readonly fetchImpl: typeof fetch
   private readonly allowPrivateEndpoints: boolean
   private readonly timeoutMs: number
+  private readonly transport: ProviderTransport
 
   constructor(options: ProviderOptions) {
     this.fetchImpl = options.fetchImpl
     this.allowPrivateEndpoints = options.allowPrivateEndpoints
     this.timeoutMs = options.timeoutMs
+    this.transport = {
+      request: (url, init, signal) =>
+        this.request(url, { ...init, signal: this.combinedSignal(signal) }),
+      httpError: (response) => this.httpError(response),
+    }
   }
 
   async listModels(config: ProviderConfig, signal?: AbortSignal): Promise<string[]> {
+    const adapter = this.adapter(config.provider)
+    this.requireKey(config, adapter)
     const baseUrl = await assertEndpointAllowed(config.baseUrl, this.allowPrivateEndpoints)
-    const url =
-      config.provider === 'ollama'
-        ? joinUrl(baseUrl, '/api/tags')
-        : joinUrl(baseUrl, '/models')
-    const response = await this.request(url, {
-      method: 'GET',
-      headers: authHeaders(config.apiKey),
-      signal: this.combinedSignal(signal),
-    })
-
-    if (!response.ok) {
-      throw await this.httpError(response)
-    }
-
-    let payload: unknown
-    try {
-      payload = await response.json()
-    } catch {
-      throw new ProviderError('provider', 'The provider returned a model list that is not JSON.')
-    }
-
-    if (config.provider === 'ollama') {
-      const models = (payload as { models?: { name?: unknown }[] }).models
-      return Array.isArray(models)
-        ? models
-            .map((entry) => (typeof entry.name === 'string' ? entry.name : ''))
-            .filter(Boolean)
-            .sort((a, b) => a.localeCompare(b))
-        : []
-    }
-
-    const data = (payload as { data?: { id?: unknown }[] }).data
-    return Array.isArray(data)
-      ? data
-          .map((entry) => (typeof entry.id === 'string' ? entry.id : ''))
-          .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b))
-      : []
+    return adapter.listModels(baseUrl, config, this.transport, signal)
   }
 
   async streamChat(
     config: ProviderConfig,
     messages: ChatMessage[],
-    options: StreamOptions,
+    options: ProviderStreamOptions,
   ): Promise<StreamResult> {
+    const adapter = this.adapter(config.provider)
+    this.requireKey(config, adapter)
+    if (!config.model.trim()) {
+      throw new ProviderError('invalid-settings', 'Choose a model before sending.')
+    }
     const baseUrl = await assertEndpointAllowed(config.baseUrl, this.allowPrivateEndpoints)
-    if (config.provider === 'ollama') {
-      return this.streamOllama(baseUrl, config, messages, options)
-    }
-    return this.streamOpenAiCompatible(baseUrl, config, messages, options)
+    return adapter.streamChat(baseUrl, config, messages, options, this.transport)
   }
 
-  private async streamOllama(
-    baseUrl: string,
-    config: ProviderConfig,
-    messages: ChatMessage[],
-    options: StreamOptions,
-  ): Promise<StreamResult> {
-    const response = await this.request(joinUrl(baseUrl, '/api/chat'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders(config.apiKey),
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        stream: true,
-        options: {
-          temperature: config.temperature ?? 0.3,
-          num_predict: config.maxTokens ?? 1200,
-        },
-      }),
-      signal: this.combinedSignal(options.signal),
-    })
-
-    if (!response.ok) {
-      throw await this.httpError(response)
-    }
-
-    const contentType = response.headers.get('content-type') ?? ''
-    if (contentType.includes('application/json')) {
-      const payload = (await response.json()) as {
-        message?: { content?: unknown }
-        prompt_eval_count?: unknown
-        eval_count?: unknown
-      }
-      const text = typeof payload.message?.content === 'string' ? payload.message.content : ''
-      if (text) options.onDelta(text)
-      return {
-        completionChars: text.length,
-        usage: {
-          promptTokens: numberOrNull(payload.prompt_eval_count),
-          completionTokens: numberOrNull(payload.eval_count),
-        },
-      }
-    }
-
-    let completionChars = 0
-    let promptTokens: number | null = null
-    let completionTokens: number | null = null
-
-    await readLines(response, (line) => {
-      const trimmed = line.trim()
-      if (!trimmed) return
-      let chunk: {
-        message?: { content?: unknown }
-        done?: unknown
-        prompt_eval_count?: unknown
-        eval_count?: unknown
-        error?: unknown
-      }
-      try {
-        chunk = JSON.parse(trimmed) as typeof chunk
-      } catch {
-        return
-      }
-      if (typeof chunk.error === 'string') {
-        throw new ProviderError('provider', chunk.error)
-      }
-      if (typeof chunk.message?.content === 'string' && chunk.message.content) {
-        completionChars += chunk.message.content.length
-        options.onDelta(chunk.message.content)
-      }
-      if (numberOrNull(chunk.prompt_eval_count) !== null) {
-        promptTokens = numberOrNull(chunk.prompt_eval_count)
-      }
-      if (numberOrNull(chunk.eval_count) !== null) {
-        completionTokens = numberOrNull(chunk.eval_count)
-      }
-    })
-
-    return { completionChars, usage: { promptTokens, completionTokens } }
+  private adapter(provider: AiProviderId): ProviderAdapter {
+    return PROVIDER_ADAPTERS[provider]
   }
 
-  private async streamOpenAiCompatible(
-    baseUrl: string,
-    config: ProviderConfig,
-    messages: ChatMessage[],
-    options: StreamOptions,
-  ): Promise<StreamResult> {
-    const response = await this.request(joinUrl(baseUrl, '/chat/completions'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-        ...authHeaders(config.apiKey),
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        stream: true,
-        temperature: config.temperature ?? 0.3,
-        max_tokens: config.maxTokens ?? 1200,
-      }),
-      signal: this.combinedSignal(options.signal),
-    })
-
-    if (!response.ok) {
-      throw await this.httpError(response)
+  private requireKey(config: ProviderConfig, adapter: ProviderAdapter): void {
+    if (adapter.requiresApiKey && !config.apiKey.trim()) {
+      throw new ProviderError(
+        'invalid-settings',
+        `${PROVIDER_LABELS[config.provider]} requires an API key.`,
+      )
     }
-
-    const contentType = response.headers.get('content-type') ?? ''
-    if (contentType.includes('application/json')) {
-      const payload = (await response.json()) as OpenAiChunk
-      const text = openAiText(payload)
-      if (text) options.onDelta(text)
-      return {
-        completionChars: text.length,
-        usage: openAiUsage(payload),
-      }
-    }
-
-    let completionChars = 0
-    let promptTokens: number | null = null
-    let completionTokens: number | null = null
-
-    await readLines(response, (line) => {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith(':')) return
-      const payloadText = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed
-      if (!payloadText || payloadText === '[DONE]') return
-
-      let chunk: OpenAiChunk
-      try {
-        chunk = JSON.parse(payloadText) as OpenAiChunk
-      } catch {
-        return
-      }
-      if (chunk.error && typeof chunk.error === 'object' && typeof chunk.error.message === 'string') {
-        throw new ProviderError('provider', chunk.error.message)
-      }
-      if (typeof chunk.error === 'string' && chunk.error) {
-        throw new ProviderError('provider', chunk.error)
-      }
-      const text = openAiText(chunk)
-      if (text) {
-        completionChars += text.length
-        options.onDelta(text)
-      }
-      const usage = openAiUsage(chunk)
-      if (usage.promptTokens !== null) promptTokens = usage.promptTokens
-      if (usage.completionTokens !== null) completionTokens = usage.completionTokens
-    })
-
-    return { completionChars, usage: { promptTokens, completionTokens } }
   }
 
   private async request(url: string, init: RequestInit): Promise<Response> {
@@ -393,72 +205,6 @@ export class ProviderClient {
   }
 }
 
-type OpenAiChunk = {
-  choices?: {
-    delta?: { content?: unknown }
-    message?: { content?: unknown }
-  }[]
-  usage?: {
-    prompt_tokens?: unknown
-    completion_tokens?: unknown
-  }
-  error?: { message?: unknown } | string
-}
-
-function openAiText(chunk: OpenAiChunk): string {
-  const choice = chunk.choices?.[0]
-  const content = choice?.delta?.content ?? choice?.message?.content
-  return typeof content === 'string' ? content : ''
-}
-
-function openAiUsage(chunk: OpenAiChunk): ProviderUsage {
-  return {
-    promptTokens: numberOrNull(chunk.usage?.prompt_tokens),
-    completionTokens: numberOrNull(chunk.usage?.completion_tokens),
-  }
-}
-
-function numberOrNull(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.round(value)) : null
-}
-
-function authHeaders(apiKey: string): Record<string, string> {
-  return apiKey ? { Authorization: `Bearer ${apiKey}` } : {}
-}
-
-export function joinUrl(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}${path.startsWith('/') ? path : `/${path}`}`
-}
-
-async function readLines(response: Response, onLine: (line: string) => void): Promise<void> {
-  if (!response.body) {
-    throw new ProviderError('provider', 'The provider returned an empty response body.')
-  }
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      let index = buffer.indexOf('\n')
-      while (index >= 0) {
-        const line = buffer.slice(0, index).replace(/\r$/, '')
-        buffer = buffer.slice(index + 1)
-        onLine(line)
-        index = buffer.indexOf('\n')
-      }
-    }
-    buffer += decoder.decode()
-    if (buffer.trim()) {
-      onLine(buffer.trim())
-    }
-  } finally {
-    reader.releaseLock()
-  }
-}
-
 function isAbort(error: unknown): boolean {
   return (
     (error instanceof DOMException && error.name === 'AbortError') ||
@@ -496,7 +242,12 @@ function isPrivateAddress(address: string): boolean {
     const normalized = address.toLowerCase()
     if (normalized === '::1' || normalized === '::') return true
     if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
-    if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) {
+    if (
+      normalized.startsWith('fe8') ||
+      normalized.startsWith('fe9') ||
+      normalized.startsWith('fea') ||
+      normalized.startsWith('feb')
+    ) {
       return true
     }
     if (normalized.startsWith('::ffff:')) {
@@ -506,11 +257,7 @@ function isPrivateAddress(address: string): boolean {
   return false
 }
 
-/**
- * SSRF guard for user-supplied base URLs. Local/private endpoints are allowed
- * only when the operator opts in (needed for Ollama on a laptop). This is a
- * defence-in-depth check; an egress firewall remains the authoritative control.
- */
+/** SSRF guard; local endpoints require the operator's explicit opt-in. */
 export async function assertEndpointAllowed(
   raw: string,
   allowPrivate: boolean,
@@ -556,6 +303,5 @@ export async function assertEndpointAllowed(
       )
     }
   }
-
   return url.toString().replace(/\/+$/, '')
 }

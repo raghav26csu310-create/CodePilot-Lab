@@ -38,6 +38,9 @@ export type AccountExport = {
   settingsUpdatedAt: number | null
   ai: {
     connection: AiStatus['connection']
+    connections: AiStatus['connections']
+    defaultProviderId: AiStatus['defaultProviderId']
+    fallbackProviderId: AiStatus['fallbackProviderId']
     usage: AiStatus['usage']
     quota: AiStatus['quota']
     preferredMode: AiStatus['preferredMode']
@@ -100,6 +103,9 @@ export async function buildAccountExport(options: {
     settingsUpdatedAt: settingsRecord?.updatedAt ?? null,
     ai: {
       connection: status.connection,
+      connections: status.connections,
+      defaultProviderId: status.defaultProviderId,
+      fallbackProviderId: status.fallbackProviderId,
       usage: status.usage,
       quota: status.quota,
       preferredMode: status.preferredMode,

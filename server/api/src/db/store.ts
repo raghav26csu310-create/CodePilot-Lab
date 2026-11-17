@@ -1,6 +1,7 @@
 import type {
   AiConnectionInput,
   AiConnectionRecord,
+  AiConnectionTestInput,
   AiUsageEvent,
   NewUserInput,
   ProjectFileInput,
@@ -70,10 +71,11 @@ export type Store = {
   getSettings(userId: string): Promise<UserSettingsRecord | null>
   putSettings(userId: string, settings: Record<string, unknown>): Promise<UserSettingsRecord>
 
-  getAiConnection(userId: string): Promise<AiConnectionRecord | null>
+  listAiConnections(userId: string): Promise<AiConnectionRecord[]>
+  getAiConnection(userId: string, connectionId: string): Promise<AiConnectionRecord | null>
   upsertAiConnection(userId: string, input: AiConnectionInput): Promise<AiConnectionRecord>
-  deleteAiConnection(userId: string): Promise<boolean>
-  markAiConnectionVerified(userId: string, at: number): Promise<void>
+  deleteAiConnection(userId: string, connectionId: string): Promise<boolean>
+  markAiConnectionTest(userId: string, input: AiConnectionTestInput): Promise<void>
 
   recordUsage(event: AiUsageEvent): Promise<void>
   getUsageSummary(userId: string, dayStart: number, monthStart: number): Promise<UsageSummary>

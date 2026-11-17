@@ -81,17 +81,18 @@ ESLint ignores `dist/` and `node_modules/`.
 
 ## AI Copilot (Phase 5) and the AI gateway (Milestone 1)
 
-- Provider code lives in `src/features/copilot/providers/*` behind the `AiProvider`
-  interface. Three adapters exist: the managed `gateway`, native `ollama` (NDJSON
-  `/api/chat`, `/api/tags`) and `openai-compatible` (SSE `/chat/completions`, `/models`).
-  Add a provider by adding an adapter and a preset, not by branching inside the dock.
-- **Always call `adapterForSettings(settings)`**, never `adapterFor(kind)`: the `route`
-  setting decides whether the CodePilot API or the browser performs the call.
-  - `preset: 'codepilot'` is managed: no URL, model or key reaches the browser.
-  - `route: 'gateway'` with a BYO preset stores the key encrypted on the API
-    (`PUT /api/ai/connection`); the browser keeps `apiKey: ''`.
-  - `route: 'direct'` is the advanced/local fallback; the browser calls the endpoint and a
-    remembered key is plaintext IndexedDB. The UI says so.
+- Browser-side provider code lives in `src/features/copilot/providers/*` behind the
+  `AiProvider` interface; API protocol adapters live in `server/api/src/ai/providerAdapters`.
+  The gateway supports OpenAI, Anthropic, Google Gemini, Ollama, DeepSeek and custom
+  OpenAI-compatible endpoints. Each API adapter owns model discovery, auth and streaming.
+- **Always call `adapterForSettings(settings)`**, never `adapterFor(kind)`. Current AI settings
+  route requests through the authenticated CodePilot API; credentials never live in browser
+  settings. Managed credentials come from the API environment, while BYO credentials are sent
+  transiently to the API and encrypted at rest with AES-256-GCM.
+- Provider configurations are per-user and may include a default and a fallback. Fallback is
+  attempted only before any text has streamed and never after cancellation. SSE metadata reports
+  the provider/model actually used; per-message usage distinguishes provider-reported counts
+  from estimates.
 - Settings are an external store (`settingsStore.ts`) consumed through
   `useSyncExternalStore` so the dock and `/settings` stay in sync. Persisted under the
   Dexie `settings` key `copilot.provider.v1`. Gateway state is a separate external store

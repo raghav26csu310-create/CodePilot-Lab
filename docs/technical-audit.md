@@ -10,8 +10,8 @@ separate what exists from what is still promised by the interface.
 > production AI gateway exists. Where a capability is absent, that is stated as absent.
 >
 > The verdict below is the original pre-Milestone-1 snapshot, not a live status page.
-> Later implementation and verification updates are recorded in §§10–16; see §15 for
-> the current GitHub integration and its live-verification limits.
+> Later implementation and verification updates are recorded in §§10–17; see §15 for
+> GitHub and §17 for multi-provider AI status and live-verification limits.
 
 ---
 
@@ -1140,5 +1140,60 @@ testable exit criteria were completed against the real HTTP router and in-memory
   archives are the separate browser-side export path.
 - Email verification, password reset, MFA and an account-deletion UI remain absent; deletion
   exists and is tested at the API level.
+
+---
+
+## 17. Phase 4 status (multi-provider AI infrastructure)
+
+Implemented and verified locally on 2026-11-17. This extends the Milestone 1 API gateway;
+it does not add a second AI service.
+
+### Provider architecture and security
+
+- The API exposes separate adapters for OpenAI, Anthropic, Google Gemini, Ollama, DeepSeek
+  and custom OpenAI-compatible endpoints. Each adapter owns its model-list protocol,
+  authentication and streaming format; the shared `ProviderClient` applies endpoint
+  validation, timeout, cancellation and HTTP error classification.
+- Provider configurations are per-user and support update, removal, real model-list tests,
+  a default provider and an optional fallback. Fallback is attempted only before the primary
+  has returned text and is never attempted after cancellation.
+- BYO keys are accepted transiently by the authenticated API and stored with AES-256-GCM.
+  API responses and exports expose only public metadata; browser settings sanitize legacy
+  key fields and keep `apiKey` empty. Managed credentials remain API environment variables.
+- Private and loopback provider URLs require explicit API configuration. Ollama must be
+  running at the configured URL; a saved connection or installed model is not a successful
+  health check.
+- Copilot SSE metadata identifies the provider/model actually selected, including fallback.
+  Provider token counts are surfaced when both counts are returned; otherwise the UI marks
+  the character-based count as estimated. API usage/quota totals continue to label the
+  aggregate as estimated.
+- Settings provides provider add/edit/remove, model discovery/test, defaults/fallback and
+  generation controls. Copilot, Quick AI and converter availability states read the real
+  gateway status rather than treating a gateway route alone as provider readiness.
+
+### Verification
+
+- Protocol tests cover OpenAI, Anthropic, Gemini, Ollama, DeepSeek and custom-compatible
+  discovery/streaming, token parsing, missing keys, auth rejection, unknown model/404,
+  server downtime, network errors, timeout and cancellation.
+- API tests cover per-user connection isolation, public status/export data, preferences,
+  fallback before partial output, SSE provider metadata and real-versus-estimated usage.
+- `npm run verify`: typecheck passed; lint passed with two React Fast Refresh warnings;
+  frontend/sidecar tests passed (145); API tests passed (42); production build passed with
+  the existing large-chunk warning.
+- Browser smoke testing reused the existing frontend at `localhost:5173`. The API health
+  endpoint reported the real in-memory, non-durable store, managed AI unavailable and an
+  ephemeral development encryption key. Settings showed the real signed-out/unconfigured
+  state. The API process started for this check was stopped afterward.
+
+### Limits
+
+- No provider credentials are configured. Live provider connectivity, live model discovery,
+  completion, usage and fallback against vendor services are therefore not verified.
+- PostgreSQL migration execution and durable provider-key persistence were not exercised.
+  Development connections and accounts are lost on API restart; production requires
+  PostgreSQL and `CREDENTIAL_ENCRYPTION_KEY`.
+- `npm run dev:all` correctly refused to start because a pre-existing listener owns port
+  5173. It was not stopped or replaced.
 
 

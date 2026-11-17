@@ -1,4 +1,4 @@
-# Session handoff — 2026-11-13
+# Session handoff — 2026-11-17
 
 This is the resume point for the next working session. It records what exists, what was
 verified, what was not, and the exact next task. It is not a claim of production
@@ -36,20 +36,24 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
 ## Current session state
 
-- Status: Phase 3 local Git/GitHub CLI integration is implemented and verified; this handoff
-  records the final validation for its commit.
-- The previous API GitHub configuration gate was removed. The local sidecar now checks GitHub
-  CLI authentication and exposes guarded repository and Git operations.
-- The UI requires the per-start sidecar pairing token and an explicit absolute repository path.
-  GitHub CLI access tokens remain under CLI-managed local storage and never enter browser code.
-- `npm run verify` passes: 130 frontend/sidecar tests, 30 API tests, typecheck, lint and build.
-  Lint retains the two existing React Fast Refresh warnings; the build retains its existing
-  large-chunk warnings. `git diff --check` passes.
-- Browser smoke checks paired the current sidecar, displayed the real `gh`-missing state, and
-  loaded this repository's actual Git status without staging or changing files.
-- GitHub CLI is not installed here, so no live auth or remote GitHub action has been verified.
-- Next: install GitHub CLI and complete its device flow, then verify real repository/remote
-  operations with a user-authorized test repository.
+- Status: Phase 4 multi-provider AI infrastructure is implemented and locally verified.
+- The API now has separate protocol adapters for OpenAI, Anthropic, Gemini, Ollama, DeepSeek
+  and custom OpenAI-compatible providers, encrypted per-user configurations, provider tests,
+  defaults/fallback, and streaming usage metadata.
+- Settings manages saved providers through the authenticated API. Browser AI settings strip
+  provider keys; the Copilot, Quick AI and converter surfaces reflect real gateway availability.
+- `npm run verify` passes: 145 frontend/sidecar tests, 42 API tests, typecheck, lint and build.
+  Lint retains two React Fast Refresh warnings; build retains the existing large-chunk warning.
+- Browser smoke check confirmed the Settings page's honest signed-out/unconfigured state. API
+  health returned `engine: memory`, `durable: false`, `managedAi.available: false`, and an
+  ephemeral development credential key.
+- No provider credentials are configured, so live provider requests and Ollama inference are
+  unverified. PostgreSQL migration execution and production durability remain unverified.
+- `npm run dev:all` correctly refused startup because an existing frontend listener owns
+  `localhost:5173`; that listener was left untouched. The API was briefly started for the
+  browser smoke check and stopped afterward.
+- Next: configure a durable API deployment and encryption key, sign in, save a provider and
+  perform a live model-list and completion test.
 
 ## Milestone map
 
@@ -63,13 +67,15 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 | 5 | GitHub integration (local Git + GitHub CLI device flow) | **Implemented, live account verification pending (§15)** |
 | 6 | Multi-user production architecture (PostgreSQL, storage, quotas, abuse, backups, deletion/export) | **Account export + isolation evidence (§16)** — PostgreSQL/deployment blocked |
 | 7 | End-to-end verification of the 17 journeys | In progress — GitHub/deployment journeys blocked |
+| 8 | Multi-provider AI (OpenAI, Anthropic, Gemini, Ollama, compatible) | Implemented and locally verified (§17); live credentials unavailable |
 
 ## Environment state at wrap-up
 
 - Node.js `v24.19.0`, npm project `codepilot-lab@0.7.0`.
-- Our temporary Vite/companion smoke-test servers are **stopped**. `npm run doctor` found
-  port 5173 occupied but its health endpoint unreachable; that listener was left untouched.
-  Ports 5310 and 8787 were available. Restart with three terminals:
+- The pre-existing shared Vite frontend responds at `http://localhost:5173` and was left
+  running. `npm run dev:all` correctly detects the occupied port and refuses duplicate startup.
+  The API started for the Phase 4 smoke check was stopped; port 8787 is available. To start
+  the development stack when its ports are free:
   - `npm run api:dev` → API on `127.0.0.1:8787` (in-memory store, ephemeral credential key)
   - `npm run dev` → Vite on `http://localhost:5173`, proxies `/api` to the API
   - `npm run exec` → execution sidecar on `127.0.0.1:5310` (Run/Trace **and** the terminal).
@@ -86,6 +92,7 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
   `FileSystemDirectoryHandle`. Native OS picker prompts were never driven by automation.
 - GitHub CLI (`gh`) is not installed, and no live GitHub authentication or repository operation
   has been performed.
+- No provider credentials were entered or saved during Phase 4's Settings smoke check.
 - The Milestone 6 export fixture account and its server project were deleted through the real
   API; the in-memory store is empty again.
 
@@ -115,8 +122,9 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - `src/features/copilot/providers/gateway.ts` — managed adapter.
 - `adapterForSettings()` is now the only way AI calls are made (`CopilotContext`,
   `quickAsk`, `convert`).
-- `route: 'gateway' | 'direct'` separates *where* a call runs from *which provider* it uses.
-  A BYO provider can be server-held (encrypted on the API) or browser-direct (advanced).
+- The original Milestone 1 `route: 'gateway' | 'direct'` setting separated transport from
+  provider. Phase 4 moved active settings to the authenticated gateway-only route and strips
+  legacy direct-provider keys from browser storage.
 - `/settings` gained a minimal account panel (sign in / create / sign out, real usage and
   quota) and a managed status panel. Provider technical detail is hidden in managed mode.
 - Honest badges: managed and BYO connections read `unverified` until a real request

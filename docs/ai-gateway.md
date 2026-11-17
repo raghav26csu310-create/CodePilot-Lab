@@ -1,114 +1,105 @@
-# CodePilot AI gateway
+# CodePilot multi-provider AI gateway
 
-The browser no longer needs a provider key. It talks to the CodePilot API, which owns the
-provider credential and enforces per-user quotas. A direct browser provider remains
-available as an explicitly labelled advanced/local fallback.
-
-Everything below was executed locally unless marked otherwise.
+The authenticated CodePilot API routes AI requests to server-held credentials. BYO keys
+are encrypted with AES-256-GCM and never returned to the browser. The UI supports OpenAI,
+Anthropic, Google Gemini, Ollama, DeepSeek and custom OpenAI-compatible endpoints through
+separate API adapters.
 
 ## Local setup
 
 ```bash
-# 1. API (127.0.0.1:8787, in-memory store by default)
+# API on 127.0.0.1:8787 (development uses an in-memory store)
 npm run api:dev
 
-# 2. Frontend (127.0.0.1:5173, proxies /api to the API)
+# Frontend on localhost:5173, with /api proxied to the API
 npm run dev
 ```
 
-Open `/settings`, create an account, then use the workspace Copilot or the converter.
-No `VITE_API_BASE_URL` is required in development because Vite proxies `/api`.
+Open `/settings`, create an API account or sign in, and use **Provider vault** to add a
+provider. The workspace Copilot, Quick AI help and code converter all use the same gateway.
+No `VITE_API_BASE_URL` is needed in development because Vite proxies `/api`.
 
-Without a managed provider configured, the gateway honestly reports:
+The API health response reports the active storage engine and whether the credential
+encryption key is ephemeral. In-memory accounts and provider connections disappear when
+the development API process exits. Production requires durable storage and a configured
+`CREDENTIAL_ENCRYPTION_KEY`.
 
-```
-managed.available = false
-reason = "Managed CodePilot AI is not configured on this server. Connect a personal
-          provider to use AI features."
-```
+## Provider adapters
 
-Signing in does not create AI access by itself. Either configure a managed provider on the
-server or connect a personal provider (BYO) from the same page.
+| Provider | Default base URL | Protocol and credential |
+| --- | --- | --- |
+| OpenAI | `https://api.openai.com/v1` | `/models`, SSE `/chat/completions`, Bearer key |
+| Anthropic | `https://api.anthropic.com` | `/v1/models`, SSE `/v1/messages`, `x-api-key` |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta` | `/models`, SSE `streamGenerateContent`, `x-goog-api-key` header |
+| Ollama | `http://127.0.0.1:11434` | `/api/tags`, NDJSON `/api/chat`, no key |
+| DeepSeek | `https://api.deepseek.com/v1` | OpenAI-compatible `/models` and `/chat/completions` |
+| Custom compatible | User supplied | OpenAI-compatible models and chat endpoints; optional Bearer key |
 
-## Managed mode
+Ollama must be running at the configured URL; an installed model does not imply a running
+server. Calls to private/loopback endpoints require `ALLOW_PRIVATE_AI_ENDPOINTS=true` on the
+API. User-supplied endpoints are URL-validated and protected by a private-address/SSRF
+guard when private access is disabled.
 
-Set these in the API environment (see `.env.example`). They are read only by the API
-process and never returned to the browser:
+Each user can save multiple configurations, test a connection and model list, select a
+default and optionally a fallback. Keys are entered transiently in Settings; editing a
+connection without entering a new key keeps the existing encrypted key. The API only
+returns public connection metadata (`hasKey`, `keyLast4`, test result and timestamps).
 
-```
-MANAGED_AI_PROVIDER=openai-compatible   # or ollama
+## Managed provider
+
+Managed AI is optional and configured only in the API environment (see `.env.example`):
+
+```dotenv
+MANAGED_AI_PROVIDER=openai-compatible
 MANAGED_AI_LABEL=CodePilot AI
 MANAGED_AI_BASE_URL=https://provider.example/v1
-MANAGED_AI_API_KEY=...                  # server-side only
-MANAGED_AI_MODEL=...
+MANAGED_AI_API_KEY=
+MANAGED_AI_MODEL=
 MANAGED_AI_DAILY_REQUESTS=100
 MANAGED_AI_MONTHLY_TOKENS=500000
 MANAGED_AI_FALLBACK_MODELS=
 ```
 
-The API enforces the daily request limit and the monthly estimated-token budget before
-calling the provider. Token counts are estimates from character counts unless the provider
-returns real usage; the UI states this.
+Supported `MANAGED_AI_PROVIDER` values are `openai`, `anthropic`, `gemini`, `ollama`,
+`deepseek` and `openai-compatible`. Managed platform keys are never sent to or exposed by
+the browser. Quota enforcement and usage recording are performed by the API.
 
-## BYO mode
+## Streaming, fallback and usage
 
-There are two BYO routes, chosen by the `route` setting on the same page:
+`POST /api/ai/chat` is session-scoped and streams SSE `meta`, `delta`, `done` and `error`
+events. Metadata identifies the provider and model actually used. Completion usage includes
+provider-reported prompt/completion tokens when available; otherwise the UI labels the
+character-based token count as an estimate.
 
-1. **Saved on the API (recommended).** Tick “Send through the CodePilot API”.
-   `PUT /api/ai/connection` stores the key encrypted with AES-256-GCM and the browser
-   keeps no key. Responses include `hasKey` and `keyLast4` only. Set
-   `CREDENTIAL_ENCRYPTION_KEY` (base64, 32 bytes) in production; without it the API uses an
-   ephemeral key and says so, and saved keys stop decrypting after a restart.
-2. **Direct from the browser (advanced).** The original adapter path, used when the toggle
-   is off. The key stays in tab memory unless the user opts into “remember”, which writes
-   plaintext JSON to IndexedDB. The UI now says so explicitly.
+The configured fallback is attempted only when the primary fails before emitting any text.
+It is not retried after partial output or cancellation. Failures are returned with their
+real provider/API error classification; a failed provider does not fabricate an answer or
+take down the rest of the app.
 
-The toggle requires a signed-in session. While the session probe is still running it is
-disabled, and a signed-out save persists `route: "direct"` instead of attempting an API
-call that could only fail. Managed mode never persists a key.
-
-Verified locally with a saved-but-unreachable BYO endpoint (`http://127.0.0.1:9`):
-
-- `PUT /api/ai/connection` succeeded and `/api/ai/status` reported the connection with
-  `hasKey: false`.
-- IndexedDB held `{"route":"gateway","apiKey":"","rememberKey":false}`.
-- `POST /api/ai/connection/test` returned the server's real
-  “The provider endpoint could not be reached (TypeError).”; no browser request went to the
-  provider host.
-- A conversion through the gateway failed with the same message and stored a `FAILED`
-  history row with the real provider, model and duration.
-
-## Endpoints used by the frontend
+## API routes
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/health` | Reachability, version, store kind, managed-AI availability |
+| GET | `/api/health` | Real API, storage and credential-key health |
 | GET | `/api/auth/session` | Signed-in user or `null` |
-| POST | `/api/auth/register` / `login` / `logout` | Account surface |
-| GET | `/api/ai/status` | Managed availability, saved connection, usage, quota |
-| POST | `/api/ai/chat` | SSE stream: `meta`, `delta`, `done`, `error` |
-| POST | `/api/ai/connection/test` | Real provider model listing |
-| PUT/DELETE | `/api/ai/connection` | Encrypted BYO credential |
-| POST | `/api/ai/mode` | Preferred `managed` / `byo` mode |
+| POST | `/api/auth/register`, `/api/auth/login`, `/api/auth/logout` | Account session |
+| GET | `/api/ai/status`, `/api/ai/connections`, `/api/ai/usage` | Availability and public metadata |
+| POST / PUT / DELETE | `/api/ai/connections` | Create, update and remove per-user connections |
+| POST | `/api/ai/connections/:id/test` | Test saved provider and list models |
+| PUT | `/api/ai/preferences` | Set default and fallback provider IDs |
+| POST | `/api/ai/chat` | Authenticated SSE completion |
 
-`/api/ai/chat` requires a session. Requests without one return 401 before any provider
-call.
+All provider configuration, test and chat routes require an authenticated session. There
+is no separate provider API or frontend-held credential route.
 
-## Failure behaviour
+## Verification and limits
 
-- A provider failure arrives as an SSE `error` event with the server's code and message.
-  The browser throws a `GatewayError`, and the conversion path keeps the partial text.
-- Quota exhaustion returns `rate_limited` with the remaining-limit reason.
-- A missing provider returns `service_unavailable`; the UI never pretends a request ran.
-- On an incomplete stream the client throws rather than accepting a truncated answer as
-  complete.
+Automated tests mock each protocol and cover model discovery, streaming and usage parsing,
+missing credentials, invalid credentials, unknown models/404, downtime, network errors,
+timeouts and fallback behavior. API tests cover per-user isolation, encrypted credential
+handling, public metadata, account export and SSE behavior.
 
-## What is not proven here
-
-- A live completion against a real provider: no credential is configured in this
-  environment. Routing, credential storage, quota checks and error propagation were
-  exercised; no model ever answered.
-- PostgreSQL persistence: PostgreSQL is not installed here. `npm run api:dev` uses the
-  in-memory store and `/api/health` reports `engine: "memory"`, `durable: false`.
-- Multi-instance rate limiting: the limiter is in-memory and the health payload says so.
-- Production hosting, TLS, secure cookies and CSP: untested without a deployed domain.
+This environment has no provider credentials configured, so live OpenAI, Anthropic,
+Gemini, DeepSeek, custom endpoint or Ollama completions have not been verified. PostgreSQL,
+production persistence, deployment, TLS, secure cookies and multi-instance quotas also
+remain unverified; development health accurately reports the in-memory store.

@@ -181,16 +181,34 @@ export function ConverterPage() {
   const settings = ai.settings
   const gateway = useGateway()
   const preset = presetById(settings.preset)
+  const gatewayAvailable =
+    gateway.status !== null &&
+    (gateway.status.managed.available || gateway.status.connections.length > 0)
   const configured =
     ai.loaded &&
     isConfigured(settings) &&
-    (settings.route === 'gateway' || !preset?.keyExpected || settings.apiKey.trim().length > 0)
-  const providerName = providerLabel(settings)
+    (settings.route === 'gateway'
+      ? gatewayAvailable
+      : !preset?.keyExpected || settings.apiKey.trim().length > 0)
+  const providerName =
+    settings.route === 'gateway'
+      ? gateway.status?.connection?.label ??
+        (gateway.status?.managed.available ? gateway.status.managed.label : providerLabel(settings))
+      : providerLabel(settings)
   const modelName =
-    settings.model ||
-    (settings.provider === 'gateway'
-      ? gateway.status?.managed.model || gateway.status?.connection?.model || ''
-      : '')
+    gateway.status?.connection?.model ??
+    gateway.status?.managed.model ??
+    settings.model
+  const gatewayUnavailableMessage =
+    gateway.reachable === null
+      ? 'Checking CodePilot API availability…'
+      : gateway.reachable === false
+        ? gateway.error ?? 'The CodePilot API is unavailable.'
+        : !gateway.user
+          ? 'Sign in on Settings to use AI conversion.'
+          : gateway.status?.managed.reason ??
+            gateway.error ??
+            'No managed or personal AI provider is available. Configure one in Settings.'
 
   const sourceLanguageInfo = projectLanguage(sourceLanguage)
   const targetLanguageInfo = projectLanguage(targetLanguage)
@@ -430,7 +448,9 @@ export function ConverterPage() {
     }
     if (!configured) {
       setConvertError(
-        `No AI provider is ready. ${providerName} needs a base URL, a model and (when required) an API key in Settings.`,
+        settings.route === 'gateway'
+          ? gatewayUnavailableMessage
+          : `No AI provider is ready. ${providerName} needs a base URL, a model and (when required) an API key in Settings.`,
       )
       return
     }
@@ -849,7 +869,9 @@ export function ConverterPage() {
                 {configured
                   ? `${modelName || 'provider default model'} · ${settings.route === 'gateway' ? 'via CodePilot API' : `direct ${settings.provider}`}`
                   : ai.loaded
-                    ? 'Configure a provider in Settings'
+                    ? settings.route === 'gateway'
+                      ? gatewayUnavailableMessage
+                      : 'Configure a provider in Settings'
                     : 'Reading stored settings…'}
               </p>
             </div>

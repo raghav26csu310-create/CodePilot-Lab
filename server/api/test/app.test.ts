@@ -302,7 +302,7 @@ describe('project isolation and CSRF', () => {
     expect(bobRead.status).toBe(404)
   })
 
-  it('stores a BYO credential for the first account only', async () => {
+  it('stores multiple encrypted BYO providers and keeps them scoped to the first account', async () => {
     const secret = 'sk-fixture-secret-do-not-export'
     const save = await request(base, '/api/ai/connection', {
       method: 'PUT',
@@ -316,12 +316,64 @@ describe('project isolation and CSRF', () => {
       },
     })
     expect(save.status).toBe(200)
+    const savedPayload = (await save.json()) as {
+      connection: { id: string }
+      status: { connections: Array<{ id: string }>; defaultProviderId: string | null }
+    }
+    expect(savedPayload.status.connections).toHaveLength(1)
+    expect(savedPayload.status.defaultProviderId).toBe(savedPayload.connection.id)
+
+    const secondSecret = 'anthropic-fixture-secret'
+    const second = await request(base, '/api/ai/connections', {
+      method: 'POST',
+      cookie: aliceCookie,
+      body: {
+        provider: 'anthropic',
+        label: 'Fallback Claude',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-test',
+        apiKey: secondSecret,
+      },
+    })
+    expect(second.status).toBe(201)
+    const secondPayload = (await second.json()) as {
+      connection: { id: string }
+      status: {
+        connections: Array<{ id: string }>
+        defaultProviderId: string | null
+      }
+    }
+    expect(secondPayload.status.connections).toHaveLength(2)
+    expect(secondPayload.status.defaultProviderId).toBe(savedPayload.connection.id)
+    const secondText = JSON.stringify(secondPayload)
+    expect(secondText).not.toContain(secret)
+    expect(secondText).not.toContain(secondSecret)
+    expect(secondText.toLowerCase()).not.toContain('encryptedapikey')
+
+    const preference = await request(base, '/api/ai/preferences', {
+      method: 'PUT',
+      cookie: aliceCookie,
+      body: {
+        defaultProviderId: savedPayload.connection.id,
+        fallbackProviderId: secondPayload.connection.id,
+      },
+    })
+    expect(preference.status).toBe(200)
+    const preferencePayload = (await preference.json()) as {
+      status: { defaultProviderId: string; fallbackProviderId: string }
+    }
+    expect(preferencePayload.status).toMatchObject({
+      defaultProviderId: savedPayload.connection.id,
+      fallbackProviderId: secondPayload.connection.id,
+    })
 
     const bobStatus = await request(base, '/api/ai/status', { cookie: bobCookie })
     expect(bobStatus.status).toBe(200)
     const bobText = await bobStatus.text()
     expect(bobText).toContain('"connection":null')
+    expect(bobText).toContain('"connections":[]')
     expect(bobText).not.toContain(secret)
+    expect(bobText).not.toContain(secondSecret)
   })
 
   it('exports the authenticated account without credentials or other users', async () => {
@@ -335,7 +387,10 @@ describe('project isolation and CSRF', () => {
     const payload = JSON.parse(text) as {
       user: { email: string }
       projects: Array<{ name: string; files: Array<{ path: string; content: string }> }>
-      ai: { connection: { keyLast4: string; hasKey: boolean } | null }
+      ai: {
+        connection: { keyLast4: string; hasKey: boolean } | null
+        connections: Array<{ provider: string; hasKey: boolean }>
+      }
       notIncluded: string[]
     }
 
@@ -347,6 +402,7 @@ describe('project isolation and CSRF', () => {
     ])
     expect(payload.ai.connection?.hasKey).toBe(true)
     expect(payload.ai.connection?.keyLast4).toBe('port')
+    expect(payload.ai.connections).toHaveLength(2)
 
     expect(text).not.toContain('sk-fixture-secret-do-not-export')
     expect(text).not.toContain('encryptedApiKey')
@@ -454,6 +510,7 @@ describe('managed AI streaming and quota', () => {
     expect(text).toContain('"text":"Hello"')
     expect(text).toContain('"text":" world"')
     expect(text).toContain('"type":"done"')
+    expect(text).toContain('"source":"estimate"')
   })
 
   it('reports the daily quota instead of calling the provider again', async () => {
@@ -466,6 +523,106 @@ describe('managed AI streaming and quota', () => {
     expect(text).toContain('"type":"error"')
     expect(text).toContain('"code":"rate_limited"')
     expect(text).toContain('daily request limit')
+  })
+})
+
+describe('BYO provider fallback', () => {
+  let providerApp: RunningApp
+  let providerBase = ''
+  let providerCookie = ''
+  const calls: string[] = []
+
+  beforeAll(async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input)
+      calls.push(url)
+      if (url.endsWith('/chat/completions')) {
+        return new Response('provider unavailable', { status: 503 })
+      }
+      if (url.endsWith('/v1/messages')) {
+        return new Response(
+          'data: {"type":"message_start","message":{"usage":{"input_tokens":2}}}\n\n' +
+            'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Recovered"}}\n\n' +
+            'data: {"type":"message_delta","usage":{"output_tokens":1}}\n\n',
+          { status: 200, headers: { 'content-type': 'text/event-stream' } },
+        )
+      }
+      throw new Error(`Unexpected provider request: ${url}`)
+    }
+
+    providerApp = await createApp({
+      config: testConfig(),
+      store: new MemoryStore(),
+      fetchImpl,
+    })
+    providerBase = await listen(providerApp)
+    const register = await request(providerBase, '/api/auth/register', {
+      method: 'POST',
+      body: {
+        email: 'providers@example.test',
+        password: 'correct horse battery staple',
+        displayName: 'Providers',
+      },
+    })
+    expect(register.status).toBe(201)
+    providerCookie = cookieFrom(register)
+
+    const primary = await request(providerBase, '/api/ai/connections', {
+      method: 'POST',
+      cookie: providerCookie,
+      body: {
+        provider: 'openai',
+        label: 'OpenAI primary',
+        baseUrl: 'https://primary.example/v1',
+        model: 'gpt-test',
+        apiKey: 'primary-secret',
+      },
+    })
+    const primaryPayload = (await primary.json()) as { connection: { id: string } }
+    const fallback = await request(providerBase, '/api/ai/connections', {
+      method: 'POST',
+      cookie: providerCookie,
+      body: {
+        provider: 'anthropic',
+        label: 'Anthropic fallback',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-test',
+        apiKey: 'fallback-secret',
+      },
+    })
+    const fallbackPayload = (await fallback.json()) as { connection: { id: string } }
+    const preferences = await request(providerBase, '/api/ai/preferences', {
+      method: 'PUT',
+      cookie: providerCookie,
+      body: {
+        defaultProviderId: primaryPayload.connection.id,
+        fallbackProviderId: fallbackPayload.connection.id,
+      },
+    })
+    expect(preferences.status).toBe(200)
+  })
+
+  afterAll(async () => {
+    if (providerApp) await providerApp.close()
+  })
+
+  it('switches to the configured fallback before streaming any primary output', async () => {
+    const response = await request(providerBase, '/api/ai/chat', {
+      method: 'POST',
+      cookie: providerCookie,
+      body: { messages: [{ role: 'user', content: 'Say hello.' }] },
+    })
+    const text = await response.text()
+    expect(response.status).toBe(200)
+    expect(text).toContain('"label":"OpenAI primary"')
+    expect(text).toContain('"label":"Anthropic fallback"')
+    expect(text).toContain('"text":"Recovered"')
+    expect(text).toContain('"type":"done"')
+    expect(text).toContain(
+      '"usage":{"promptTokens":2,"completionTokens":1,"estimatedTokens":3,"source":"provider"}',
+    )
+    expect(calls.filter((url) => url.endsWith('/chat/completions'))).toHaveLength(1)
+    expect(calls.filter((url) => url.endsWith('/v1/messages'))).toHaveLength(1)
   })
 })
 

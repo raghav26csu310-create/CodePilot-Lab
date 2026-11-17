@@ -44,7 +44,13 @@ export type UserSettingsRecord = {
   updatedAt: number
 }
 
-export type AiProviderId = 'ollama' | 'deepseek' | 'openai-compatible'
+export type AiProviderId =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'ollama'
+  | 'deepseek'
+  | 'openai-compatible'
 
 export type AiConnectionRecord = {
   id: string
@@ -59,6 +65,9 @@ export type AiConnectionRecord = {
   createdAt: number
   updatedAt: number
   verifiedAt: number | null
+  lastTestAt: number | null
+  lastTestOk: boolean | null
+  lastTestMessage: string | null
 }
 
 export type AiUsageMode = 'managed' | 'byo'
@@ -129,4 +138,11 @@ export type AiConnectionInput = {
   encryptedApiKey: string
   keyLast4: string
   createdAt: number
+}
+
+export type AiConnectionTestInput = {
+  id: string
+  testedAt: number
+  ok: boolean
+  message: string
 }

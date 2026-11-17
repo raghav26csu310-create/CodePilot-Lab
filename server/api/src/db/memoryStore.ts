@@ -2,6 +2,7 @@ import { EMPTY_USAGE } from './types.ts'
 import type {
   AiConnectionInput,
   AiConnectionRecord,
+  AiConnectionTestInput,
   AiUsageEvent,
   NewUserInput,
   ProjectFileInput,
@@ -120,7 +121,9 @@ export class MemoryStore implements Store {
       }
     }
     this.settings.delete(id)
-    this.connections.delete(id)
+    for (const [connectionId, connection] of this.connections) {
+      if (connection.userId === id) this.connections.delete(connectionId)
+    }
     this.usage = this.usage.filter((event) => event.userId !== id)
     return true
   }
@@ -311,36 +314,54 @@ export class MemoryStore implements Store {
     return clone(record)
   }
 
-  async getAiConnection(userId: string): Promise<AiConnectionRecord | null> {
-    const connection = this.connections.get(userId)
-    return connection ? clone(connection) : null
+  async listAiConnections(userId: string): Promise<AiConnectionRecord[]> {
+    return [...this.connections.values()]
+      .filter((connection) => connection.userId === userId)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(clone)
+  }
+
+  async getAiConnection(userId: string, connectionId: string): Promise<AiConnectionRecord | null> {
+    const connection = this.connections.get(connectionId)
+    return connection?.userId === userId ? clone(connection) : null
   }
 
   async upsertAiConnection(
     userId: string,
     input: AiConnectionInput,
   ): Promise<AiConnectionRecord> {
-    const existing = this.connections.get(userId)
+    const existing = this.connections.get(input.id)
+    if (existing && existing.userId !== userId) {
+      throw new Error('The provider connection does not belong to this account.')
+    }
     const record: AiConnectionRecord = {
       ...input,
       userId,
-      id: existing?.id ?? input.id,
       createdAt: existing?.createdAt ?? input.createdAt,
       updatedAt: input.createdAt,
       verifiedAt: null,
+      lastTestAt: null,
+      lastTestOk: null,
+      lastTestMessage: null,
     }
-    this.connections.set(userId, record)
+    this.connections.set(record.id, record)
     return clone(record)
   }
 
-  async deleteAiConnection(userId: string): Promise<boolean> {
-    return this.connections.delete(userId)
+  async deleteAiConnection(userId: string, connectionId: string): Promise<boolean> {
+    const existing = this.connections.get(connectionId)
+    if (!existing || existing.userId !== userId) return false
+    return this.connections.delete(connectionId)
   }
 
-  async markAiConnectionVerified(userId: string, at: number): Promise<void> {
-    const connection = this.connections.get(userId)
-    if (connection) {
-      connection.verifiedAt = at
+  async markAiConnectionTest(userId: string, input: AiConnectionTestInput): Promise<void> {
+    const connection = this.connections.get(input.id)
+    if (connection?.userId === userId) {
+      connection.lastTestAt = input.testedAt
+      connection.lastTestOk = input.ok
+      connection.lastTestMessage = input.message.slice(0, 500)
+      connection.verifiedAt = input.ok ? input.testedAt : null
+      connection.updatedAt = input.testedAt
     }
   }
 

@@ -2,6 +2,7 @@ import { CircleSlash, LoaderCircle, Sparkles, Square, TriangleAlert, Trash2 } fr
 import { useRef, useState } from 'react'
 
 import { isConfigured, presetById, providerLabel } from '../copilot/providerPresets'
+import { useGateway } from '../copilot/gateway/store'
 import { streamAssistant } from '../copilot/quickAsk'
 import { useAiSettings } from '../copilot/settingsStore'
 import { AiError } from '../copilot/errors'
@@ -31,6 +32,7 @@ const DEFAULT_SYSTEM = [
  */
 export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPanelProps) {
   const ai = useAiSettings()
+  const gateway = useGateway()
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [asking, setAsking] = useState(false)
@@ -41,10 +43,34 @@ export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPan
 
   const settings = ai.settings
   const preset = presetById(settings.preset)
+  const gatewayAvailable =
+    gateway.status !== null &&
+    (gateway.status.managed.available || gateway.status.connections.length > 0)
   const configured =
     ai.loaded &&
     isConfigured(settings) &&
-    (settings.route === 'gateway' || !preset?.keyExpected || settings.apiKey.trim().length > 0)
+    (settings.route === 'gateway'
+      ? gatewayAvailable
+      : !preset?.keyExpected || settings.apiKey.trim().length > 0)
+  const providerName =
+    gateway.status?.connection?.label ??
+    (gateway.status?.managed.available ? gateway.status.managed.label : providerLabel(settings))
+  const modelName =
+    gateway.status?.connection?.model ??
+    gateway.status?.managed.model ??
+    settings.model
+  const unavailableMessage =
+    settings.route !== 'gateway'
+      ? 'Configure a provider in Settings to use AI help. The problem, editor and grader work without it.'
+      : gateway.reachable === null
+        ? 'Checking CodePilot API availability…'
+        : gateway.reachable === false
+          ? gateway.error ?? 'The CodePilot API is unavailable.'
+          : !gateway.user
+            ? 'Sign in on Settings to use AI help.'
+            : gateway.status?.managed.reason ??
+              gateway.error ??
+              'No managed or personal AI provider is available. Configure one in Settings.'
 
   const ask = async (text: string) => {
     const trimmed = text.trim()
@@ -117,7 +143,9 @@ export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPan
         <div className={styles.headCopy}>
           <p className={styles.title}>Ask the AI Copilot</p>
           <p className={styles.subtitle}>
-            {configured ? `${providerLabel(settings)} · ${settings.model}` : 'Provider not ready'}
+            {configured
+              ? `${providerName}${modelName ? ` · ${modelName}` : ''}`
+              : 'Provider not ready'}
           </p>
         </div>
         <button
@@ -135,9 +163,7 @@ export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPan
       {!configured ? (
         <p className={styles.unavailable}>
           <CircleSlash size={12} aria-hidden="true" />
-          {ai.loaded
-            ? 'Configure a provider in Settings to use AI help. The problem, editor and grader work without it.'
-            : 'Reading stored provider settings…'}
+          {!ai.loaded ? 'Reading stored provider settings…' : unavailableMessage}
         </p>
       ) : null}
 

@@ -22,14 +22,14 @@ export const gatewayProvider: ProviderAdapter = {
   },
 
   async stream(request: ChatRequest): Promise<void> {
-    const model = request.settings.model.trim()
     await streamGatewayChat({
       turns: request.turns,
-      model: model || undefined,
       temperature: request.settings.temperature,
       maxTokens: request.settings.maxTokens,
       signal: request.signal,
       onDelta: request.onDelta,
+      onMeta: request.onMeta,
+      onUsage: request.onUsage,
     })
   },
 }

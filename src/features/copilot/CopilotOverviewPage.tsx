@@ -63,14 +63,18 @@ export function CopilotOverviewPage() {
   const snapshot = useAiSettings()
   const gateway = useGateway()
   const routed = usesGateway(snapshot.settings)
+  const activeConnection = gateway.status?.connection ?? null
+  const providerName =
+    activeConnection?.label ??
+    (gateway.status?.managed.available ? gateway.status.managed.label : providerLabel(snapshot.settings))
   const configured = routed
-    ? gateway.status !== null
+    ? gateway.status !== null &&
+      (gateway.status.managed.available || gateway.status.connections.length > 0)
     : snapshot.settings.baseUrl.trim() !== '' && snapshot.settings.model.trim() !== ''
   const status = !configured
     ? 'unconfigured'
     : routed
-      ? gateway.status?.managed.available === true ||
-        (gateway.status?.connection?.verifiedAt ?? null) !== null
+      ? gateway.status?.managed.available === true || (activeConnection?.verifiedAt ?? null) !== null
         ? 'verified'
         : 'configured'
       : snapshot.lastTest?.ok
@@ -79,7 +83,7 @@ export function CopilotOverviewPage() {
   const model =
     snapshot.settings.model ||
     gateway.status?.managed.model ||
-    gateway.status?.connection?.model ||
+    activeConnection?.model ||
     '—'
 
   return (
@@ -121,7 +125,7 @@ export function CopilotOverviewPage() {
           <dl>
             <div>
               <dt>Provider</dt>
-              <dd>{configured ? providerLabel(snapshot.settings) : 'not selected'}</dd>
+              <dd>{configured ? providerName : 'not selected'}</dd>
             </div>
             <div>
               <dt>Model</dt>
@@ -134,13 +138,7 @@ export function CopilotOverviewPage() {
             <div>
               <dt>Key in this browser</dt>
               <dd>
-                {routed
-                  ? 'none'
-                  : snapshot.settings.apiKey
-                    ? snapshot.settings.rememberKey
-                      ? 'remembered in this browser (plaintext)'
-                      : 'memory only'
-                    : 'none'}
+                none
               </dd>
             </div>
           </dl>

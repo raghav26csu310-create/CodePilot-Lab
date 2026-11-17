@@ -71,12 +71,12 @@ sandbox.
   write a starter file to IndexedDB, and the workspace status bar shows the active file
   language and whether it is runnable.
 - **AI Copilot** in the workspace dock (`/copilot` explains the model; `/settings`
-  configures it). Three routes, one interface: managed **CodePilot AI** through the API
-  (no provider key in the browser, server-side quotas), a native **Ollama** adapter
-  (`/api/chat`, NDJSON streaming, direct or via the API) and an **OpenAI-compatible**
-  adapter (SSE `/chat/completions`) covering DeepSeek, OpenAI, OpenRouter, Groq, LM Studio,
-  llama.cpp and user-run proxies. The app is fully usable with no provider configured;
-  the dock states that plainly instead of inventing an answer.
+  manages providers). The authenticated API provides separate adapters for OpenAI,
+  Anthropic, Google Gemini, Ollama, DeepSeek and custom OpenAI-compatible endpoints.
+  Provider keys are encrypted on the API and never stored in the browser; requests stream
+  over SSE with pre-output fallback and honest provider/model/usage metadata. Ollama must
+  actually be running before it can be tested. The app remains usable without a configured
+  provider and states that plainly instead of inventing an answer.
 - **Seven AI modes** — free-form chat, explain (beginner/intermediate/advanced),
   debug, code generation, code review, test generation, and a learning assistant that
   starts with hints and only gives the full solution when asked. Every mode shares the
@@ -262,13 +262,11 @@ src/
   frontend.
 - Conversions, practice drafts, notes, bookmarks and submissions are stored in browser
   IndexedDB only.
-- AI settings are stored under the `settings` key `copilot.provider.v1`. With the default
-  managed route, no provider key exists in the browser at all: the API holds it. A
-  BYO connection routed through the API stores the key encrypted on the server and the
-  browser keeps `apiKey: ""`. Only in the advanced `direct` route can a key be written to
-  IndexedDB, and only when "remember" is checked; the UI labels that as plaintext.
-- Context is assembled in the browser and sent only to the configured route (the CodePilot
-  API or the endpoint you entered), only when you press Send.
+- AI settings are stored under the `settings` key `copilot.provider.v1`, with provider keys
+  sanitized out. Managed platform keys stay in the API environment; BYO provider keys are
+  encrypted on the API. Legacy browser-stored keys are removed when settings load.
+- Context is assembled in the browser and sent to the authenticated CodePilot API only when
+  you press Send.
 - Stored content is authoritative after the first save. A linked `directoryHandle` is
   read only when no saved copy exists; permission prompts are disclosed.
 - `directoryHandle` is structured-clone data; re-permission may be requested on read.

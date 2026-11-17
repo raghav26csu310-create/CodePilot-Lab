@@ -29,16 +29,12 @@ export type AiProviderPreset = {
 export type AiSettings = {
   preset: AiProviderPresetId
   provider: AiProviderKind
-  /**
-   * Where the request is sent. `gateway` means the CodePilot API holds the
-   * credential and performs the call; `direct` means this browser calls the
-   * provider endpoint itself (advanced/local mode).
-   */
+  /** AI requests use the authenticated CodePilot API; credentials never live in browser settings. */
   route: 'gateway' | 'direct'
   baseUrl: string
   model: string
   apiKey: string
-  /** Persist the key in this browser's IndexedDB. Off by default. */
+  /** Legacy field retained only to read old settings; always sanitized to false. */
   rememberKey: boolean
   temperature: number
   maxTokens: number
@@ -98,6 +94,15 @@ export type ChatRequest = {
   turns: AiChatTurn[]
   signal: AbortSignal
   onDelta: (chunk: string) => void
+  onMeta?: (meta: { provider: string; model: string; label: string }) => void
+  onUsage?: (usage: AiUsage) => void
+}
+
+export type AiUsage = {
+  promptTokens: number | null
+  completionTokens: number | null
+  estimatedTokens: number
+  source: 'provider' | 'estimate'
 }
 
 export type ProviderAdapter = {
@@ -194,6 +199,7 @@ export type CopilotMessage = {
   proposals: CodeProposal[]
   providerLabel?: string
   model?: string
+  usage?: AiUsage
   elapsedMs?: number
   error?: string
   errorKind?: AiErrorKind

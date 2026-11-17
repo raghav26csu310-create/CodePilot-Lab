@@ -41,7 +41,7 @@ import { collectContextPaths } from '../../copilot/context'
 import { DiffDialog } from '../../copilot/DiffDialog'
 import { Markdown } from '../../copilot/markdown'
 import { CAPABILITIES, capabilityMeta } from '../../copilot/prompts'
-import { ProviderSettingsForm } from '../../copilot/ProviderSettingsForm'
+import { ProviderManager } from '../../copilot/ProviderManager'
 import { useAiSettings } from '../../copilot/settingsStore'
 import type {
   CapabilityId,
@@ -384,7 +384,7 @@ export function CopilotDock({ variant = 'inline', onRequestClose }: CopilotDockP
             </Link>
           </div>
           <div className={styles.settingsBody}>
-            <ProviderSettingsForm
+            <ProviderManager
               compact
               onSaved={() => {
                 window.setTimeout(() => setShowSettings(false), 1200)
@@ -944,6 +944,15 @@ function MessageItem({
                   {message.elapsedMs < 1000
                     ? `${message.elapsedMs} ms`
                     : `${(message.elapsedMs / 1000).toFixed(1)} s`}
+                </span>
+              ) : null}
+              {message.usage ? (
+                <span>
+                  {message.usage.source === 'provider' &&
+                  message.usage.promptTokens !== null &&
+                  message.usage.completionTokens !== null
+                    ? `${message.usage.promptTokens.toLocaleString()} prompt + ${message.usage.completionTokens.toLocaleString()} completion tokens`
+                    : `~${message.usage.estimatedTokens.toLocaleString()} tokens (estimated)`}
                 </span>
               ) : null}
               {appliedRevision ? <span>change applied</span> : null}
