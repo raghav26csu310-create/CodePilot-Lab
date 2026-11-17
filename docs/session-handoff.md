@@ -284,6 +284,23 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 
 - Windows-only verification. Linux/macOS have no `node-pty` prebuild here and npm's
   allow-scripts blocks the build script.
+
+## Current terminal integration work (Phase 7)
+
+- Status: Phase 7 multi-session integrated terminal is implemented and verified.
+- The terminal backend (`server/terminal.mjs`) already owns the real PTY (node-pty / Windows ConPTY), loopback bind, per-start pairing token, Origin allow-list, per-session kill-tree, cwd change with directory validation, and exit-code streaming. No backend was replaced.
+- `src/features/terminal/TerminalSurface.tsx` was converted to `forwardRef` and now exposes `write`/`clear`/`copy`/`resize`/`focus`/`fit` so the panel can act on the active session without knowing about xterm internals.
+- `src/features/terminal/TerminalPanel.tsx` was rewritten as a multi-session terminal tab surface:
+  - New terminal / Close terminal / switch tabs (capped at the backend's `MAX_SESSIONS = 2` concurrent PTYs, each tab holds its own WebSocket),
+  - Clear and Copy (xterm selection) on the active session,
+  - Working-directory `cd` control with real directory validation,
+  - Maximize / restore panel height (dispatches `ui/set-bottom-height`),
+  - Per-session status chip, pid, exit-code readout, per-tab exit code, and a working-directory `cd` input.
+- Session state (connected/connecting/exited/error + pid/cwd/exit) now flows from each terminal session to the parent panel through stable refs, so tabs render correctly and reconnect only on token/key change.
+- Local end-to-end verification: `npm run typecheck` ✅, `npm run lint` ✅ (0 errors, 2 pre-existing warnings), `npm test` ✅ (17 files / 151 tests) including `server/terminal.test.mjs`, `npm run build` ✅ (only the pre-existing large-chunk warning), and a live `cmd.exe` PTY run showing `echo`, `node --version`, real CWD change and exit codes. `ws` (non-default) is not installed in this environment, so the browser-facing terminal surface itself has not been browser-verified here — run it manually.
+- The terminal remains a genuine local shell on the host machine, not a sandbox, not cloud isolation, per `docs/security.md`.
+
+## Resume checklist
 - No installer or signing; the user starts `npm run exec` and pastes the console token.
 - This is real shell access with the operator's privileges, not a sandbox. The UI says so.
 - Cloud terminal, installer packaging, multi-tab session sharing and scrollback persistence

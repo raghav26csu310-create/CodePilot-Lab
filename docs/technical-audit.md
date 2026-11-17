@@ -23,7 +23,7 @@ separate what exists from what is still promised by the interface.
 | Is there a running application backend? | **No.** `server/api/` is an incomplete TypeScript scaffold: no entry point, no route wiring, no tests, not typechecked by the root build. |
 | Is AI production-safe today? | **No.** The browser calls user-configured providers directly; BYO keys can be persisted in plaintext IndexedDB. |
 | Is the execution runner a sandbox? | **No.** It is a loopback-only, resource-limited local runner with process-tree kills and timeouts. Code runs with the operator's OS permissions. |
-| Is there a terminal? | **Yes, local only.** A guarded loopback PTY shipped in Milestone 3. The cloud terminal is still absent and rendered as unavailable. |
+| Is there a terminal? | **Yes, local only.** A guarded loopback PTY shipped in Milestone 3, extended in Phase 7 into a multi-session integrated terminal. The cloud terminal is still absent and rendered as unavailable. |
 | Is there GitHub integration? | **At audit time: configuration gate only.** The current local Git/GitHub CLI implementation and its live-verification limits are recorded in §15. |
 | Can users edit their device files? | **Yes, with explicit permission.** Open/import, save through a linked folder that grants write access, Save As/export, archive import/export and drag-and-drop shipped in Milestone 4. IndexedDB remains authoritative; disk writes happen only through a granted handle. |
 | Is the product multi-user? | **No.** Projects, settings and practice data are browser-local. No accounts, sessions or server-side isolation are active. |

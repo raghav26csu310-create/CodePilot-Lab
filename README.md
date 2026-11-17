@@ -2,15 +2,13 @@
 
 A local-first, AI-native coding laboratory. Built as an instrument, not a dashboard.
 
-**Current milestone: Milestone 6 — account export, with production infrastructure blocked.**
-The settings account panel can download the account's real server-side data as JSON, and the
-API tests prove two accounts cannot read each other's projects, files or AI credentials and
-that deletion revokes the session. PostgreSQL, hosting, TLS, monitoring and backups are still
-absent, so durability and deployment are not claimed. Milestones 1 (AI gateway and accounts),
-2 (editor action bar, dropdown fix), 3 (local terminal), 4 (device files) and 5 (GitHub
-configuration gate) are complete. `docs/technical-audit.md` §11–16 records the evidence, and
-`docs/session-handoff.md` is the current resume point. No deployment, PostgreSQL run, GitHub
-round trip or live model completion has happened yet.
+**Current milestone: Milestone 7 — fully functional integrated terminal (Phase 7).**
+The terminal backend (`server/terminal.mjs`) owns a real PTY (node-pty / Windows ConPTY) with
+loopback bind, per-start pairing token, Origin allow-list, per-session kill-tree, cwd change,
+and exit-code streaming. The frontend now offers multiple terminal tabs, New/Close,
+Clear, Copy, a working-directory `cd` control, maximize/restore, and a real status/exit-code
+readout. `docs/technical-audit.md` records the evidence. No deployment, PostgreSQL run or live
+model completion has happened yet.
 
 **Previous milestone: Phase 7 — Public beta hardening.** The lab includes a
 static public site with honest SEO, a real feedback pipeline, automated tests, centralized
@@ -34,7 +32,8 @@ sandbox.
   delivered, or failed with the HTTP status.
 - **Security:** loopback-only execution by default, bearer token required for an explicit
   remote bind, CORS allow-list, concurrency cap/HTTP 429, sanitized 500s, stdin limits and
-  process cleanup. Still a resource-limited runner, not a sandbox.
+  process cleanup. Still a resource-limited runner, not a sandbox. The integrated local
+  terminal mirrors this boundary — a real shell on the host machine, not a sandbox.
 - **Docs:** `docs/architecture.md`, `docs/deployment.md`, `docs/security.md` and
   `docs/production-readiness.md`.
 
@@ -56,6 +55,13 @@ sandbox.
   streamed provider conversion, a real LCS line diff, accept/reject, copy/download,
   save-as-new, replace-with-confirmation, persisted history, honest warnings, and a real
   validation run of the converted program.
+
+- **Integrated terminal** (bottom panel inside `/workspace`, and the full editor layout
+  once expanded). Real local `cmd.exe`/bash PTY via the loopback sidecar: multiple tabs,
+  New and Close, Clear, Copy (xterm selection), a working-directory `cd` control,
+  maximize/restore, per-tab status, pid and exit-code readout, and per-session command
+  history. Verify by starting `npm run exec` and pasting its console `pairing token`.
+
 - **Practice Arena** (`/practice`, `/practice/:problemId`). Thirteen original
   Easy/Medium/Hard problems across arrays, strings, hashing, sorting, binary search, two
   pointers, sliding window, linked lists, stacks, queues, recursion, backtracking, trees,

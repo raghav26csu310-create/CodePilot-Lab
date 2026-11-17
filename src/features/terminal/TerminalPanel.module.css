@@ -348,3 +348,192 @@
     animation: none;
   }
 }
+
+/* --------------------------------- Toolbar --------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 7px;
+  margin-bottom: 6px;
+}
+
+.toolbarGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: var(--hairline);
+  margin: 0 2px;
+}
+
+.cwdForm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* --------------------------------- Tabs ------------------------------------ */
+
+.sessionTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: none;
+  border-bottom: 1px solid var(--hairline);
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  overflow-x: auto;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding-inline: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xs);
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+}
+
+.tab:hover:not([data-active='true']) {
+  border-color: var(--hairline-accent);
+  color: var(--text-2);
+}
+
+.tab[data-active='true'] {
+  border-color: rgb(87 226 230 / 0.35);
+  background: var(--cyan-wash);
+  color: var(--ice);
+}
+
+.tab[data-exited='true'] {
+  border-color: rgb(255 126 140 / 0.25);
+  color: var(--danger);
+}
+
+.tabExit {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 7px;
+  margin-left: 4px;
+}
+
+.tabClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin-left: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-xs);
+  color: var(--text-3);
+  cursor: pointer;
+  background: transparent;
+  padding: 0;
+}
+
+.tabClose:hover {
+  border-color: var(--hairline-accent);
+  color: var(--ice);
+}
+
+/* --------------------------------- Session surface ------------------------- */
+
+.sessionSurface {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sessionViewport {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: #05080d;
+  overflow: hidden;
+}
+
+.sessionViewport[data-maximized='true'] {
+  min-height: 340px;
+}
+
+.sessionCard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.sessionCard[data-active='true'] {
+  display: flex;
+  flex: 1;
+}
+
+.sessionCard[data-active='false'] {
+  display: none;
+}
+
+/* --------------------------------- Misc ------------------------------------ */
+
+.modeLabel {
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 6.8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+
+.sessionCount {
+  color: var(--ice);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  font-weight: 600;
+}
+
+.statusChip {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
