@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { LIMITS, gradeSubmission, runCode, traceCode } from './executor.mjs'
+import { LIMITS, gradeSubmission, runCode, runProjectCode, traceCode } from './executor.mjs'
 
 const python = { language: 'python', code: 'print(1)' }
 
@@ -45,6 +45,59 @@ describe('executor request validation', () => {
       (await rejection(traceCode({ language: 'python', code: 'x=1', stdin: 'x'.repeat(LIMITS.maxStdinChars + 1) })))
         ?.message,
     ).toMatch(/stdin exceeds/)
+  })
+
+  it('rejects unsafe and incomplete project snapshots before spawning', async () => {
+    const unsafe = await rejection(
+      runProjectCode({
+        language: 'javascript',
+        code: 'console.log(1)',
+        entryPath: '../test.js',
+        projectFiles: [{ path: '../test.js', content: 'console.log(1)' }],
+      }),
+    )
+    expect(unsafe?.statusCode).toBe(400)
+    expect(unsafe?.message).toMatch(/safe project-relative/)
+
+    const missingEntry = await rejection(
+      runProjectCode({
+        language: 'javascript',
+        code: 'console.log(1)',
+        entryPath: 'test.js',
+        projectFiles: [{ path: 'other.js', content: 'console.log(1)' }],
+      }),
+    )
+    expect(missingEntry?.message).toMatch(/identify a file/)
+  })
+
+  it('runs a real test entry with its relative project imports', async () => {
+    const result = await runProjectCode({
+      language: 'javascript',
+      entryPath: 'tests/math.test.js',
+      code: [
+        "import assert from 'node:assert/strict'",
+        "import { add } from '../src/math.js'",
+        'assert.equal(add(2, 3), 5)',
+        "console.log('project test passed')",
+      ].join('\n'),
+      projectFiles: [
+        { path: 'package.json', content: '{"type":"module"}' },
+        { path: 'src/math.js', content: 'export function add(a, b) { return a + b }' },
+        {
+          path: 'tests/math.test.js',
+          content: [
+            "import assert from 'node:assert/strict'",
+            "import { add } from '../src/math.js'",
+            'assert.equal(add(2, 3), 5)',
+            "console.log('project test passed')",
+          ].join('\n'),
+        },
+      ],
+    })
+
+    expect(result.status).toBe('ok')
+    expect(result.results[0]?.stdout).toContain('project test passed')
+    expect(result.results[0]?.exitCode).toBe(0)
   })
 
   it('refuses to invent tracer events for non-Python languages', async () => {

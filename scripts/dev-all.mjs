@@ -1,27 +1,41 @@
 import { spawn } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 
+const isWin = process.platform === 'win32'
 const processes = []
 let shuttingDown = false
 let exitCode = 0
 
 function termProcess(name, child) {
-  if (!child || child.killed || child.exitCode !== null) return
-  child.kill('SIGTERM')
-  setTimeout(() => {
-    if (child.exitCode === null) {
-      child.kill('SIGKILL')
+  if (!child || !child.pid || child.killed || child.exitCode !== null) return
+
+  try {
+    if (isWin) {
+      spawn('taskkill', ['/pid', String(child.pid), '/f', '/t'], { stdio: 'ignore' })
+    } else {
+      child.kill('SIGTERM')
+      setTimeout(() => {
+        if (child.exitCode === null) {
+          child.kill('SIGKILL')
+        }
+      }, 2000).unref()
     }
-  }, 2000).unref()
+  } catch {
+    // Ignore errors if the process already exited
+  }
 }
 
 function addProcess(name, command, args, options = {}) {
-  const child = spawn(command, args, {
+  const bin = isWin && ['npm', 'npx'].includes(command) ? `${command}.cmd` : command
+
+  const child = spawn(bin, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: false,
     env: { ...process.env, FORCE_COLOR: '1', ...options.env },
     cwd: options.cwd || process.cwd(),
   })
+
+  processes.push({ name, child })
 
   child.stdout.on('data', (chunk) => {
     const text = chunk.toString().trimEnd()
@@ -58,14 +72,12 @@ function addProcess(name, command, args, options = {}) {
     exitCode = 1
     shutdown()
   })
-
-  processes.push({ name, child })
 }
 
 function isPortOpen(port) {
   return new Promise((resolve) => {
-    const command = process.platform === 'win32' ? 'netstat' : 'ss'
-    const args = process.platform === 'win32' ? ['-ano'] : ['-lnt']
+    const command = isWin ? 'netstat' : 'ss'
+    const args = isWin ? ['-ano'] : ['-lnt']
     const tester = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
 
     let output = ''
@@ -82,12 +94,11 @@ function isPortOpen(port) {
         resolve(false)
         return
       }
-      const portPattern =
-        process.platform === 'win32'
-          ? new RegExp(`(?:\\]|\\b):${port}\\s`)
-          : new RegExp(`:${port}(?:\\s|$)`)
+      const portPattern = isWin
+        ? new RegExp(`(?:\\]|\\b):${port}\\s`)
+        : new RegExp(`:${port}(?:\\s|$)`)
       const match = output.split(/\r?\n/).some((line) => {
-        if (process.platform === 'win32' && !/\bLISTENING\b/i.test(line)) {
+        if (isWin && !/\bLISTENING\b/i.test(line)) {
           return false
         }
         return portPattern.test(line)
@@ -137,14 +148,16 @@ async function startup() {
     process.exit(1)
   }
 
-  addProcess('frontend', 'npx', ['vite'], { cwd: process.cwd() })
+ addProcess('frontend', 'node', ['node_modules/vite/bin/vite.js'], { cwd: process.cwd() })
   if (executionReady) {
     addProcess('execution', 'node', ['server/index.mjs'], {
       cwd: process.cwd(),
       optional: true,
     })
   }
-  addProcess('api', 'npx', ['tsx', 'watch', 'server/api/src/index.ts'], { cwd: process.cwd() })
+  addProcess('api', 'node', ['node_modules/tsx/dist/cli.mjs', 'watch', 'server/api/src/index.ts'], {
+    cwd: process.cwd(),
+  })
 
   await waitForHealthy('frontend', 'http://127.0.0.1:5173', 30000)
   if (executionReady) {

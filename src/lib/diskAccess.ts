@@ -49,6 +49,7 @@ export type PickedDirectoryResult =
   | { status: 'failed'; reason: string }
 
 type PermittedHandle = FileSystemDirectoryHandle
+const MAX_OPEN_TEXT_BYTES = 4 * 1024 * 1024
 
 export function supportsDeviceFolders(): boolean {
   return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function'
@@ -234,6 +235,7 @@ export async function writeTextToDirectory(
 export async function readTextFromDirectory(
   root: FileSystemDirectoryHandle,
   path: string,
+  maxBytes = MAX_OPEN_TEXT_BYTES,
 ): Promise<DiskReadOutcome> {
   const permission = await ensureHandlePermission(root, 'read', true)
   if (permission.status !== 'granted') {
@@ -257,6 +259,12 @@ export async function readTextFromDirectory(
     }
     const handle = await directory.getFileHandle(fileName)
     const file = await handle.getFile()
+    if (file.size > maxBytes) {
+      return {
+        status: 'unavailable',
+        reason: `That file is ${Math.ceil(file.size / 1024)} KiB. The limit for this action is ${Math.ceil(maxBytes / 1024)} KiB.`,
+      }
+    }
     return { status: 'ready', content: await file.text() }
   } catch (cause) {
     return {
@@ -419,8 +427,6 @@ export async function pickBinaryFile(options: {
     input.click()
   })
 }
-
-const MAX_OPEN_TEXT_BYTES = 4 * 1024 * 1024
 
 export type PickTextFileResult =
   | { status: 'picked'; name: string; content: string; handle?: FileSystemFileHandle }

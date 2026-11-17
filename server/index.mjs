@@ -19,6 +19,7 @@ import {
   gradeSubmission,
   healthReport,
   runCode,
+  runProjectCode,
   traceCode,
 } from './executor.mjs'
 import { PROBLEM_IDS, PROBLEM_SETS } from './problems.mjs'
@@ -209,6 +210,14 @@ const server = createServer(async (request, response) => {
       const body = await readJsonBody(request)
       await withExecutionSlot(response, async () => {
         sendJson(response, 200, await runCode(body))
+      })
+      return
+    }
+
+    if (request.method === 'POST' && url.pathname === '/project/run') {
+      const body = await readJsonBody(request)
+      await withExecutionSlot(response, async () => {
+        sendJson(response, 200, await runProjectCode(body))
       })
       return
     }

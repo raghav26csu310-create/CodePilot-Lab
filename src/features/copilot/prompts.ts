@@ -60,6 +60,13 @@ export const CAPABILITIES: CapabilityMeta[] = [
     placeholder: 'Name the framework or the behaviour to cover…',
   },
   {
+    id: 'agent',
+    label: 'Coding agent',
+    short: 'Agent',
+    description: 'Inspect the real workspace, plan a change, and propose reviewable file edits.',
+    placeholder: 'Describe the project task. The agent will inspect relevant files first…',
+  },
+  {
     id: 'learn',
     label: 'Learning assistant',
     short: 'Learn',
@@ -113,8 +120,23 @@ const CAPABILITY_GUIDANCE: Record<CapabilityId, string> = {
     'Refactor the supplied code without changing observable behaviour. Preserve the public interface, error behaviour, ordering and comments that carry meaning. State what improved and why, list the behaviour that must stay identical, and propose the complete refactored file so the change can be reviewed as a diff.',
   tests:
     'Design tests for the supplied code. List cases as a table or bullets with input, expected outcome and why it matters. Cover unhappy paths and edge cases, not only the happy path. If the user asks for test code, propose a complete test file that matches the project conventions.',
+  agent:
+    'Act as a controlled project coding agent. Use only the real workspace inspection report and supplied file contents. Briefly state the task understanding and a concrete plan before proposing changes. Identify files to inspect or change, explain relevant dependencies/imports, and call out missing evidence. Never claim a tool ran unless the local agent evidence explicitly says it did. Do not invent file contents, run commands, or apply changes; propose complete files using the reviewable codepilot protocol so the user can preview, accept, or reject each change.',
   learn:
     'Teach rather than solve. Start with one or two progressive hints and a question that helps the user reason it out. Do not reveal the complete solution until the user explicitly asks for it; then explain it thoroughly.',
+}
+
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(
+      /\b([A-Za-z0-9_]*(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|private[_-]?key|credential|password)[A-Za-z0-9_]*\s*[:=]\s*["']?)[^\s"'`,;]+/gi,
+      '$1[REDACTED]',
+    )
+    .replace(/\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{16,}|github_pat_[A-Za-z0-9_]{16,}|AIza[A-Za-z0-9_-]{20,})\b/g, '[REDACTED KEY]')
+    .replace(
+      /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
+      '[REDACTED PRIVATE KEY]',
+    )
 }
 
 export type PromptInput = {
@@ -124,6 +146,7 @@ export type PromptInput = {
   projectLanguage: string
   context: ContextBundle
   userText: string
+  agentEvidence?: string
 }
 
 function renderTree(context: ContextBundle): string {
@@ -182,10 +205,10 @@ function renderFiles(context: ContextBundle): string {
 }
 
 export function buildSystemPrompt(input: Omit<PromptInput, 'userText'>): string {
-  return [
+  const prompt = [
     'You are CodePilot, the AI assistant inside CodePilot Lab, a local-first coding workspace.',
     'You are working on a real project. Be accurate, concrete and honest about uncertainty.',
-    'Never claim to have run code, tests or commands: you cannot execute anything here.',
+    'You cannot execute anything here or invoke tools directly. Never claim to have run code, tests or commands unless explicit local agent evidence in this prompt reports that operation and its real result.',
     'Never claim a file was modified. The user applies every change manually after reviewing a diff.',
     'Prefer short paragraphs and fenced code with a language tag. Use Markdown headings sparingly.',
     '',
@@ -200,10 +223,16 @@ export function buildSystemPrompt(input: Omit<PromptInput, 'userText'>): string 
     '',
     renderDiagnostics(input.context),
     '',
+    input.context.agentNotes ? `Local agent inspection (real workspace reads):\n${input.context.agentNotes}` : '',
+    input.agentEvidence
+      ? `Local agent execution evidence (real sidecar response):\n${input.agentEvidence}`
+      : '',
+    '',
     renderFiles(input.context),
     '',
     PROPOSAL_PROTOCOL,
   ].join('\n')
+  return redactSensitiveText(prompt)
 }
 
 export function buildUserPrompt(input: PromptInput): string {
@@ -229,6 +258,8 @@ export function buildUserPrompt(input: PromptInput): string {
         : 'Refactor the shared file without changing its behaviour.'
     case 'tests':
       return 'Suggest test cases and edge cases for the shared code.'
+    case 'agent':
+      return 'Inspect the project evidence, state a concise plan, and propose the smallest safe change.'
     case 'generate':
       return 'Generate the code that fits the shared project context.'
     case 'learn':

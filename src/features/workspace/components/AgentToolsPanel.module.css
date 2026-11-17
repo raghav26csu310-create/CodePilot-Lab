@@ -1,0 +1,365 @@
+.panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 340px;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: linear-gradient(180deg, rgb(15 22 35 / 0.96), rgb(8 13 22 / 0.96));
+  color: var(--text-2);
+  font-size: var(--fs-11);
+}
+
+.header,
+.resultHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.header > div {
+  min-width: 0;
+}
+
+.header p {
+  margin: 0 0 3px;
+  color: var(--violet);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header > span {
+  flex: none;
+  padding: 2px 6px;
+  border: 1px solid rgb(91 224 168 / 0.24);
+  border-radius: 999px;
+  color: var(--ok);
+  font-size: 9px;
+}
+
+.search {
+  display: grid;
+  gap: 4px;
+}
+
+.search label,
+.testRun h3,
+.reportGroup h3 {
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.search > div {
+  display: flex;
+  gap: 5px;
+}
+
+.search input,
+.testRun select {
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  outline: none;
+  background: var(--surface-1);
+  color: var(--text);
+  font: inherit;
+}
+
+.search input {
+  flex: 1;
+}
+
+.search input:focus,
+.testRun select:focus {
+  border-color: rgb(140 123 255 / 0.55);
+  box-shadow: 0 0 0 2px rgb(140 123 255 / 0.1);
+}
+
+.search button,
+.runActions button,
+.resultHead button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 27px;
+  padding: 0 8px;
+  border: 1px solid rgb(140 123 255 / 0.3);
+  border-radius: var(--r-sm);
+  background: rgb(140 123 255 / 0.1);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search button:disabled,
+.runActions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.report {
+  display: grid;
+  gap: 7px;
+}
+
+.scanSummary,
+.hint,
+.disclaimer,
+.error,
+.testRun p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.reportGroup {
+  display: grid;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+.reportGroup h3 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+}
+
+.reportGroup > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.reportGroup strong,
+.reportGroup span,
+.hit > span {
+  color: var(--text-2);
+}
+
+.reportGroup code,
+.hit code {
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.hit {
+  display: grid;
+  grid-template-columns: minmax(70px, 0.8fr) minmax(0, 2fr) 22px;
+  align-items: start;
+  gap: 5px;
+  min-width: 0;
+}
+
+.hit > span {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hit code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hit button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--surface-1);
+  color: var(--cyan);
+  cursor: pointer;
+}
+
+.omissions {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin: 0;
+  color: var(--warn);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.omissions svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.testRun {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.testRun h3 {
+  margin: 0 0 2px;
+}
+
+.testRun select {
+  width: 100%;
+}
+
+.runActions {
+  display: flex;
+  gap: 6px;
+}
+
+.runActions .stop {
+  border-color: rgb(240 196 106 / 0.3);
+  background: rgb(240 196 106 / 0.08);
+  color: var(--warn);
+}
+
+.disclaimer {
+  font-size: 9px;
+}
+
+.result {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: rgb(4 8 14 / 0.6);
+}
+
+.resultHead strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultHead button {
+  min-height: 23px;
+  padding: 0 6px;
+  font-size: 9px;
+}
+
+.result > p,
+.output > p {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.result pre {
+  max-height: 90px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.25);
+  color: var(--text-2);
+  font: 9px/1.45 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.output {
+  display: grid;
+  gap: 4px;
+}
+
+.error {
+  color: var(--danger);
+}
+
+.activity {
+  padding-top: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+.activity summary {
+  color: var(--text-2);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.activity ul {
+  display: grid;
+  gap: 5px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity li {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 5px;
+  padding: 5px;
+  border-radius: 4px;
+  background: var(--surface-1);
+}
+
+.activity li > span,
+.activity time {
+  color: var(--text-3);
+  font-size: 9px;
+}
+
+.activity li[data-status='error'] > span {
+  color: var(--warn);
+}
+
+.activity li > p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 9px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

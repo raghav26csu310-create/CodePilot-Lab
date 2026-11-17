@@ -87,4 +87,31 @@ describe('copilot capabilities', () => {
       expect(prompt).toContain('The user applies every change manually')
     }
   })
+
+  it('redacts credential-shaped values from project context and labels real run evidence', () => {
+    const secret = 'sk-test-12345678901234567890'
+    const prompt = buildSystemPrompt({
+      ...base,
+      capability: 'debug',
+      context: emptyContext({
+        files: [
+          {
+            path: 'src/config.ts',
+            language: 'typescript',
+            content: `const apiKey = "${secret}"`,
+            chars: secret.length,
+            originalChars: secret.length,
+            truncated: false,
+            source: 'stored',
+            dirty: false,
+          },
+        ],
+      }),
+      agentEvidence: 'Actual local status: runtime_error; exit code 1.',
+    })
+
+    expect(prompt).not.toContain(secret)
+    expect(prompt).toContain('[REDACTED]')
+    expect(prompt).toContain('Actual local status: runtime_error')
+  })
 })

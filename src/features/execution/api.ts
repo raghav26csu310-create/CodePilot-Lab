@@ -47,6 +47,14 @@ export type RunRequest = {
   jobId?: string
 }
 
+export type ProjectRunRequest = {
+  language: string
+  entryPath: string
+  files: { path: string; content: string }[]
+  timeoutMs?: number
+  jobId?: string
+}
+
 export type RunResponse = {
   language: string
   status: ExecutionStatus
@@ -83,6 +91,8 @@ export type HealthResponse = {
     runTimeoutMs: number
     maxTests: number
     maxTraceEvents: number
+    projectMaxFiles: number
+    projectMaxBytes: number
   }
   runtimes: Record<string, RuntimeProbe>
   languages: LanguageSupport[]
@@ -264,6 +274,33 @@ export function runCode(payload: RunRequest, timeoutMs = 40_000): Promise<RunRes
   return request<RunResponse>('/run', {
     method: 'POST',
     body: JSON.stringify(payload),
+    timeoutMs,
+  })
+}
+
+export function runProjectCode(
+  payload: ProjectRunRequest,
+  timeoutMs = 40_000,
+): Promise<RunResponse> {
+  const entry = payload.files.find((file) => file.path === payload.entryPath)
+  if (!entry) {
+    return Promise.reject(
+      new ExecutionServiceError(
+        'invalid-response',
+        'The selected test entry is missing from the project snapshot.',
+      ),
+    )
+  }
+  return request<RunResponse>('/project/run', {
+    method: 'POST',
+    body: JSON.stringify({
+      language: payload.language,
+      entryPath: payload.entryPath,
+      code: entry.content,
+      projectFiles: payload.files,
+      timeoutMs: payload.timeoutMs,
+      jobId: payload.jobId,
+    }),
     timeoutMs,
   })
 }

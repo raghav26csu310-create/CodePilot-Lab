@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -26,6 +26,8 @@ export const LIMITS = {
   runTimeoutMs: 8_000,
   maxTests: 16,
   maxTraceEvents: 2_500,
+  projectMaxFiles: 120,
+  projectMaxBytes: 800_000,
 }
 
 export const LANGUAGE_INFO = {
@@ -347,7 +349,9 @@ function javaClassName(code) {
   const match = code.match(
     /\bpublic\s+(?:final\s+|abstract\s+|sealed\s+|non-sealed\s+)*(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)/,
   )
-  return match?.[1] ?? 'Main'
+  const packageName = code.match(/^\s*package\s+([\w.]+)\s*;/m)?.[1]
+  const className = match?.[1] ?? 'Main'
+  return packageName ? `${packageName}.${className}` : className
 }
 
 function sourceFile(language, javaName) {
@@ -356,34 +360,102 @@ function sourceFile(language, javaName) {
   if (language === 'typescript') return 'main.ts'
   if (language === 'c') return 'main.c'
   if (language === 'cpp') return 'main.cpp'
-  return `${javaName}.java`
+  return `${javaName.replace(/\./g, '/')}.java`
 }
 
-async function writeSource(language, code, dir) {
+function normalizedProjectPath(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.includes('\0')) {
+    return null
+  }
+  const normalized = value.replace(/\\/g, '/')
+  if (
+    normalized.startsWith('/') ||
+    /^[A-Za-z]:/.test(normalized) ||
+    normalized.split('/').some((part) => !part || part === '.' || part === '..')
+  ) {
+    return null
+  }
+  return normalized
+}
+
+function validateProjectFiles(body) {
+  if (body.projectFiles === undefined) {
+    return null
+  }
+  if (!Array.isArray(body.projectFiles) || body.projectFiles.length === 0) {
+    return 'projectFiles must be a non-empty array.'
+  }
+  if (body.projectFiles.length > LIMITS.projectMaxFiles) {
+    return `At most ${LIMITS.projectMaxFiles} project files can be staged.`
+  }
+  const entryPath = normalizedProjectPath(body.entryPath)
+  if (!entryPath) {
+    return 'entryPath must be a safe project-relative file path.'
+  }
+  const seen = new Set()
+  let totalBytes = 0
+  let entryContent = null
+  for (const file of body.projectFiles) {
+    const path = normalizedProjectPath(file?.path)
+    if (!path || typeof file?.content !== 'string') {
+      return 'Each project file needs a safe relative path and string content.'
+    }
+    const key = process.platform === 'win32' ? path.toLocaleLowerCase() : path
+    if (seen.has(key)) {
+      return `Duplicate project file path: ${path}.`
+    }
+    seen.add(key)
+    totalBytes += Buffer.byteLength(file.content, 'utf8')
+    if (totalBytes > LIMITS.projectMaxBytes) {
+      return `Project snapshot exceeds the ${LIMITS.projectMaxBytes} byte limit.`
+    }
+    if (path === entryPath) {
+      entryContent = file.content
+    }
+  }
+  if (entryContent === null) {
+    return 'entryPath must identify a file in projectFiles.'
+  }
+  if (entryContent !== body.code) {
+    return 'code must match the selected entry file content.'
+  }
+  return null
+}
+
+async function writeSource(language, code, dir, entryPath, projectFiles) {
   const javaName = language === 'java' ? javaClassName(code) : 'Main'
-  const file = sourceFile(language, javaName)
-  await writeFile(join(dir, file), code, 'utf8')
+  const file = entryPath ?? sourceFile(language, javaName)
+  if (projectFiles) {
+    for (const projectFile of projectFiles) {
+      const path = normalizedProjectPath(projectFile.path)
+      const target = join(dir, ...path.split('/'))
+      await mkdir(dirname(target), { recursive: true })
+      await writeFile(target, projectFile.content, 'utf8')
+    }
+  } else {
+    await writeFile(join(dir, file), code, 'utf8')
+  }
   return { file, javaName }
 }
 
-function compileSpec(language, javaName) {
+function compileSpec(language, javaName, entryFile) {
   if (language === 'c') {
-    return { command: 'gcc', args: ['main.c', '-O1', '-std=c17', '-o', 'main.exe'] }
+    return { command: 'gcc', args: [entryFile, '-O1', '-std=c17', '-o', 'main.exe'] }
   }
   if (language === 'cpp') {
-    return { command: 'g++', args: ['main.cpp', '-O1', '-std=c++17', '-o', 'main.exe'] }
+    return { command: 'g++', args: [entryFile, '-O1', '-std=c++17', '-o', 'main.exe'] }
   }
   if (language === 'java') {
     return {
       command: 'javac',
-      args: ['-J-Xmx256m', '-encoding', 'UTF-8', `${javaName}.java`],
+      args: ['-J-Xmx256m', '-encoding', 'UTF-8', '-sourcepath', '.', '-d', '.', entryFile],
     }
   }
   return null
 }
 
-async function compileIfNeeded(language, dir, javaName, env, jobId) {
-  const spec = compileSpec(language, javaName)
+async function compileIfNeeded(language, dir, javaName, entryFile, env, jobId) {
+  const spec = compileSpec(language, javaName, entryFile)
   if (!spec) {
     return { ok: true, compile: null }
   }
@@ -428,21 +500,34 @@ async function compileIfNeeded(language, dir, javaName, env, jobId) {
   return { ok: true, compile }
 }
 
-function runSpec(language, dir, javaName, python) {
+function runSpec(language, dir, javaName, entryFile, python, projectMode) {
   if (language === 'python') {
-    return { command: python, args: ['-I', '-B', 'main.py'], note: 'No memory cap in this runner.' }
+    if (projectMode) {
+      return {
+        command: python,
+        args: [
+          '-I',
+          '-B',
+          '-c',
+          "import runpy,sys;sys.path.insert(0,'.');runpy.run_path(sys.argv[1],run_name='__main__')",
+          entryFile,
+        ],
+        note: 'No memory cap in this runner.',
+      }
+    }
+    return { command: python, args: ['-I', '-B', entryFile], note: 'No memory cap in this runner.' }
   }
   if (language === 'javascript') {
     return {
       command: 'node',
-      args: ['--no-warnings', '--max-old-space-size=256', 'main.js'],
+      args: ['--no-warnings', '--max-old-space-size=256', entryFile],
       note: 'V8 heap capped at 256 MB.',
     }
   }
   if (language === 'typescript') {
     return {
       command: 'node',
-      args: ['--no-warnings', '--max-old-space-size=256', 'main.ts'],
+      args: ['--no-warnings', '--max-old-space-size=256', entryFile],
       note: 'Node 24 native type stripping (no enums/namespaces). V8 heap capped at 256 MB.',
     }
   }
@@ -464,9 +549,9 @@ function runSpec(language, dir, javaName, python) {
 }
 
 /** Executes the prepared program once with the given stdin. */
-async function runOnce(language, dir, javaName, stdin, timeoutMs, jobId) {
+async function runOnce(language, dir, javaName, entryFile, stdin, timeoutMs, jobId, projectMode) {
   const python = language === 'python' ? await resolvePythonExecutable() : 'python'
-  const spec = runSpec(language, dir, javaName, python)
+  const spec = runSpec(language, dir, javaName, entryFile, python, projectMode)
   if (!spec) {
     return {
       status: 'unsupported',
@@ -549,6 +634,10 @@ function validateRequest(body) {
   if (code.length > LIMITS.maxCodeChars) {
     return `Source code exceeds the ${LIMITS.maxCodeChars} character limit.`
   }
+  const projectFilesError = validateProjectFiles(body)
+  if (projectFilesError) {
+    return projectFilesError
+  }
   if (body.stdin !== undefined && typeof body.stdin !== 'string') {
     return 'stdin must be a string.'
   }
@@ -609,8 +698,14 @@ export async function runCode(body) {
 
   try {
     const env = baseEnv(dir)
-    const { javaName } = await writeSource(language, code, dir)
-    const compiled = await compileIfNeeded(language, dir, javaName, env, jobId)
+    const { file, javaName } = await writeSource(
+      language,
+      code,
+      dir,
+      body.entryPath,
+      body.projectFiles,
+    )
+    const compiled = await compileIfNeeded(language, dir, javaName, file, env, jobId)
 
     if (!compiled.ok) {
       return {
@@ -632,7 +727,18 @@ export async function runCode(body) {
 
     const results = []
     for (const test of tests) {
-      results.push(await runOnce(language, dir, javaName, test.stdin ?? '', timeoutMs, jobId))
+      results.push(
+        await runOnce(
+          language,
+          dir,
+          javaName,
+          file,
+          test.stdin ?? '',
+          timeoutMs,
+          jobId,
+          Boolean(body.projectFiles),
+        ),
+      )
     }
 
     const status = results.some((result) => result.status === 'cancelled')
@@ -656,6 +762,13 @@ export async function runCode(body) {
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
+}
+
+export async function runProjectCode(body) {
+  if (!body || typeof body !== 'object' || body.projectFiles === undefined) {
+    throw badRequest('A bounded projectFiles snapshot is required.')
+  }
+  return runCode(body)
 }
 
 export async function traceCode(body) {

@@ -9,10 +9,25 @@ import {
   type ReactNode,
 } from 'react'
 
-import { createStoredEntry, loadFileContent } from '../../lib/projectStorage'
+import {
+  createStoredEntry,
+  deleteStoredEntry,
+  loadFileContent,
+} from '../../lib/projectStorage'
+import {
+  cancelExecution,
+  newJobId,
+  runProjectCode,
+  type RunResponse,
+} from '../execution/api'
 import { useEditorCommands } from '../editor/EditorCommandsContext'
 import { buildContextBundle, DEFAULT_CONTEXT_OPTIONS, summarizeContext } from './context'
 import { AiError, describeAiError, toAiError } from './errors'
+import {
+  inspectProjectForAgent,
+  type AgentProjectReport,
+  type ProjectExecutionSnapshot,
+} from './agent/projectTools'
 import { useGateway } from './gateway/store'
 import { buildSystemPrompt, buildUserPrompt } from './prompts'
 import { isConfigured, providerLabel } from './providerPresets'
@@ -44,6 +59,21 @@ type ComposerSeed = {
   level: ExplainLevel
 }
 
+export type AgentToolActivity = {
+  id: string
+  tool: 'inspect-project' | 'run-test'
+  status: 'running' | 'complete' | 'error' | 'cancelled'
+  message: string
+  createdAt: number
+}
+
+export type AgentRunResult = {
+  entryPath: string
+  language: string
+  snapshot: ProjectExecutionSnapshot
+  response: RunResponse
+}
+
 type CopilotContextValue = {
   messages: CopilotMessage[]
   revisions: AppliedRevision[]
@@ -51,6 +81,9 @@ type CopilotContextValue = {
   generating: boolean
   status: CopilotStatus
   statusError: { message: string; kind: AiErrorKind } | null
+  agentReport: AgentProjectReport | null
+  agentActivity: AgentToolActivity[]
+  agentRun: AgentRunResult | null
   providerLabel: string
   model: string
   configured: boolean
@@ -64,12 +97,22 @@ type CopilotContextValue = {
   composerSeed: ComposerSeed | null
   seedComposer(text: string, capability?: CapabilityId, level?: ExplainLevel): void
   consumeComposerSeed(): void
-  send(text: string, override?: { capability?: CapabilityId; level?: ExplainLevel }): Promise<void>
+  send(
+    text: string,
+    override?: { capability?: CapabilityId; level?: ExplainLevel; agentEvidence?: string },
+  ): Promise<void>
   stop(): void
   clearConversation(): void
   toggleContextPath(path: string): void
   clearContextAttachments(): void
   buildContext(): Promise<ContextBundle>
+  inspectProject(query: string): Promise<AgentProjectReport | null>
+  runProjectTest(
+    entryPath: string,
+    language: string,
+    snapshot: ProjectExecutionSnapshot,
+  ): Promise<AgentRunResult | null>
+  cancelProjectTest(): Promise<void>
   previewProposal(proposal: CodeProposal): Promise<ProposalPreview>
   applyProposal(proposal: CodeProposal): Promise<ApplyResult>
   restoreRevision(revisionId: string): Promise<ApplyResult>
@@ -122,9 +165,13 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   const [appliedByProposal, setAppliedByProposal] = useState<Record<string, string>>({})
   const [composerSeed, setComposerSeed] = useState<ComposerSeed | null>(null)
   const [verifiedSignature, setVerifiedSignature] = useState<string | null>(null)
+  const [agentReport, setAgentReport] = useState<AgentProjectReport | null>(null)
+  const [agentActivity, setAgentActivity] = useState<AgentToolActivity[]>([])
+  const [agentRun, setAgentRun] = useState<AgentRunResult | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const busyRef = useRef(false)
+  const agentJobRef = useRef<string | null>(null)
 
   const activeConnection = gateway.status?.connection ?? null
   const activeProviderLabel =
@@ -192,6 +239,158 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
     })
   }, [project, state, contextOptions, settings.contextChars, commands])
 
+  const inspectProject = useCallback(
+    async (query: string): Promise<AgentProjectReport | null> => {
+      const id = messageId()
+      setAgentActivity((previous) => [
+        {
+          id,
+          tool: 'inspect-project',
+          status: 'running',
+          message: 'Reading the active project tree and bounded file contents…',
+          createdAt: Date.now(),
+        } satisfies AgentToolActivity,
+        ...previous,
+      ].slice(0, 12))
+
+      try {
+        const report = await inspectProjectForAgent({
+          project,
+          nodes: state.tree.nodes,
+          tabs: state.tree.tabs,
+          activePath: state.tree.activeTabPath,
+          query,
+          getDraft: (path) => commands.current?.getDraft(path) ?? null,
+        })
+        setAgentReport(report)
+        setAgentActivity((previous) =>
+          previous.map((activity) =>
+            activity.id === id
+              ? {
+                  ...activity,
+                  status: 'complete',
+                  message: `Inspected ${report.filesRead} real file(s); found ${report.search.totalMatches} matching line(s) and ${report.imports.length} import reference(s).`,
+                }
+              : activity,
+          ),
+        )
+        return report
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Project inspection failed before any files could be reported.'
+        setAgentActivity((previous) =>
+          previous.map((activity) =>
+            activity.id === id ? { ...activity, status: 'error', message } : activity,
+          ),
+        )
+        return null
+      }
+    },
+    [project, state, commands],
+  )
+
+  const runProjectTest = useCallback(
+    async (
+      entryPath: string,
+      language: string,
+      snapshot: ProjectExecutionSnapshot,
+    ): Promise<AgentRunResult | null> => {
+      if (agentJobRef.current) {
+        return null
+      }
+      const id = messageId()
+      const jobId = newJobId()
+      agentJobRef.current = jobId
+      setAgentRun(null)
+      setAgentActivity((previous) => [
+        {
+          id,
+          tool: 'run-test',
+          status: 'running',
+          message: `Submitting ${entryPath} and ${snapshot.files.length - 1} related file(s) to the local execution service…`,
+          createdAt: Date.now(),
+        } satisfies AgentToolActivity,
+        ...previous,
+      ].slice(0, 12))
+
+      try {
+        const response = await runProjectCode({
+          language,
+          entryPath,
+          files: snapshot.files,
+          jobId,
+        })
+        const result = { entryPath, language, snapshot, response }
+        setAgentRun(result)
+        setAgentActivity((previous) =>
+          previous.map((activity) =>
+            activity.id === id
+              ? {
+                  ...activity,
+                  status: response.status === 'cancelled' ? 'cancelled' : 'complete',
+                  message: `Real local run returned ${response.status}${response.durationMs === undefined ? '' : ` in ${response.durationMs} ms`}.`,
+                }
+              : activity,
+          ),
+        )
+        return result
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'The local execution service failed before returning a result.'
+        setAgentActivity((previous) =>
+          previous.map((activity) =>
+            activity.id === id ? { ...activity, status: 'error', message } : activity,
+          ),
+        )
+        return null
+      } finally {
+        agentJobRef.current = null
+      }
+    },
+    [],
+  )
+
+  const cancelProjectTest = useCallback(async () => {
+    const jobId = agentJobRef.current
+    if (!jobId) {
+      return
+    }
+    try {
+      const result = await cancelExecution(jobId)
+      if (!result.cancelled) {
+        setAgentActivity((previous) => [
+          {
+            id: messageId(),
+            tool: 'run-test',
+            status: 'error',
+            message: result.message,
+            createdAt: Date.now(),
+          } satisfies AgentToolActivity,
+          ...previous,
+        ].slice(0, 12))
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'The local execution service did not confirm the stop request.'
+      setAgentActivity((previous) => [
+        {
+          id: messageId(),
+          tool: 'run-test',
+          status: 'error',
+          message: `Could not stop the local test: ${message}`,
+          createdAt: Date.now(),
+        } satisfies AgentToolActivity,
+        ...previous,
+      ].slice(0, 12))
+    }
+  }, [])
+
   const seedComposer = useCallback(
     (text: string, nextCapability?: CapabilityId, nextLevel?: ExplainLevel) => {
       seedCounter += 1
@@ -227,7 +426,11 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
   const send = useCallback(
     async (
       text: string,
-      override?: { capability?: CapabilityId; level?: ExplainLevel },
+      override?: {
+        capability?: CapabilityId
+        level?: ExplainLevel
+        agentEvidence?: string
+      },
     ) => {
       if (busyRef.current) {
         return
@@ -254,6 +457,11 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       setStatusError(null)
 
       try {
+        const inspection =
+          usedCapability === 'agent' ? await inspectProject(text) : null
+        if (usedCapability === 'agent' && !inspection) {
+          throw new Error('Project inspection failed. Review the agent activity before retrying.')
+        }
         const bundle = await buildContextBundle({
           project,
           tabs: current.tree.tabs,
@@ -261,11 +469,17 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
           activePath,
           selection,
           markers: current.ui.markers,
-          attached: current.ui.copilotContext,
+          attached: [
+            ...current.ui.copilotContext,
+            ...(inspection?.relevantPaths ?? []),
+          ],
           options: contextOptions,
           getDraft: (path) => commands.current?.getDraft(path) ?? null,
           contextChars: settings.contextChars,
         })
+        if (inspection) {
+          bundle.agentNotes = inspection.summary
+        }
         const summary = summarizeContext(bundle)
 
         const now = Date.now()
@@ -316,6 +530,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
               projectName: project.name,
               projectLanguage: project.language,
               context: bundle,
+              agentEvidence: override?.agentEvidence,
             }),
           },
           ...prior.map<AiChatTurn>((message) => ({
@@ -479,6 +694,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       messages,
       contextOptions,
       commands,
+      inspectProject,
       configured,
       activeProviderLabel,
       activeModel,
@@ -609,6 +825,19 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
 
       const result = await commands.current?.applyContent(proposal.path, proposal.content)
       if (!result || !result.ok) {
+        if (proposal.mode === 'create') {
+          try {
+            await deleteStoredEntry(project.id, proposal.path)
+            dispatch({ type: 'entry/delete', path: proposal.path })
+          } catch (cause) {
+            return {
+              ok: false,
+              message: `The editor could not apply the new file, and its empty project entry could not be removed: ${
+                cause instanceof Error ? cause.message : 'storage error'
+              }`,
+            }
+          }
+        }
         return {
           ok: false,
           message: result?.message ?? 'The editor is not available to apply this change.',
@@ -620,6 +849,8 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
         proposalId: proposal.id,
         path: proposal.path,
         previousContent: preview.before,
+        created: proposal.mode === 'create',
+        appliedContent: proposal.content,
         createdAt: Date.now(),
         restoredAt: null,
       }
@@ -640,9 +871,47 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
 
   const restoreRevision = useCallback(
     async (id: string): Promise<ApplyResult> => {
+      const warn = (message: string): ApplyResult => {
+        dispatch({ type: 'ui/show-toast', tone: 'warn', message })
+        return { ok: false, message }
+      }
       const revision = revisions.find((entry) => entry.id === id)
       if (!revision) {
-        return { ok: false, message: 'That revision is no longer in this session.' }
+        return warn('That revision is no longer in this session.')
+      }
+
+      if (revision.created) {
+        const tab = state.tree.tabs.find((entry) => entry.path === revision.path)
+        const draft = commands.current?.getDraft(revision.path) ?? null
+        if (!tab || !tab.dirty || draft !== revision.appliedContent) {
+          return warn(
+            'This created file has been saved or changed since the proposal. It was not removed; review and delete it from the explorer if that is still intended.',
+          )
+        }
+        if (!window.confirm(`Remove the unsaved agent-created file ${revision.path} from this project?`)) {
+          return warn('Removal cancelled. The project file was not changed.')
+        }
+        try {
+          await deleteStoredEntry(project.id, revision.path)
+        } catch (error) {
+          return warn(
+            error instanceof Error
+              ? `The new file could not be removed from browser storage: ${error.message}`
+              : 'The new file could not be removed from browser storage.',
+          )
+        }
+        dispatch({ type: 'entry/delete', path: revision.path })
+        setRevisions((previous) =>
+          previous.map((entry) =>
+            entry.id === id ? { ...entry, restoredAt: Date.now() } : entry,
+          ),
+        )
+        dispatch({
+          type: 'ui/show-toast',
+          tone: 'ok',
+          message: `Removed the unsaved new file ${revision.path} from this project.`,
+        })
+        return { ok: true }
       }
 
       const result = await commands.current?.applyContent(
@@ -650,10 +919,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
         revision.previousContent,
       )
       if (!result || !result.ok) {
-        return {
-          ok: false,
-          message: result?.message ?? 'The editor is not available to restore this revision.',
-        }
+        return warn(result?.message ?? 'The editor is not available to restore this revision.')
       }
 
       setRevisions((previous) =>
@@ -668,7 +934,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       })
       return { ok: true }
     },
-    [revisions, commands, dispatch],
+    [revisions, state, project, commands, dispatch],
   )
 
   const isApplied = useCallback(
@@ -721,6 +987,12 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       toggleContextPath,
       clearContextAttachments,
       buildContext,
+      agentReport,
+      agentActivity,
+      agentRun,
+      inspectProject,
+      runProjectTest,
+      cancelProjectTest,
       previewProposal,
       applyProposal,
       restoreRevision,
@@ -730,6 +1002,9 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       messages,
       revisions,
       appliedByProposal,
+      agentReport,
+      agentActivity,
+      agentRun,
       generating,
       status,
       statusError,
@@ -749,6 +1024,9 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
       toggleContextPath,
       clearContextAttachments,
       buildContext,
+      inspectProject,
+      runProjectTest,
+      cancelProjectTest,
       previewProposal,
       applyProposal,
       restoreRevision,

@@ -54,6 +54,7 @@ export type CapabilityId =
   | 'review'
   | 'refactor'
   | 'tests'
+  | 'agent'
   | 'learn'
 
 export type ContextOptions = {
@@ -156,6 +157,8 @@ export type ContextBundle = {
   } | null
   totalChars: number
   selectionChars: number
+  /** Grounded local inspection report for the coding-agent capability. */
+  agentNotes?: string
 }
 
 export type ContextSummary = {
@@ -211,6 +214,8 @@ export type AppliedRevision = {
   path: string
   /** Complete previous buffer content. Empty string means the file was new. */
   previousContent: string
+  created: boolean
+  appliedContent: string
   createdAt: number
   restoredAt: number | null
 }

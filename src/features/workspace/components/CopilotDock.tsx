@@ -9,6 +9,7 @@ import {
   FileCode2,
   FileDiff,
   FlaskConical,
+  FolderTree,
   GraduationCap,
   Layers,
   Loader2,
@@ -42,6 +43,7 @@ import { DiffDialog } from '../../copilot/DiffDialog'
 import { Markdown } from '../../copilot/markdown'
 import { CAPABILITIES, capabilityMeta } from '../../copilot/prompts'
 import { ProviderManager } from '../../copilot/ProviderManager'
+import { AgentToolsPanel } from './AgentToolsPanel'
 import { useAiSettings } from '../../copilot/settingsStore'
 import type {
   CapabilityId,
@@ -68,6 +70,7 @@ const CAPABILITY_ICONS: Record<CapabilityId, typeof Sparkles> = {
   review: ShieldCheck,
   refactor: Wrench,
   tests: FlaskConical,
+  agent: FolderTree,
   learn: GraduationCap,
 }
 
@@ -547,6 +550,8 @@ export function CopilotDock({ variant = 'inline', onRequestClose }: CopilotDockP
             </div>
           ) : null}
 
+          {capability === 'agent' ? <AgentToolsPanel /> : null}
+
           {statusError ? (
             <div className={styles.statusError} data-kind={statusError.kind} role="alert">
               <CircleAlert size={14} />
@@ -655,7 +660,7 @@ export function CopilotDock({ variant = 'inline', onRequestClose }: CopilotDockP
               <summary>
                 <RotateCcw size={12} />
                 Applied revisions ({revisions.length})
-                <span>restore any previous buffer</span>
+                <span>restore buffers or remove an unsaved created file</span>
               </summary>
               <ul>
                 {revisions.slice(0, 8).map((revision) => (
@@ -673,7 +678,13 @@ export function CopilotDock({ variant = 'inline', onRequestClose }: CopilotDockP
                       disabled={revision.restoredAt !== null}
                     >
                       {revision.restoredAt ? <Check size={11} /> : <RotateCcw size={11} />}
-                      {revision.restoredAt ? 'Restored' : 'Restore'}
+                      {revision.restoredAt
+                        ? revision.created
+                          ? 'Removed'
+                          : 'Restored'
+                        : revision.created
+                          ? 'Remove new file'
+                          : 'Restore'}
                     </button>
                   </li>
                 ))}
