@@ -1,3 +1,4 @@
+import { normalizeStoredPath, validateStoredPath } from '../../lib/storedPaths'
 import type { CodeProposal } from './types'
 
 export type ParsedProposal = Omit<CodeProposal, 'id' | 'messageId'>
@@ -37,45 +38,36 @@ export function validateProposalPath(path: string): string | null {
   if (!value) {
     return 'The proposal has no file path.'
   }
-  if (/\p{Cc}/u.test(value)) {
-    return 'The proposal path contains control characters.'
+
+  const problem = validateStoredPath(value)
+  if (!problem) {
+    return null
   }
 
-  const normalized = value.replace(/\\/g, '/')
-  if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) {
+  if (problem.includes('Absolute paths are not allowed')) {
     return 'Absolute paths are not allowed; use a path relative to the project root.'
   }
-
-  const segments = normalized.split('/')
-  if (segments.some((segment) => segment === '.' || segment === '..')) {
-    return segmentError(normalized)
+  if (problem.includes('empty, "." or ".."')) {
+    if (value.includes('//') || value.startsWith('/') || value.endsWith('/')) {
+      return 'The proposal path has an empty segment.'
+    }
+    if (value.includes('..')) {
+      return 'The proposal path escapes the project root.'
+    }
+    return 'The proposal path contains a dot segment that resolves to the current directory.'
   }
-  if (segments.some((segment) => segment.trim().length === 0)) {
+  if (problem.includes('control characters')) {
+    return 'The proposal path contains control characters.'
+  }
+  if (problem.includes('empty')) {
     return 'The proposal path has an empty segment.'
   }
 
-  return null
-}
-
-function segmentError(path: string): string {
-  const normalized = path.replace(/\\/g, '/')
-  if (normalized.split('/').includes('..')) {
-    return 'The proposal path escapes the project root.'
-  }
-  return 'The proposal path contains a dot segment that resolves to the current directory.'
+  return problem
 }
 
 export function normalizeProposalPath(path: string): string {
-  const normalized = path
-    .trim()
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
-    .replace(/^\/+/, '')
-
-  return normalized
-    .split('/')
-    .filter((segment) => segment.length > 0 && segment !== '.')
-    .join('/')
+  return normalizeStoredPath(path)
 }
 
 function readFence(lines: string[], start: number): { end: number; body: string[] } | null {

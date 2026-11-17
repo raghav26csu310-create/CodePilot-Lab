@@ -38,11 +38,12 @@ describe('validateProposalPath', () => {
     expect(validateProposalPath('README.md')).toBeNull()
   })
 
-  it('rejects traversal, absolute paths, dot segments and empty segments', () => {
+  it('rejects traversal, absolute paths, dot segments, empty segments and reserved names', () => {
     expect(validateProposalPath('../escape.py')).toMatch(/escapes/)
     expect(validateProposalPath('/etc/passwd')).toMatch(/Absolute/)
     expect(validateProposalPath('src/./main.py')).toMatch(/dot segment|current directory/)
     expect(validateProposalPath('a//b.py')).toMatch(/empty segment/)
+    expect(validateProposalPath('CON.txt')).toMatch(/reserved|Windows/)
     expect(validateProposalPath('a\u0000b')).toMatch(/control/)
   })
 })
