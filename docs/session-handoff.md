@@ -6,6 +6,16 @@ readiness.
 
 ## Mission
 
+## Current environment orchestration work
+
+- Status: environment orchestration is implemented and verified for the repo's local dev stack.
+- Added `npm run dev:all` to coordinate the Vite frontend, API and execution sidecar with named logs, graceful shutdown and port-conflict handling.
+- Added `npm run check`, `npm run verify`, and `npm run doctor` as the local validation/reporting flow.
+- Added VS Code tasks/launch/settings for the shared local dev workflow.
+- Verified result: `npm run check` and `npm run verify` pass; `npm run dev:all` reports a clear conflict when the shared environment already owns `:5173` instead of starting duplicate processes.
+- Remaining caveat: this machine currently has another process bound to `127.0.0.1:5173`, so a clean end-to-end start requires that port to be free.
+
+
 Turn CodePilot Lab into a usable, secure, scalable AI-native coding environment without
 rebuilding it. Work proceeds in milestones; each one starts with inspection, affected
 files and a plan, and ends with typecheck, lint, tests, build and a report of real results.
