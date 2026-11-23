@@ -359,6 +359,39 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - Cloud terminal, installer packaging, multi-tab session sharing and scrollback persistence
   are not implemented.
 
+## 2026-11-23 deployment and documentation handoff
+
+### Delivered
+- Added `npm start` as a unified production entrypoint.
+- The entrypoint serves `dist/`, forwards `/api/*` to the real API router, runs PostgreSQL
+  migrations before listening, and handles SIGINT/SIGTERM shutdown.
+- Added a Dockerfile and Docker Compose PostgreSQL template.
+- Rewrote `public/docs.html` as a structured operator manual with contents, copy examples,
+  implemented routes, provider setup, terminal limits, deployment and troubleshooting.
+- Replaced `docs/deployment.md` with the exact production startup and environment contract.
+- Added `PORT` support to the example environment and moved `tsx` into runtime dependencies
+  because `npm start` uses it in production.
+
+### Verified
+- `npm run verify`: pass.
+- Frontend: 22 test files, 167 tests.
+- API: 3 test files, 42 tests.
+- Build: pass.
+- Unified server smoke test: pass on `127.0.0.1:8799`:
+  - `/api/health/live` returned 200.
+  - `/api/health/ready` returned 200.
+  - `/workspace/test-project` returned the SPA shell.
+  - `/docs.html` returned the rebuilt documentation page.
+- Development smoke mode used the honest in-memory store and reported `durable: false`.
+
+### External dependencies that remain
+- PostgreSQL, a persistent encryption key and HTTPS origins are required for production API
+  startup.
+- Live provider credentials, live provider quotas and live Ollama availability are unverified.
+- GitHub CLI live authentication and repository operations remain unverified.
+- The execution and terminal companions remain loopback-only host tools, not public sandboxes.
+- Native OS file pickers remain browser/platform-dependent.
+
 ## What Milestone 4 delivered
 
 ### Storage services (no new dependency)

@@ -4,14 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Documentation — CodePilot Lab</title>
-    <meta name="description" content="Install, configure providers, run supported languages, understand execution and tracer limits, use the converter, deploy and troubleshoot CodePilot Lab." />
+    <meta name="description" content="Production and local setup, IDE, AI, terminal, projects, deployment and troubleshooting documentation for CodePilot Lab." />
     <meta name="theme-color" content="#04060b" />
     <link rel="canonical" href="__SITE_URL__/docs.html" />
     <meta property="og:type" content="article" />
-    <meta property="og:title" content="Documentation — CodePilot Lab" />
-    <meta property="og:description" content="The honest operator manual for CodePilot Lab." />
-    <meta property="og:image" content="__SITE_URL__/screenshots/command-center.png" />
-    <meta name="twitter:card" content="summary_large_image" />
+    <meta property="og:title" content="CodePilot Lab Documentation" />
+    <meta property="og:description" content="The practical guide to running and operating CodePilot Lab." />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/site.css" />
   </head>
@@ -19,9 +17,9 @@
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
       <div class="inner">
-        <a class="brand" href="/home.html" aria-label="CodePilot Lab home"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#04060b" /><path d="M16 4.5 26.2 10.4v11.2L16 27.5 5.8 21.6V10.4Z" fill="none" stroke="#57e2e6" stroke-opacity=".55" stroke-width="1.2" /><path d="M12.6 11.9 17.4 16l-4.8 4.1" fill="none" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /><path d="M18.4 20.1h3.1" stroke="#57e2e6" stroke-width="1.8" stroke-linecap="round" /></svg>CodePilot Lab <small>Beta</small></a>
+        <a class="brand" href="/home.html" aria-label="CodePilot Lab home">CodePilot Lab <small>Beta</small></a>
         <nav class="site-nav" aria-label="Public">
-          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html" aria-current="page">Docs</a><a href="/about.html">About</a>
+          <a href="/home.html">Home</a><a href="/features.html">Features</a><a href="/workspace.html">Workspace</a><a href="/copilot.html">Copilot</a><a href="/tracer.html">Tracer</a><a href="/practice.html">Practice</a><a href="/converter.html">Converter</a><a href="/docs.html" aria-current="page">Docs</a>
         </nav>
         <a class="header-cta" href="/">Open the app</a>
       </div>
@@ -30,124 +28,148 @@
     <main id="main">
       <section class="block" style="padding-top: clamp(2.6rem, 7vh, 4.5rem)">
         <div class="wrap prose">
-          <p class="kicker">Documentation</p>
-          <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">The operator manual.</h1>
-          <p class="lead">
-            Everything below describes this repository. Where a feature depends on a local service or
-            a model provider, the dependency is stated rather than assumed.
-          </p>
+          <p class="kicker">Product documentation</p>
+          <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">CodePilot Lab operator manual</h1>
+          <p class="lead">Implemented workflows, real platform boundaries, secure configuration and exact troubleshooting steps.</p>
 
-          <h2 id="install">Install and run</h2>
-          <pre class="code"><code>npm install
-npm run dev      # Vite, http://localhost:5173
-npm run exec     # loopback runner, http://127.0.0.1:5310
+          <nav aria-label="Documentation table of contents" class="callout">
+            <strong>Contents</strong>
+            <ol>
+              <li><a href="#getting-started">Getting started</a></li>
+              <li><a href="#ide">IDE workspace</a></li>
+              <li><a href="#copilot">AI Copilot</a></li>
+              <li><a href="#providers">AI provider configuration</a></li>
+              <li><a href="#projects">Project management</a></li>
+              <li><a href="#terminal">Terminal and execution</a></li>
+              <li><a href="#deployment">Deployment</a></li>
+              <li><a href="#troubleshooting">Troubleshooting</a></li>
+              <li><a href="#security">Security and privacy</a></li>
+              <li><a href="#faq">FAQ and support</a></li>
+            </ol>
+          </nav>
 
+          <h2 id="getting-started">1. Getting started</h2>
+          <h3>Local development</h3>
+          <pre><button type="button" data-copy>Copy</button><code>npm install
+npm run dev:all
 npm run typecheck
 npm run lint
-npm run test
-npm run build</code></pre>
-          <p>
-            Node.js 20 or newer is required for the toolchain. The frontend has no runtime secrets and
-            no server dependency. The execution service is a separate local process.
-          </p>
+npm run verify</code></pre>
+          <p><code>dev:all</code> coordinates Vite, the API and the optional loopback execution/terminal companion. Without it, the three processes can also be started separately:</p>
+          <pre><code>npm run api:dev
+npm run dev
+npm run exec</code></pre>
+          <p>Create a project from <a href="/workspace">Workspace</a>, open or import files, and save. Browser projects live in IndexedDB and are per-origin/per-browser-profile. Account data and saved provider credentials can live in the API when PostgreSQL is configured.</p>
 
-          <h2 id="languages">Supported programming languages</h2>
+          <h2 id="ide">2. IDE workspace</h2>
+          <p>The workspace uses Monaco with tabs, breadcrumbs, folding, minimap, find/replace, project search, live diagnostics, save and save-all controls, and keyboard shortcuts:</p>
           <table>
-            <thead><tr><th>Language</th><th>Editor</th><th>Run / grade</th><th>Trace</th></tr></thead>
+            <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
             <tbody>
-              <tr><td><strong>Python</strong></td><td>Yes</td><td>Yes</td><td>Yes, real <code>sys.settrace</code></td></tr>
-              <tr><td><strong>JavaScript</strong></td><td>Yes</td><td>Yes, Node.js</td><td>No</td></tr>
-              <tr><td><strong>TypeScript</strong></td><td>Yes</td><td>Yes, Node.js type stripping</td><td>No</td></tr>
-              <tr><td><strong>C</strong></td><td>Yes</td><td>Yes, GCC</td><td>No</td></tr>
-              <tr><td><strong>C++</strong></td><td>Yes</td><td>Yes, G++</td><td>No</td></tr>
-              <tr><td><strong>Java</strong></td><td>Yes</td><td>Yes, javac/java</td><td>No</td></tr>
-              <tr><td><strong>Go</strong></td><td>Highlighting</td><td>Not offered</td><td>No</td></tr>
-              <tr><td><strong>HTML / CSS / JSON</strong></td><td>Yes</td><td>Editor-only</td><td>No</td></tr>
-              <tr><td>Markdown, YAML, SQL, Shell, Rust, etc.</td><td>Highlighting</td><td>Not supported</td><td>No</td></tr>
+              <tr><td>Save</td><td><code>Ctrl/⌘ S</code></td></tr>
+              <tr><td>Save all</td><td><code>Ctrl/⌘ Shift S</code></td></tr>
+              <tr><td>Quick open</td><td><code>Ctrl/⌘ P</code></td></tr>
+              <tr><td>Project search</td><td><code>Ctrl/⌘ Shift F</code></td></tr>
+              <tr><td>Find / replace</td><td><code>Ctrl/⌘ F</code></td></tr>
+              <tr><td>Toggle bottom panel</td><td><code>Ctrl/⌘ J</code> or <code>Ctrl/⌘ `</code></td></tr>
             </tbody>
           </table>
-          <p>
-            Runtime availability is probed on the machine running the service. A missing compiler
-            produces an explicit unsupported state; it is never replaced with sample output.
-          </p>
+          <p>The project picker, Vault, Atlas, Activity and dossier reflect actual IndexedDB records and real diagnostics. HTML, CSS and JSON are editor formats, not execution targets.</p>
 
-          <h2 id="providers">AI provider setup</h2>
-          <p>
-            Open <a href="/settings">Settings</a>. Choose a preset or “OpenAI-compatible”, enter the
-            base URL and model, then test the connection. Ollama's default is
-            <code>http://127.0.0.1:11434</code>; allow the app origin with
-            <code>OLLAMA_ORIGINS=http://localhost:5173</code> if the browser is blocked.
-          </p>
-          <p>
-            Keys are optional for local models and live in memory unless you opt into browser
-            persistence. A proxy can hold keys server-side. Remote providers must permit CORS from
-            the app origin.
-          </p>
+          <h2 id="copilot">3. AI Copilot</h2>
+          <p>Open <a href="/copilot">AI Copilot</a>. Choose a chat mode, share only the active file, selection, tree names or Monaco markers you need, and attach additional files explicitly. The context preview is the exact character-bounded bundle. Copilot supports chat, explanation, debugging, generation, review, test generation and learning modes.</p>
+          <p>Model answers containing complete-file <code>codepilot</code> proposals require review before one undoable Monaco edit is applied. Saving remains explicit.</p>
 
-          <h2 id="workspace">Workspace</h2>
-          <p>
-            Create or import a project, then edit files on the left. Saves go to IndexedDB
-            (<code>contents</code>). <code>Ctrl/⌘ S</code> saves, <code>Shift S</code> saves all,
-            <code>P</code> opens quick open, <code>Shift F</code> searches stored contents.
-          </p>
+          <h2 id="providers">4. AI provider configuration</h2>
+          <p>Sign in to the API and open <a href="/settings">Settings</a>. Provider keys are encrypted on the API; browser settings do not retain provider secrets. Managed AI is only available when the server environment supplies a complete managed provider configuration.</p>
+          <table>
+            <thead><tr><th>Provider</th><th>Server <code>MANAGED_AI_PROVIDER</code></th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>OpenAI</td><td><code>openai</code></td><td>OpenAI-compatible chat API</td></tr>
+              <tr><td>Anthropic</td><td><code>anthropic</code></td><td>Anthropic Messages API</td></tr>
+              <tr><td>Google Gemini</td><td><code>gemini</code></td><td>Gemini API adapter</td></tr>
+              <tr><td>Groq / OpenRouter / compatible</td><td><code>openai-compatible</code></td><td>Set the provider's HTTPS base URL and model</td></tr>
+              <tr><td>Ollama Cloud</td><td><code>ollama</code></td><td>Use a remotely reachable HTTPS endpoint</td></tr>
+              <tr><td>Local Ollama</td><td>BYO saved connection</td><td>Available only with the operator's loopback endpoint and browser policy</td></tr>
+            </tbody>
+          </table>
+          <p>Configuration is complete only when provider, base URL, API key (where required) and model are all present. Test connection reports real provider/model status and never prints a full secret.</p>
 
-          <h2 id="tracer">Execution and tracer limits</h2>
-          <p>
-            The runner caps source at 200,000 characters, stdin at 64,000, stdout at 96,000, stderr
-            at 48,000, compile time at 20 seconds and run time at 8 seconds. Tracing caps at 2,500
-            events. Processes are tree-killed on timeout, Stop or shutdown.
-          </p>
-          <div class="callout"><strong>Resource limits are not a sandbox.</strong> Only run code you would run in your own terminal. The service binds to loopback by default; a remote bind is refused unless the operator explicitly opts in with a token.</div>
+          <h2 id="projects">5. Project management</h2>
+          <p><strong>Project Vault</strong> creates, imports, duplicates, renames, favours and deletes browser projects. Deleting a project removes stored browser entries; it does not erase a linked device folder.</p>
+          <p><strong>Project Atlas</strong> derives imports, exports, entry points, test files and language breakdown from real project contents. <strong>Activity &amp; Diagnostics</strong> records real application events and live health probes for the API, execution sidecar, terminal and GitHub companion.</p>
 
-          <h2 id="converter">Code Converter</h2>
-          <p>
-            Conversion requires a configured provider. Review the diff before accepting. Save-as-new
-            writes a new stored file; replace requires confirmation and never writes a linked folder
-            on disk. Validation runs use the local execution service.
-          </p>
+          <h2 id="terminal">6. Terminal and execution</h2>
+          <p>The integrated terminal is a real loopback PTY companion, not a browser simulator. It supports multiple sessions, PowerShell or CMD on Windows, cwd changes, history, resize and exit codes. The companion prints a per-start pairing token and requires an allow-listed Origin.</p>
+          <table>
+            <thead><tr><th>Language</th><th>Run</th><th>Trace</th></tr></thead>
+            <tbody>
+              <tr><td>Python</td><td>Yes</td><td>Real <code>sys.settrace</code></td></tr>
+              <tr><td>JavaScript</td><td>Yes, Node.js</td><td>Unsupported</td></tr>
+              <tr><td>TypeScript</td><td>Yes, Node type stripping</td><td>Unsupported</td></tr>
+              <tr><td>C / C++</td><td>GCC / G++</td><td>Unsupported</td></tr>
+              <tr><td>Java</td><td>javac / java</td><td>Unsupported</td></tr>
+              <tr><td>HTML, CSS, JSON</td><td>Editor only</td><td>Unsupported</td></tr>
+              <tr><td>Go</td><td>Not offered</td><td>Unsupported</td></tr>
+            </tbody>
+          </table>
+          <div class="callout"><strong>Security boundary:</strong> the loopback runner is a resource-limited local tool, not a hardened sandbox. It can access the machine account's filesystem. Never expose it to anonymous public users or run untrusted code on a shared host.</div>
 
-          <h2 id="practice">Practice grading</h2>
-          <p>
-            Visible cases are published in the UI and can be run repeatedly. Submissions use hidden
-            suites in <code>server/problems.mjs</code>. The API returns only case indices, hidden
-            flags, statuses and bounded visible stderr.
-          </p>
+          <h2 id="deployment">7. Deployment</h2>
+          <h3>One managed service</h3>
+          <pre><code>npm ci
+npm run build
+npm start</code></pre>
+          <p><code>npm start</code> serves <code>dist/</code> and the API from one Node process, runs PostgreSQL migrations before listening, and serves <code>/api/health/live</code> and <code>/api/health/ready</code>. Set <code>PORT</code> or <code>API_PORT</code>, <code>API_HOST</code>, <code>CORS_ORIGINS</code>, <code>DATABASE_URL</code>, <code>CREDENTIAL_ENCRYPTION_KEY</code> and <code>SESSION_COOKIE_SECURE=true</code> for production.</p>
+          <h3>Docker Compose</h3>
+          <pre><code>openssl rand -base64 32
+CREDENTIAL_ENCRYPTION_KEY=&lt;generated-key&gt; docker compose up --build -d</code></pre>
+          <p>Use a real HTTPS origin in <code>CORS_ORIGINS</code> and a deployment-managed PostgreSQL service for durable data. The included database is only a local Compose convenience.</p>
 
-          <h2 id="feedback">Feedback</h2>
-          <p>
-            Feedback is written to IndexedDB first. Set <code>VITE_FEEDBACK_ENDPOINT</code> to an
-            absolute HTTPS URL to also POST the payload. The result panel reports local-only,
-            delivered, or failed delivery with the HTTP status.
-          </p>
-
-          <h2 id="deploy">Deployment</h2>
-          <p>
-            The default public beta is frontend-only. Build with <code>npm run build</code> and serve
-            <code>dist/</code> with SPA rewrites. Execution is not available on static hosting; users
-            who want it run the sidecar locally. See the deployment guide in the repository.
-          </p>
-
-          <h2 id="troubleshooting">Troubleshooting</h2>
+          <h2 id="troubleshooting">8. Troubleshooting</h2>
           <ul>
-            <li><strong>“Execution service offline”</strong> — run <code>npm run exec</code> and confirm <code>http://127.0.0.1:5310/health</code>.</li>
-            <li><strong>Provider request fails</strong> — check the base URL, model name, key, CORS and the provider's own status. Nothing is retried automatically.</li>
-            <li><strong>Projects disappeared</strong> — IndexedDB is per origin and per profile. Private browsing or clearing site data removes it.</li>
-            <li><strong>Linked folder unreadable</strong> — re-grant permission or re-import. Saved IndexedDB content still opens.</li>
-            <li><strong>Blank screen after an update</strong> — hard reload to clear a stale service worker or optimized dependency cache.</li>
+            <li><strong>HTTP 401:</strong> sign in again and verify the browser includes the HttpOnly session cookie.</li>
+            <li><strong>HTTP 403:</strong> verify <code>CORS_ORIGINS</code> exactly matches the public HTTPS origin and Origin/CSRF headers are present.</li>
+            <li><strong>HTTP 429:</strong> distinguish provider retry headers from application throttling. Quota-exhausted providers must be corrected or disabled; temporary overload can fall back before text streams.</li>
+            <li><strong>HTTP 404:</strong> the provider model or endpoint is wrong. Test connection and model availability first.</li>
+            <li><strong>Terminal offline:</strong> start the loopback companion, confirm <code>/terminal/health</code>, then paste the current pairing token from that process console.</li>
+            <li><strong>Execution offline:</strong> start <code>npm run exec</code>; a hosted deployment cannot start a local compiler by itself.</li>
+            <li><strong>Projects disappeared:</strong> IndexedDB is origin/profile-specific. Private browsing or clearing site data removes local projects.</li>
           </ul>
 
-          <h2>Repository documents</h2>
-          <p>
-            The repository also contains <code>docs/architecture.md</code>,
-            <code>docs/deployment.md</code>, <code>docs/security.md</code> and
-            <code>docs/production-readiness.md</code>, plus the main <code>README.md</code>.
-          </p>
+          <h2 id="security">9. Security and privacy</h2>
+          <ul>
+            <li>Platform provider keys exist only in server environment variables or the encrypted API connection store.</li>
+            <li>Never place secrets in <code>VITE_*</code> variables or commit <code>.env</code>.</li>
+            <li>Authentication uses session cookies, SameSite policy and CSRF Origin checks.</li>
+            <li>Production requires PostgreSQL and a persistent 32-byte AES-GCM credential key.</li>
+            <li>Browser project files are local-first; account/project server storage uses the API only when configured.</li>
+            <li>Terminal and execution features remain loopback/local unless separately hardened in an external isolated service.</li>
+          </ul>
+
+          <h2 id="faq">10. FAQ and support</h2>
+          <p><strong>Does deployment start the terminal or execute public code?</strong> No. A public service must use a separate isolated container/VM runner. The repository's terminal and execution sidecar are host-machine developer tools.</p>
+          <p><strong>Can Groq, OpenRouter or a custom endpoint be used?</strong> Yes, independently through the OpenAI-compatible adapter with that provider's base URL and model.</p>
+          <p><strong>Can the app work without PostgreSQL or AI?</strong> Yes for local IndexedDB editing, but production API startup requires PostgreSQL and AI features remain explicitly unavailable until a provider is configured.</p>
+          <p><strong>Where are logs?</strong> API requests have structured stdout logs and request IDs. Activity &amp; Diagnostics shows browser-side events and live subsystem health.</p>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a></nav></div>
+      <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a></nav></div>
     </footer>
+    <script>
+      document.querySelectorAll('[data-copy]').forEach(function (button) {
+        button.addEventListener('click', function () {
+          var code = button.parentElement.querySelector('code')
+          if (!code) return
+          navigator.clipboard.writeText(code.textContent).then(function () {
+            button.textContent = 'Copied'
+            setTimeout(function () { button.textContent = 'Copy' }, 1200)
+          })
+        })
+      })
+    </script>
   </body>
 </html>

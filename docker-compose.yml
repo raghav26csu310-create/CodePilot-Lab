@@ -1,0 +1,44 @@
+services:
+  codepilot:
+    build: .
+    ports:
+      - "${CODEPILOT_PORT:-8787}:8787"
+    environment:
+      NODE_ENV: development
+      API_HOST: 0.0.0.0
+      API_PORT: 8787
+      DATABASE_URL: postgresql://codepilot:codepilot@postgres:5432/codepilot
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8787}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY}
+      ALLOW_PRIVATE_AI_ENDPOINTS: ${ALLOW_PRIVATE_AI_ENDPOINTS:-false}
+      MANAGED_AI_PROVIDER: ${MANAGED_AI_PROVIDER:-openai-compatible}
+      MANAGED_AI_LABEL: ${MANAGED_AI_LABEL:-CodePilot AI}
+      MANAGED_AI_BASE_URL: ${MANAGED_AI_BASE_URL:-}
+      MANAGED_AI_API_KEY: ${MANAGED_AI_API_KEY:-}
+      MANAGED_AI_MODEL: ${MANAGED_AI_MODEL:-}
+      MANAGED_AI_DAILY_REQUESTS: ${MANAGED_AI_DAILY_REQUESTS:-100}
+      MANAGED_AI_MONTHLY_TOKENS: ${MANAGED_AI_MONTHLY_TOKENS:-500000}
+      MANAGED_AI_FALLBACK_MODELS: ${MANAGED_AI_FALLBACK_MODELS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: codepilot
+      POSTGRES_USER: codepilot
+      POSTGRES_PASSWORD: codepilot
+    volumes:
+      - codepilot-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codepilot -d codepilot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  codepilot-postgres:

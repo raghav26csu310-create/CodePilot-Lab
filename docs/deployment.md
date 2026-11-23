@@ -1,187 +1,129 @@
 # Deployment guide
 
-> **Status note (2026-11-12):** the table below describes the static frontend beta. The
-> current build also has an optional API (`server/api`, `npm run api:dev` / `api:start`)
-> that owns provider credentials and accounts; it is not deployed anywhere yet and no
-> production database exists. Treat this guide as still valid **only** for the static
-> frontend until the API deployment section in
-> [`technical-audit.md`](./technical-audit.md) §11 is completed.
+CodePilot Lab has a one-process production entrypoint: `npm start` serves `dist/` and
+`/api/*` through the same Node server, applies PostgreSQL migrations at startup and
+handles graceful SIGINT/SIGTERM shutdown.
 
-## What is required vs optional
+## Production requirements
 
-| Component | Required for the public beta? | Notes |
+| Requirement | Value |
+| --- | --- |
+| Node.js | 24 recommended |
+| Database | PostgreSQL |
+| Credential encryption key | Base64 encoding of exactly 32 bytes |
+| Public origin | HTTPS |
+| AI provider | Optional; managed mode needs complete server configuration |
+| Execution / terminal | Separate loopback companion; not a public sandbox |
+
+Production startup refuses in-memory storage, incomplete credential encryption, missing
+database configuration, missing origins or insecure cookies.
+
+## Required environment variables
+
+| Variable | Required | Purpose |
 | --- | --- | --- |
-| Static frontend host | **Yes** | Vercel, Netlify, Cloudflare Pages, GitHub Pages or any static server |
-| Execution sidecar | **No** | Local-only. Users run it on their own machine. Do not host it publicly |
-| AI provider | **No** | Ollama/LM Studio locally or any OpenAI-compatible endpoint chosen by the user |
-| Feedback endpoint | **No** | Without it, feedback stays in the user's browser and the UI says so |
-| Database service | **No** | IndexedDB only; there is no server database |
-| Object/file storage | **No** | Export/import is not implemented |
-| Analytics provider | **No** | Not configured in this release |
+| `NODE_ENV=production` | Yes | Enables production validation |
+| `DATABASE_URL` | Yes | PostgreSQL connection URL |
+| `CREDENTIAL_ENCRYPTION_KEY` | Yes | Base64 AES-256-GCM key |
+| `CORS_ORIGINS` | Yes | Exact HTTPS origins, comma separated |
+| `SESSION_COOKIE_SECURE=true` | Yes | Require secure session cookies |
+| `PORT` or `API_PORT` | Yes | Platform listen port; `PORT` is supported |
+| `API_HOST=0.0.0.0` | Usually | Bind address |
 
-The default public beta is **frontend-only**. The hosted site cannot execute code, and the UI
-states that the runner must be started locally. This is a deliberate honesty and safety
-decision, not a missing deployment step.
+Generate a credential key:
 
-## Build
+```bash
+openssl rand -base64 32
+```
+
+## Managed AI variables
+
+All three of `MANAGED_AI_BASE_URL`, `MANAGED_AI_API_KEY` and `MANAGED_AI_MODEL` must be
+set together. `MANAGED_AI_PROVIDER` selects `openai`, `anthropic`, `gemini`, `ollama`,
+`deepseek` or `openai-compatible`.
+
+| Variable | Purpose |
+| --- | --- |
+| `MANAGED_AI_PROVIDER` | Provider adapter |
+| `MANAGED_AI_LABEL` | Display label |
+| `MANAGED_AI_BASE_URL` | Provider or compatible endpoint |
+| `MANAGED_AI_API_KEY` | Server-held key |
+| `MANAGED_AI_MODEL` | Default model |
+| `MANAGED_AI_DAILY_REQUESTS` | Daily managed request cap |
+| `MANAGED_AI_MONTHLY_TOKENS` | Estimated monthly token cap |
+| `MANAGED_AI_FALLBACK_MODELS` | Optional comma-separated fallback models |
+
+Never put provider secrets in `VITE_*` variables. Never commit `.env`.
+
+## Build and start
 
 ```bash
 npm ci
-npm run typecheck
-npm run lint
-npm run test
 npm run build
+npm start
 ```
 
-`npm run build` emits `dist/`. Static marketing pages and assets from `public/` are copied
-into `dist/` by Vite.
+The normal startup process:
 
-Set `SITE_URL` so canonical, Open Graph and sitemap URLs become absolute:
+1. Loads environment variables.
+2. Validates production configuration.
+3. Opens PostgreSQL.
+4. Runs advisory-lock migrations.
+5. Serves the built SPA and API on one port.
+6. Exposes liveness and readiness health checks.
+
+Health endpoints:
+
+- `GET /api/health/live` — process liveness.
+- `GET /api/health/ready` — database-backed readiness.
+- `GET /api/health` — backward-compatible detailed capability report.
+
+## Docker
 
 ```bash
-SITE_URL=https://your-domain.example npm run build
-node scripts/set-site-url.mjs
+docker build -t codepilot-lab .
+docker run --rm -p 8787:8787 \
+  -e NODE_ENV=production \
+  -e API_HOST=0.0.0.0 \
+  -e API_PORT=8787 \
+  -e DATABASE_URL='postgresql://user:password@host:5432/codepilot' \
+  -e CREDENTIAL_ENCRYPTION_KEY='<base64-32-byte-key>' \
+  -e CORS_ORIGINS='https://codepilot.example.com' \
+  -e SESSION_COOKIE_SECURE=true \
+  codepilot-lab
 ```
 
-The Vercel build command in `vercel.json` already runs the URL rewrite step. With no
-`SITE_URL`, the token is replaced with an empty string, producing valid relative URLs.
-
-## Vercel (recommended)
-
-1. Push the repository to GitHub/GitLab.
-2. Import the repository in Vercel. Framework preset: **Vite**. Build command:
-   `npm run build && node scripts/set-site-url.mjs`. Output: `dist`.
-3. Add environment variables:
-   - `SITE_URL` — the production origin, e.g. `https://codepilot-lab.vercel.app`.
-   - `VITE_FEEDBACK_ENDPOINT` — optional absolute HTTPS endpoint.
-4. Deploy.
-5. Verify:
-   - `/home.html`, `/features.html`, `/docs.html`, `/privacy.html`, `/terms.html` return 200.
-   - `/workspace`, `/lab`, `/practice`, `/convert`, `/settings` return the app shell on a
-     hard refresh (SPA rewrites).
-   - Private routes carry `X-Robots-Tag: noindex`.
-   - `/robots.txt` and `/sitemap.xml` reference the production origin.
-6. Add the custom domain in Vercel → Settings → Domains, then update `SITE_URL` and redeploy.
-
-`vercel.json` sets security headers, private-route noindex headers and explicit rewrites for
-app routes. Static `.html` pages are served directly and are not rewritten. The root `/`
-serves the React app shell and is `noindex`; the crawlable public homepage is `/home.html`.
-Both are linked explicitly (`Open the app` points at `/`).
-
-## Any static host
+Docker Compose includes a local PostgreSQL service and a development-mode application:
 
 ```bash
-npm run build
-# serve dist/ with a static server
+CREDENTIAL_ENCRYPTION_KEY='<base64-32-byte-key>' docker compose up --build -d
+curl http://127.0.0.1:8787/api/health/ready
 ```
 
-Configure:
+Compose uses development defaults, an ephemeral key when the key is absent, and
+`codepilot-postgres` data. It is suitable for local containers, not as a substitute for
+production infrastructure.
 
-- SPA fallback: unknown app paths → `/index.html`.
-- Do **not** rewrite `/*.html`, `/site.css`, `/screenshots/*`, `/robots.txt` or
-  `/sitemap.xml`.
-- HTTPS.
-- The same security headers as `vercel.json` if the host supports them.
-- Cache HTML briefly; cache static assets longer.
+## Platform deployment
 
-A minimal local preview:
+Set the platform build command to `npm ci && npm run build`, start command to `npm start`,
+and health check to `/api/health/ready`. Supply PostgreSQL over a private network and
+set the public HTTPS origin exactly in `CORS_ORIGINS`.
 
-```bash
-npm run preview
-```
+The platform must support a persistent Node process for this API. Serverless-only hosting
+is not equivalent: migrations, sessions and provider quotas require adaptation.
 
-## Environment variables
+## Execution and terminal sidecars
 
-| Variable | Scope | Required | Purpose |
-| --- | --- | --- | --- |
-| `SITE_URL` | build | Recommended | Absolute origin for canonical/OG/sitemap |
-| `VITE_FEEDBACK_ENDPOINT` | build | No | Feedback POST destination |
-| `VITE_ANALYTICS_ENDPOINT` | build | No | Reserved; not implemented |
-| `EXEC_PORT` | sidecar | No | Default `5310` |
-| `EXEC_HOST` | sidecar | No | Default `127.0.0.1` |
-| `EXEC_ORIGINS` | sidecar | No | Comma-separated allowed browser origins |
-| `EXEC_MAX_CONCURRENCY` | sidecar | No | 1–4, default 2 |
-| `EXEC_ALLOW_REMOTE` | sidecar | No | Must be `1` for a non-loopback bind |
-| `EXEC_TOKEN` | sidecar | With remote | Bearer token for remote binds |
-
-Never commit `.env.local` or real keys. `VITE_*` variables are public in the client bundle.
-
-## Local execution service
-
-```bash
-npm run exec
-# http://127.0.0.1:5310
-```
-
-The runner is not part of the hosted deployment. Users start it locally when they want Run,
-Trace, Submit or converter validation. The app shows the exact command when it is offline.
-
-If the frontend is hosted on a different origin, add that origin to `EXEC_ORIGINS`:
-
-```bash
-EXEC_ORIGINS=https://your-domain.example,http://localhost:5173 npm run exec
-```
-
-This still binds to loopback, so a browser on the same machine can reach it, but a remote
-visitor cannot. The runner answers Chrome's Private Network Access preflight with
-`Access-Control-Allow-Private-Network: true` when the origin is allow-listed, but browser
-policy varies. If a hosted HTTPS page cannot reach the loopback runner, run the frontend
-locally (`npm run dev`) instead of fighting the browser; do not expose the runner publicly.
-
-## AI provider
-
-No provider is required to deploy. Users configure one in `/settings`. For a local Ollama:
-
-```bash
-OLLAMA_ORIGINS=http://localhost:5173,https://your-domain.example ollama serve
-```
-
-Remote providers must allow browser CORS. A server-side proxy can hold keys and avoid CORS;
-document it as the user's own infrastructure.
-
-## Feedback endpoint
-
-The endpoint receives:
-
-```json
-{
-  "id": "uuid",
-  "category": "general|bug|feature",
-  "rating": 1,
-  "feature": "lab",
-  "message": "…",
-  "contact": "optional",
-  "page": "/lab",
-  "appVersion": "0.7.0",
-  "createdAt": 1760000000000,
-  "delivery": "endpoint",
-  "endpointStatus": 202,
-  "endpointError": null
-}
-```
-
-Requirements: HTTPS, accept `POST application/json`, return 2xx on success. The browser sends
-no cookies or credentials. Without an endpoint the app reports “stored in this browser”.
+The local execution and terminal companion is not started by the production Node process.
+It is intentionally host-local and resource-limited, not a hardened public sandbox.
+The UI reports it unavailable on hosted deployments. A future public terminal must use
+an authenticated, isolated container/VM service with path, CPU, memory, network and TTL
+limits.
 
 ## Rollback
 
-Vercel keeps immutable deployments:
-
-1. Open the project → Deployments.
-2. Select the last known-good deployment.
-3. Promote/Redeploy it.
-4. If an environment variable caused the issue, correct it and redeploy the same commit.
-
-For other hosts, keep the previous `dist/` artifact and restore it. The app has no server
-database migrations to reverse; IndexedDB schema upgrades are additive and versioned.
-
-## Domain checklist
-
-- [ ] HTTPS certificate active.
-- [ ] `SITE_URL` matches the canonical origin.
-- [ ] `robots.txt` and `sitemap.xml` use the production origin.
-- [ ] Public pages are reachable without JavaScript.
-- [ ] Private routes return noindex headers.
-- [ ] Hard refresh on `/workspace` and `/practice/<id>` returns the app shell.
-- [ ] Feedback endpoint, if configured, is reachable and returns 2xx.
-- [ ] No key or secret appears in the built JavaScript.
+1. Re-deploy the previous immutable build.
+2. Restore PostgreSQL only by a database backup; application migrations are forward-only.
+3. Revoke changed provider credentials and rotate the encryption key if it was exposed.
+4. Check `/api/health/ready` and the application logs before restoring traffic.
