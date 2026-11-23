@@ -75,6 +75,20 @@ const PROVIDERS: ProviderChoice[] = [
   },
   {
     id: 'openai-compatible',
+    label: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    requiresKey: true,
+    note: 'Groq OpenAI-compatible API · configure the Groq key and model.',
+  },
+  {
+    id: 'openai-compatible',
+    label: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    requiresKey: true,
+    note: 'OpenRouter OpenAI-compatible API · configure the provider key and exact model identifier.',
+  },
+  {
+    id: 'openai-compatible',
     label: 'Custom OpenAI-compatible',
     baseUrl: '',
     requiresKey: false,
@@ -702,6 +716,14 @@ function TestReport({ report }: { report: GatewayTestResult }) {
         {report.ok ? `Endpoint responded in ${report.latencyMs} ms` : 'Connection test failed'}
       </strong>
       <p>{report.message}</p>
+      {report.category ? (
+        <small>
+          Diagnostic: {report.category.replaceAll('_', ' ')}
+          {report.retryAfterSeconds != null
+            ? ` · retry after ${report.retryAfterSeconds}s`
+            : ''}
+        </small>
+      ) : null}
       {report.models.length > 0 ? (
         <small>{report.models.length} model(s) discovered. Select one in the Model field.</small>
       ) : null}

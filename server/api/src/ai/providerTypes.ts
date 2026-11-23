@@ -37,17 +37,30 @@ export type ProviderFailure = {
     | 'invalid-settings'
   status: number | null
   message: string
+  category?: 'request' | 'authentication' | 'permission' | 'not_found' | 'timeout' |
+    'payload' | 'rate_limit' | 'quota' | 'billing' | 'overload' | 'provider' | 'network'
+  retryAfterSeconds?: number
 }
 
 export class ProviderError extends Error {
   code: ProviderFailure['code']
   status: number | null
+  category: ProviderFailure['category']
+  retryAfterSeconds: number | null
 
-  constructor(code: ProviderFailure['code'], message: string, status: number | null = null) {
+  constructor(
+    code: ProviderFailure['code'],
+    message: string,
+    status: number | null = null,
+    category: ProviderFailure['category'] = undefined,
+    retryAfterSeconds: number | null = null,
+  ) {
     super(message)
     this.name = 'ProviderError'
     this.code = code
     this.status = status
+    this.category = category
+    this.retryAfterSeconds = retryAfterSeconds
   }
 }
 

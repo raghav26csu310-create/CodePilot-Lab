@@ -392,6 +392,21 @@ Loopback execution stays a resource-limited local tool, not a hardened sandbox.
 - The execution and terminal companions remain loopback-only host tools, not public sandboxes.
 - Native OS file pickers remain browser/platform-dependent.
 
+## 2026-11-23 AI reliability and certification pass
+
+- Added provider HTTP 400/401/403/408/413/429/404/5xx classification.
+- Added Retry-After and bounded 429/408 retry behavior with jitter.
+- Added provider circuit-open protection after repeated failures.
+- Prevented fallback for invalid credentials, permissions and not-found/model failures.
+- Added temporary overload fallback while preventing fallback for billing/quota exhaustion.
+- Added Ollama bearer-header support for remotely hosted/Ollama Cloud endpoints.
+- Added Groq and OpenRouter presets to the provider manager.
+- Added category and Retry-After details to connection test diagnostics.
+- Added documentation search and copy controls.
+- Verification: 169 frontend/sidecar tests and 44 API tests pass.
+- Unified-server smoke test passed for live health, readiness, SPA fallback and docs.
+- Docker daemon is installed but unavailable, so Docker image build could not run locally.
+
 ## What Milestone 4 delivered
 
 ### Storage services (no new dependency)

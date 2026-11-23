@@ -98,6 +98,8 @@ export type TestResult = {
   models: string[]
   message: string
   kind?: string
+  category?: string
+  retryAfterSeconds?: number
 }
 
 export type ChatInput = {
@@ -885,10 +887,14 @@ function resolvedPreferences(
 }
 
 function shouldFallback(error: unknown): boolean {
-  return (
-    error instanceof ProviderError &&
-    ['auth', 'rate-limit', 'network', 'timeout', 'not-found', 'provider'].includes(error.code)
-  )
+  if (!(error instanceof ProviderError)) return false
+  if (error.code === 'auth' || error.code === 'not-found' || error.code === 'invalid-settings') {
+    return false
+  }
+  if (error.code === 'rate-limit') {
+    return error.category === 'overload' || error.category === 'rate_limit'
+  }
+  return ['network', 'timeout', 'provider'].includes(error.code)
 }
 
 function redactSecret(message: string, secret: string): string {
@@ -936,6 +942,8 @@ function providerFailure(
       models: [],
       message: error.message,
       kind: error.code,
+      category: error.category,
+      retryAfterSeconds: error.retryAfterSeconds ?? undefined,
     }
   }
   return {

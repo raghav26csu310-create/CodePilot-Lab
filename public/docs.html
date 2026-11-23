@@ -31,6 +31,8 @@
           <p class="kicker">Product documentation</p>
           <h1 style="margin: 0; font-size: clamp(2.2rem, 4.6vw, 3.6rem)">CodePilot Lab operator manual</h1>
           <p class="lead">Implemented workflows, real platform boundaries, secure configuration and exact troubleshooting steps.</p>
+          <label for="docs-search"><strong>Search documentation</strong></label>
+          <input id="docs-search" type="search" placeholder="Search provider, 429, terminal, deployment…" style="width:min(100%,40rem);margin:.5rem 0 1.25rem;padding:.7rem;border:1px solid #29313d;border-radius:.55rem;background:#0b1018;color:#eaf4f5" />
 
           <nav aria-label="Documentation table of contents" class="callout">
             <strong>Contents</strong>
@@ -160,6 +162,29 @@ CREDENTIAL_ENCRYPTION_KEY=&lt;generated-key&gt; docker compose up --build -d</co
       <div class="inner"><div><strong>CodePilot Lab</strong> · local-first beta</div><nav aria-label="Footer"><a href="/features.html">Features</a><a href="/docs.html">Documentation</a><a href="/feedback.html">Feedback</a></nav></div>
     </footer>
     <script>
+      var docsSearch = document.getElementById('docs-search')
+      if (docsSearch) {
+        docsSearch.addEventListener('input', function () {
+          var query = docsSearch.value.trim().toLowerCase()
+          document.querySelectorAll('.prose h2').forEach(function (heading) {
+            var section = heading
+            var nodes = []
+            while (section && section.tagName !== 'H2') section = section.parentElement
+            var inSection = false
+            var sibling = heading
+            while (sibling) {
+              if (sibling !== heading && sibling.tagName === 'H2') break
+              nodes.push(sibling)
+              sibling = sibling.nextElementSibling
+            }
+            var text = nodes.map(function (node) { return node.textContent || '' }).join(' ').toLowerCase()
+            heading.style.display = !query || text.includes(query) ? '' : 'none'
+            nodes.forEach(function (node) {
+              if (node !== heading) node.style.display = !query || text.includes(query) ? '' : 'none'
+            })
+          })
+        })
+      }
       document.querySelectorAll('[data-copy]').forEach(function (button) {
         button.addEventListener('click', function () {
           var code = button.parentElement.querySelector('code')

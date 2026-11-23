@@ -15,6 +15,7 @@ import {
   type ChatMessage,
   type ProviderAdapter,
   type ProviderConfig,
+  type ProviderFailure,
   type ProviderStreamOptions,
   type ProviderTransport,
   type StreamResult,
@@ -63,11 +64,13 @@ export class ProviderClient {
   private readonly allowPrivateEndpoints: boolean
   private readonly timeoutMs: number
   private readonly transport: ProviderTransport
+  private readonly circuit: Map<string, { failures: number; openedAt: number | null }>
 
   constructor(options: ProviderOptions) {
     this.fetchImpl = options.fetchImpl
     this.allowPrivateEndpoints = options.allowPrivateEndpoints
     this.timeoutMs = options.timeoutMs
+    this.circuit = new Map()
     this.transport = {
       request: (url, init, signal) =>
         this.request(url, { ...init, signal: this.combinedSignal(signal) }),
@@ -110,38 +113,147 @@ export class ProviderClient {
   }
 
   private async request(url: string, init: RequestInit): Promise<Response> {
-    try {
-      return await this.fetchImpl(url, {
-        ...init,
-        redirect: 'error',
-        signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
-      })
-    } catch (error) {
-      if (isAbort(error) || init.signal?.aborted) {
-        const reason: unknown = init.signal?.reason
-        const timedOut =
-          timeoutLike(error) ||
-          (reason instanceof DOMException && reason.name === 'TimeoutError') ||
-          (reason instanceof Error && reason.name === 'TimeoutError')
-        if (timedOut) {
+    const circuitKey = url
+    const circuit = this.circuitState(circuitKey)
+    if (circuit.openedAt !== null) {
+      const elapsed = Date.now() - circuit.openedAt
+      if (elapsed < 30_000) {
+        throw new ProviderError(
+          'provider',
+          'The provider circuit is open after repeated failures. Wait briefly before retrying.',
+          null,
+          'provider',
+        )
+      }
+      circuit.failures = 0
+      circuit.openedAt = null
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (init.signal?.aborted) {
+        throw new ProviderError('aborted', 'The provider request was cancelled.')
+      }
+      try {
+        const response = await this.fetchImpl(url, {
+          ...init,
+          redirect: 'error',
+          signal: init.signal ?? AbortSignal.timeout(this.timeoutMs),
+        })
+        const retryDecision = await this.retryDecision(response, attempt)
+        if (retryDecision.retry) {
+          if (
+            retryDecision.category === 'billing' ||
+            retryDecision.category === 'quota' ||
+            retryDecision.category === 'authentication' ||
+            retryDecision.category === 'permission'
+          ) {
+            throw await this.httpError(response)
+          }
+          const waitSeconds =
+            retryDecision.retryAfterSeconds ?? Math.min(8, 2 ** attempt)
+          await sleep((waitSeconds * 1000) + Math.floor(Math.random() * 250))
+          continue
+        }
+        if (
+          response.status === 408 ||
+          response.status === 429 ||
+          (response.status >= 500 && response.status <= 599)
+        ) {
+          this.recordFailure(circuit)
+        } else {
+          this.recordSuccess(circuit)
+        }
+        return response
+      } catch (error) {
+        if (error instanceof ProviderError) throw error
+        if (isAbort(error) || init.signal?.aborted) {
+          const reason: unknown = init.signal?.reason
+          const timedOut =
+            timeoutLike(error) ||
+            (reason instanceof DOMException && reason.name === 'TimeoutError') ||
+            (reason instanceof Error && reason.name === 'TimeoutError')
+          if (timedOut) {
+            throw new ProviderError(
+              'timeout',
+              `The provider did not respond within ${Math.round(this.timeoutMs / 1000)} seconds.`,
+              null,
+              'timeout',
+            )
+          }
+          throw new ProviderError('aborted', 'The provider request was cancelled.')
+        }
+        if (timeoutLike(error)) {
           throw new ProviderError(
             'timeout',
             `The provider did not respond within ${Math.round(this.timeoutMs / 1000)} seconds.`,
+            null,
+            'timeout',
           )
         }
-        throw new ProviderError('aborted', 'The provider request was cancelled.')
-      }
-      if (timeoutLike(error)) {
+        this.recordFailure(circuit)
         throw new ProviderError(
-          'timeout',
-          `The provider did not respond within ${Math.round(this.timeoutMs / 1000)} seconds.`,
+          'network',
+          `The provider endpoint could not be reached (${describeNetworkError(error)}).`,
+          null,
+          'network',
         )
       }
-      throw new ProviderError(
-        'network',
-        `The provider endpoint could not be reached (${describeNetworkError(error)}).`,
-      )
     }
+    throw new ProviderError(
+      'provider',
+      'The provider remained unavailable after bounded retries.',
+      null,
+      'overload',
+    )
+  }
+
+  private circuitState(key: string): { failures: number; openedAt: number | null } {
+    let state = this.circuit.get(key)
+    if (!state) {
+      state = { failures: 0, openedAt: null }
+      this.circuit.set(key, state)
+    }
+    return state
+  }
+
+  private recordSuccess(state: { failures: number; openedAt: number | null }): void {
+    state.failures = 0
+    state.openedAt = null
+  }
+
+  private recordFailure(state: { failures: number; openedAt: number | null }): void {
+    state.failures += 1
+    if (state.failures >= 3) state.openedAt = Date.now()
+  }
+
+  private async retryDecision(
+    response: Response,
+    attempt: number,
+  ): Promise<{
+    retry: boolean
+    category?: ProviderFailure['category']
+    retryAfterSeconds?: number
+  }> {
+    if (attempt >= 2) return { retry: false }
+    if (response.status === 408) {
+      return { retry: true, category: 'timeout' }
+    }
+    if (response.status === 429) {
+      const text = await response.clone().text().catch(() => '')
+      const category = classify429(text)
+      const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'))
+      return {
+        retry: category === 'overload' || category === 'rate_limit',
+        category,
+        retryAfterSeconds: retryAfterSeconds ?? undefined,
+      }
+    }
+    if (response.status >= 500 && response.status <= 599) {
+      // 5xx responses are provider/server failures. Return immediately to
+      // fallback or the caller instead of extending past the request deadline.
+      return { retry: false, category: 'overload' }
+    }
+    return { retry: false }
   }
 
   private combinedSignal(signal?: AbortSignal): AbortSignal {
@@ -176,11 +288,44 @@ export class ProviderClient {
       // Keep the status-based message.
     }
 
-    if (status === 401 || status === 403) {
+    if (status === 400) {
+      return new ProviderError(
+        'provider',
+        `The provider rejected the request as invalid (HTTP 400).${detail ? ` ${detail}` : ' Check the model, messages and parameters.'}`,
+        status,
+        'request',
+      )
+    }
+    if (status === 401) {
       return new ProviderError(
         'auth',
-        `The provider rejected the credential (HTTP ${status}). Check the key and account access.`,
+        'The provider rejected the credential (HTTP 401). Check the API key.',
         status,
+        'authentication',
+      )
+    }
+    if (status === 403) {
+      return new ProviderError(
+        'auth',
+        'The provider denied access (HTTP 403). Check account permissions and allowed models.',
+        status,
+        'permission',
+      )
+    }
+    if (status === 408) {
+      return new ProviderError(
+        'timeout',
+        'The provider request timed out (HTTP 408). Try again or reduce the request size.',
+        status,
+        'timeout',
+      )
+    }
+    if (status === 413) {
+      return new ProviderError(
+        'provider',
+        'The provider rejected the payload as too large (HTTP 413). Reduce context or token limits.',
+        status,
+        'payload',
       )
     }
     if (status === 404) {
@@ -188,13 +333,26 @@ export class ProviderClient {
         'not-found',
         `The provider endpoint was not found (HTTP 404). Check the base URL${detail ? `: ${detail}` : '.'}`,
         status,
+        'not_found',
       )
     }
     if (status === 429) {
+      const category = classify429(detail)
+      const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'))
+      const categoryMessage =
+        category === 'billing'
+          ? 'Account or billing quota is exhausted.'
+          : category === 'quota'
+            ? 'Token or daily quota is exhausted.'
+            : category === 'overload'
+              ? 'The provider is temporarily overloaded.'
+              : 'Requests are being rate-limited.'
       return new ProviderError(
         'rate-limit',
-        `The provider rate-limited this request (HTTP 429).${detail ? ` ${detail}` : ''}`,
+        `The provider returned HTTP 429: ${categoryMessage}${detail ? ` ${detail}` : ''}`,
         status,
+        category,
+        retryAfterSeconds,
       )
     }
     return new ProviderError(
@@ -203,6 +361,45 @@ export class ProviderClient {
       status,
     )
   }
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(300, Math.ceil(seconds))
+  const date = Date.parse(value)
+  if (!Number.isNaN(date)) {
+    return Math.min(300, Math.max(0, Math.ceil((date - Date.now()) / 1000)))
+  }
+  return null
+}
+
+function classify429(detail: string): ProviderFailure['category'] {
+  const text = detail.toLowerCase()
+  if (
+    text.includes('billing') ||
+    text.includes('payment') ||
+    text.includes('credit') ||
+    text.includes('insufficient funds')
+  ) return 'billing'
+  if (
+    text.includes('daily') ||
+    text.includes('token') ||
+    text.includes('quota') ||
+    text.includes('limit exceeded') ||
+    text.includes('usage limit')
+  ) return 'quota'
+  if (
+    text.includes('overload') ||
+    text.includes('capacity') ||
+    text.includes('temporarily unavailable') ||
+    text.includes('try again')
+  ) return 'overload'
+  return 'rate_limit'
+}
+
+async function sleep(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, milliseconds))
 }
 
 function isAbort(error: unknown): boolean {

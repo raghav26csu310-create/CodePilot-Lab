@@ -442,6 +442,8 @@ export type GatewayTestResult = {
   models: string[]
   message: string
   kind?: string
+  category?: string
+  retryAfterSeconds?: number
 }
 
 export async function testGatewayConnection(input: {

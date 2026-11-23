@@ -230,6 +230,51 @@ describe('provider adapters', () => {
     })
   })
 
+  it('distinguishes billing quota 429s and does not retry them', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ error: { message: 'insufficient billing credit' } }),
+        { status: 429, headers: { 'retry-after': '60' } },
+      ),
+    )
+    await expect(client(fetchMock).listModels(config('openai'))).rejects.toMatchObject({
+      code: 'rate-limit',
+      category: 'billing',
+      status: 429,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries temporary overload 429s but never retries exhausted token quota', async () => {
+    let overloadedCalls = 0
+    const overloaded = vi.fn(async () => {
+      overloadedCalls += 1
+      if (overloadedCalls === 1) {
+        return new Response(
+          JSON.stringify({ error: { message: 'provider temporarily overloaded; try again' } }),
+          { status: 429, headers: { 'retry-after': '0' } },
+        )
+      }
+      return Response.json({ data: [{ id: 'recovered-model' }] })
+    })
+    await expect(client(overloaded).listModels(config('openai'))).resolves.toEqual([
+      'recovered-model',
+    ])
+    expect(overloaded).toHaveBeenCalledTimes(2)
+
+    const quota = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { message: 'daily token quota exceeded' } }), {
+        status: 429,
+        headers: { 'retry-after': '0' },
+      }),
+    )
+    await expect(client(quota).listModels(config('openai'))).rejects.toMatchObject({
+      category: 'quota',
+      status: 429,
+    })
+    expect(quota).toHaveBeenCalledTimes(1)
+  })
+
   it('honors provider request cancellation and deadlines', async () => {
     const fetchMock: typeof fetch = async (_input, init) =>
       await new Promise<Response>((_resolve, reject) => {

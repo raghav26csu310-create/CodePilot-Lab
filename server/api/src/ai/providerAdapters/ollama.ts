@@ -1,5 +1,5 @@
 import { ProviderError, type ProviderAdapter } from '../providerTypes.ts'
-import { decodeJson, joinUrl, numberOrNull, readLines } from '../providerShared.ts'
+import { authHeaders, decodeJson, joinUrl, numberOrNull, readLines } from '../providerShared.ts'
 
 type OllamaChunk = {
   message?: { content?: unknown }
@@ -12,10 +12,10 @@ type OllamaChunk = {
 export const ollamaProviderAdapter: ProviderAdapter = {
   requiresApiKey: false,
 
-  async listModels(baseUrl, _config, transport, signal) {
+  async listModels(baseUrl, config, transport, signal) {
     const response = await transport.request(
       joinUrl(baseUrl, '/api/tags'),
-      { method: 'GET' },
+      { method: 'GET', headers: authHeaders(config.apiKey) },
       signal,
     )
     if (!response.ok) throw await transport.httpError(response)
@@ -36,7 +36,7 @@ export const ollamaProviderAdapter: ProviderAdapter = {
       joinUrl(baseUrl, '/api/chat'),
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders(config.apiKey) },
         body: JSON.stringify({
           model: config.model,
           messages,
