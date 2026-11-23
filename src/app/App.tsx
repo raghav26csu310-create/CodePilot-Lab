@@ -5,7 +5,6 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { CommandCenterPage } from '../features/command-center/CommandCenterPage'
 import { FeedbackPage } from '../features/feedback/FeedbackPage'
 import { NotFoundPage } from '../features/placeholder/NotFoundPage'
-import { PlaceholderPage } from '../features/placeholder/PlaceholderPage'
 import { AppShell } from './AppShell'
 
 /*
@@ -38,9 +37,24 @@ const PracticeWorkspacePage = lazy(() =>
     default: module.PracticeWorkspacePage,
   })),
 )
+const ProjectAtlasPage = lazy(() =>
+  import('../features/atlas/ProjectAtlasPage').then((module) => ({
+    default: module.ProjectAtlasPage,
+  })),
+)
 const AiSettingsPage = lazy(() =>
   import('../features/settings/AiSettingsPage').then((module) => ({
     default: module.AiSettingsPage,
+  })),
+)
+const ProjectVaultPage = lazy(() =>
+  import('../features/vault/ProjectVaultPage').then((module) => ({
+    default: module.ProjectVaultPage,
+  })),
+)
+const ActivityPage = lazy(() =>
+  import('../features/activity/ActivityPage').then((module) => ({
+    default: module.ActivityPage,
   })),
 )
 const ProjectOverviewRoute = lazy(() =>
@@ -66,17 +80,17 @@ export function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route index element={<CommandCenterPage />} />
-            <Route path="vault" element={<PlaceholderPage path="/vault" />} />
+            <Route path="vault" element={<ProjectVaultPage />} />
             <Route path="workspace" element={<ProjectPickerPage />} />
             <Route path="workspace/:projectId" element={<ProjectWorkspaceRoute />} />
             <Route path="workspace/:projectId/overview" element={<ProjectOverviewRoute />} />
             <Route path="copilot" element={<CopilotOverviewPage />} />
-            <Route path="atlas" element={<PlaceholderPage path="/atlas" />} />
+            <Route path="atlas" element={<ProjectAtlasPage />} />
             <Route path="lab" element={<ExecutionLabPage />} />
             <Route path="convert" element={<ConverterPage />} />
             <Route path="practice" element={<PracticeLibraryPage />} />
             <Route path="practice/:problemId" element={<PracticeWorkspacePage />} />
-            <Route path="activity" element={<PlaceholderPage path="/activity" />} />
+            <Route path="activity" element={<ActivityPage />} />
             <Route path="settings" element={<AiSettingsPage />} />
             <Route path="feedback" element={<FeedbackPage />} />
             <Route path="*" element={<NotFoundPage />} />

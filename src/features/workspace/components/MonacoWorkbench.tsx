@@ -520,6 +520,12 @@ export default function MonacoWorkbench() {
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.PageDown, () => {
         cycleTabRef.current?.(1)
       })
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Backquote, () => {
+        dispatch({ type: 'ui/toggle-bottom' })
+      })
+      editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyJ, () => {
+        dispatch({ type: 'ui/toggle-bottom' })
+      })
       editor.addAction({
         id: 'codepilot.formatDocument',
         label: 'Format Document with Prettier',
@@ -551,13 +557,22 @@ export default function MonacoWorkbench() {
         const model = editor.getModel()
         const selectedText =
           model && !selection.isEmpty() ? model.getValueInRange(selection) : ''
-        setCursor({
+        const cursorInfo = {
           line: position.lineNumber,
           column: position.column,
           selected: selectedText.length,
           selectionLines: selection.isEmpty()
             ? 0
             : selection.endLineNumber - selection.startLineNumber + 1,
+        }
+        setCursor(cursorInfo)
+        dispatch({
+          type: 'editor/set-cursor',
+          cursor: {
+            line: position.lineNumber,
+            column: position.column,
+            selected: selectedText.length,
+          },
         })
 
         let selectionPath: string | null = null

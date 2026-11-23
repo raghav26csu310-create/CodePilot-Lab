@@ -27,6 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Select } from '../../design-system/primitives/Select'
 import { listProjects, type ConversionRecord, type ProjectRecord } from '../../lib/db'
 import { formatDate } from '../../lib/format'
+import { logActivity } from '../../lib/activityService'
 import {
   StoredPathError,
   createStoredEntry,
@@ -512,6 +513,19 @@ export function ConverterPage() {
         durationMs,
       })
       await refreshHistory()
+      void logActivity({
+        type: 'ai:convert',
+        description: `Converted ${sourceLanguage} to ${targetLanguage} (${status})`,
+        projectId: mode === 'project' && projectId ? projectId : undefined,
+        projectName: projects.find((p) => p.id === projectId)?.name,
+        status: status === 'complete' ? 'success' : 'info',
+        details: JSON.stringify({
+          sourceLanguage,
+          targetLanguage,
+          durationMs,
+          warningsCount: result.warnings.length,
+        }),
+      })
     } catch (error) {
       const durationMs = Math.round(performance.now() - startRef.current)
       const aborted = error instanceof AiError && error.kind === 'aborted'
@@ -550,6 +564,13 @@ export function ConverterPage() {
           durationMs,
         })
         await refreshHistory()
+        void logActivity({
+          type: 'ai:convert',
+          description: `Converted ${sourceLanguage} to ${targetLanguage} (partial)`,
+          projectId: mode === 'project' && projectId ? projectId : undefined,
+          projectName: projects.find((p) => p.id === projectId)?.name,
+          status: 'info',
+        })
         return
       }
 
@@ -572,6 +593,13 @@ export function ConverterPage() {
           durationMs,
         })
         await refreshHistory()
+        void logActivity({
+          type: 'ai:convert',
+          description: `Failed conversion: ${sourceLanguage} to ${targetLanguage}`,
+          projectId: mode === 'project' && projectId ? projectId : undefined,
+          projectName: projects.find((p) => p.id === projectId)?.name,
+          status: 'failure',
+        })
       }
     } finally {
       abortRef.current = null

@@ -10,11 +10,14 @@ import {
   RefreshCw,
   TriangleAlert,
   X,
+  Search,
+  OctagonX,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { useWorkspace } from '../workspace/state/useWorkspace'
 import { clampBottomHeight } from '../workspace/state/layoutPreference'
+import { logActivity } from '../../lib/activityService'
 import {
   connectTerminal,
   describeTerminalClose,
@@ -59,6 +62,7 @@ type ExitInfo = {
 type TerminalSession = {
   id: string
   label: string
+  shell?: string
 }
 
 type SessionState = {
@@ -70,6 +74,8 @@ type SessionState = {
 
 type TerminalSessionHandle = TerminalSurfaceHandle & {
   changeCwd: (path: string) => void
+  switchShell: (shell: string) => void
+  kill: () => void
 }
 
 /**
@@ -79,12 +85,14 @@ type TerminalSessionHandle = TerminalSurfaceHandle & {
  */
 function TerminalSession({
   token,
+  shell,
   active,
   reconnectKey,
   onStateChange,
   register,
 }: {
   token: string
+  shell?: string
   active: boolean
   reconnectKey: number
   onStateChange: (state: SessionState) => void
@@ -117,6 +125,7 @@ function TerminalSession({
     if (token) {
       const connection = connectTerminal({
         token,
+        shell,
         onFrame: (frame) => {
           if (!active_) {
             return
@@ -199,7 +208,7 @@ function TerminalSession({
       }
       setConnection(null)
     }
-  }, [token, reconnectKey])
+  }, [token, shell, reconnectKey])
 
   const changeCwd = useCallback(
     (path: string) => {
@@ -221,7 +230,10 @@ function TerminalSession({
           resize: handle.resize,
           focus: handle.focus,
           fit: handle.fit,
+          search: handle.search,
           changeCwd,
+          switchShell: (targetShell: string) => connection?.switchShell(targetShell),
+          kill: () => connection?.kill(),
         }
       : null
     handleRef.current = sessionHandle
@@ -229,7 +241,7 @@ function TerminalSession({
     return () => {
       registerRef.current(null)
     }
-  }, [registerRef, changeCwd])
+  }, [registerRef, changeCwd, connection])
 
   // When this session becomes active, re-fit the surface so it sizes correctly.
   useEffect(() => {
@@ -343,21 +355,64 @@ export function TerminalPanel() {
     setError(null)
   }, [token])
 
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchStatus, setSearchStatus] = useState<string | null>(null)
+
   const newSessionId = useCallback(() => `terminal-${Date.now()}`, [])
 
-  const addSession = useCallback(() => {
-    if (!canAdd) {
+  const addSession = useCallback(
+    (chosenShell?: string) => {
+      if (!canAdd) {
+        return
+      }
+      const id = newSessionId()
+      const shellTag = chosenShell?.includes('cmd')
+        ? 'CMD'
+        : chosenShell?.includes('powershell')
+          ? 'PowerShell'
+          : 'Shell'
+      const next: TerminalSession = {
+        id,
+        label: chosenShell ? `${shellTag} ${sessions.length + 1}` : `Terminal ${sessions.length + 1}`,
+        shell: chosenShell,
+      }
+      setSessions((current) => [...current, next])
+      setActiveId(id)
+      setError(null)
+
+      void logActivity({
+        type: 'terminal:session',
+        description: `Started ${next.label} (${chosenShell ?? health?.shell ?? 'default shell'})`,
+        status: 'info',
+      })
+    },
+    [canAdd, health?.shell, newSessionId, sessions.length],
+  )
+
+  const killActive = useCallback(() => {
+    if (!active) {
       return
     }
-    const id = newSessionId()
-    const next: TerminalSession = {
-      id,
-      label: `Terminal ${sessions.length + 1}`,
-    }
-    setSessions((current) => [...current, next])
-    setActiveId(id)
-    setError(null)
-  }, [canAdd, sessions.length, newSessionId])
+    sessionHandles.current.get(active.id)?.kill()
+    void logActivity({
+      type: 'terminal:session',
+      description: `Terminated active terminal process (${active.label})`,
+      status: 'info',
+    })
+  }, [active])
+
+  const searchActive = useCallback(
+    (event: React.FormEvent) => {
+      event.preventDefault()
+      if (!active || !searchQuery.trim()) {
+        return
+      }
+      const found = sessionHandles.current.get(active.id)?.search(searchQuery.trim()) ?? false
+      setSearchStatus(found ? 'Found & selected in buffer' : 'Not found in buffer')
+      setTimeout(() => setSearchStatus(null), 3000)
+    },
+    [active, searchQuery],
+  )
 
   const closeSession = useCallback(
     (id: string) => {
@@ -525,12 +580,34 @@ export function TerminalPanel() {
                 type="button"
                 className={`${styles.button} ${styles.primary}`}
                 disabled={!canAdd}
-                onClick={addSession}
+                onClick={() => addSession()}
                 title={canAdd ? 'Open a new terminal tab' : 'Maximum concurrent sessions reached'}
               >
                 <Plus size={12} aria-hidden="true" />
                 New terminal
               </button>
+              {health?.availableShells?.includes('powershell.exe') && (
+                <button
+                  type="button"
+                  className={styles.button}
+                  disabled={!canAdd}
+                  onClick={() => addSession('powershell.exe')}
+                  title="Open PowerShell tab"
+                >
+                  + PowerShell
+                </button>
+              )}
+              {health?.availableShells?.includes('cmd.exe') && (
+                <button
+                  type="button"
+                  className={styles.button}
+                  disabled={!canAdd}
+                  onClick={() => addSession('cmd.exe')}
+                  title="Open Command Prompt tab"
+                >
+                  + CMD
+                </button>
+              )}
               <button
                 type="button"
                 className={styles.button}
@@ -539,7 +616,17 @@ export function TerminalPanel() {
                 title={active ? 'Close this terminal' : 'No terminal to close'}
               >
                 <Trash2 size={12} aria-hidden="true" />
-                Close terminal
+                Close
+              </button>
+              <button
+                type="button"
+                className={styles.button}
+                disabled={!active || activeState?.status !== 'ready'}
+                onClick={killActive}
+                title="Terminate active shell process"
+              >
+                <OctagonX size={12} aria-hidden="true" />
+                Terminate
               </button>
               <button
                 type="button"
@@ -564,6 +651,31 @@ export function TerminalPanel() {
             </div>
 
             <div className={styles.toolbarGroup}>
+              <form className={styles.cwdForm} onSubmit={searchActive} title="Search terminal output">
+                <input
+                  className={styles.input}
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Find in output..."
+                />
+                <button
+                  type="submit"
+                  className={styles.button}
+                  disabled={!active || !searchQuery.trim()}
+                  title="Search terminal scrollback"
+                >
+                  <Search size={11} aria-hidden="true" />
+                  Find
+                </button>
+                {searchStatus ? (
+                  <span className={styles.chip} data-tone={searchStatus.includes('Found') ? 'ok' : 'warn'}>
+                    {searchStatus}
+                  </span>
+                ) : null}
+              </form>
+
+              <span className={styles.divider} aria-hidden="true" />
+
               <form className={styles.cwdForm} onSubmit={submitCwd}>
                 <label className={styles.label} htmlFor="terminal-cwd">
                   Working directory
@@ -736,6 +848,7 @@ export function TerminalPanel() {
                       >
                         <TerminalSession
                           token={token}
+                          shell={session.shell}
                           active={selected}
                           reconnectKey={reconnectKey}
                           onStateChange={(state) =>

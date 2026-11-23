@@ -12,6 +12,7 @@ import {
 import { Button } from '../../design-system/primitives/Button'
 import { Select } from '../../design-system/primitives/Select'
 import { createProjectRecord, findProjectByName, type ProjectRecord } from '../../lib/db'
+import { logActivity } from '../../lib/activityService'
 import { pickBinaryFile } from '../../lib/diskAccess'
 import { formatBytes, formatDate } from '../../lib/format'
 import {
@@ -179,6 +180,14 @@ function CreateProjectForm({
         )
         return
       }
+
+      void logActivity({
+        type: 'project:create',
+        description: `Created new project “${project.name}” (${selected.label})`,
+        projectId: project.id,
+        projectName: project.name,
+        status: 'success',
+      })
 
       onCompleted(project)
     } catch (cause) {
@@ -514,6 +523,14 @@ function ImportProjectFlow({
         )
         return
       }
+
+      void logActivity({
+        type: 'project:import',
+        description: `Imported project “${project.name}” (${archive ? 'ZIP archive' : 'directory'})`,
+        projectId: project.id,
+        projectName: project.name,
+        status: 'success',
+      })
 
       onCompleted(project)
     } catch (cause) {

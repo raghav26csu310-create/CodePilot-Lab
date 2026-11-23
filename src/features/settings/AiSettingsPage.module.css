@@ -158,3 +158,142 @@
     grid-template-columns: 1fr;
   }
 }
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--hairline);
+  margin-top: 20px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  color: var(--text-2);
+  font-family: var(--font-ui);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.activeTab {
+  color: var(--cyan);
+  background: rgb(8 13 21 / 0.6);
+  border-color: var(--hairline-accent);
+  font-weight: 600;
+}
+
+.sectionCard {
+  padding: clamp(18px, 2.5vw, 28px);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: rgb(7 11 18 / 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.settingRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.settingInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 500px;
+}
+
+.settingTitle {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.settingDesc {
+  font-size: var(--fs-11);
+  color: var(--text-2);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.controlGroup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.selectInput {
+  background: rgb(12 17 26 / 0.8);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  padding: 6px 12px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-12);
+  outline: none;
+}
+
+.selectInput:focus {
+  border-color: var(--cyan-dim);
+}
+
+.sliderInput {
+  accent-color: var(--cyan);
+  cursor: pointer;
+  width: 140px;
+}
+
+.previewBox {
+  background: rgb(4 6 11 / 0.8);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 16px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow: auto;
+  margin-top: 12px;
+  line-height: 1.6;
+}
+
+.dangerButton {
+  background: rgba(255, 126, 140, 0.12);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 6px 14px;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-12);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dangerButton:hover {
+  background: rgba(255, 126, 140, 0.22);
+}
+

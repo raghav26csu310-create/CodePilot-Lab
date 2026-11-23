@@ -21,6 +21,10 @@ export type ProjectRecord = {
   excluded: string[]
   /** Present only when the File System Access API provided a handle. */
   directoryHandle?: FileSystemDirectoryHandle
+  /** Pinned status in Project Vault. */
+  pinned?: boolean
+  /** Optional tags for organisation. */
+  tags?: string[]
 }
 
 export type NewProjectInput = {
@@ -35,6 +39,8 @@ export type NewProjectInput = {
   truncated?: boolean
   excluded?: string[]
   directoryHandle?: FileSystemDirectoryHandle
+  pinned?: boolean
+  tags?: string[]
 }
 
 export type StoredEntryKind = 'file' | 'folder'
@@ -134,6 +140,38 @@ export type FeedbackRecord = {
   endpointError: string | null
 }
 
+export type ActivityType =
+  | 'project:create'
+  | 'project:open'
+  | 'project:delete'
+  | 'project:import'
+  | 'project:rename'
+  | 'project:duplicate'
+  | 'file:create'
+  | 'file:save'
+  | 'file:delete'
+  | 'file:rename'
+  | 'code:execute'
+  | 'code:trace'
+  | 'ai:chat'
+  | 'ai:convert'
+  | 'ai:explain'
+  | 'settings:update'
+  | 'terminal:session'
+  | 'diagnostics:check'
+
+export type ActivityRecord = {
+  id: string
+  type: ActivityType
+  description: string
+  timestamp: number
+  projectId?: string
+  projectName?: string
+  target?: string
+  status: 'success' | 'failure' | 'info'
+  details?: string
+}
+
 export type StorageSnapshot = {
   indexedDB: boolean
   estimate: boolean
@@ -151,6 +189,7 @@ const database = new Dexie('codepilot-lab') as Dexie & {
   practiceProgress: EntityTable<PracticeProgress, 'problemId'>
   practiceSubmissions: EntityTable<PracticeSubmission, 'id'>
   feedback: EntityTable<FeedbackRecord, 'id'>
+  activities: EntityTable<ActivityRecord, 'id'>
 }
 
 function normalizePath(path: string): string {
@@ -257,6 +296,10 @@ database.version(3).stores({
 
 database.version(4).stores({
   feedback: 'id, createdAt, category',
+})
+
+database.version(5).stores({
+  activities: 'id, type, timestamp, projectId, status',
 })
 
 export const db = database
@@ -386,6 +429,130 @@ export async function deleteProjectCascade(id: string): Promise<void> {
       await db.projects.delete(id)
     },
   )
+}
+
+export async function toggleProjectPin(id: string): Promise<boolean> {
+  return db.transaction('rw', db.projects, async () => {
+    const project = await db.projects.get(id)
+    if (!project) return false
+    const nextPinned = !project.pinned
+    await db.projects.update(id, { pinned: nextPinned })
+    return nextPinned
+  })
+}
+
+export async function duplicateProjectCascade(
+  id: string,
+  targetName: string,
+): Promise<ProjectRecord> {
+  const source = await db.projects.get(id)
+  if (!source) {
+    throw new Error('Source project not found')
+  }
+
+  const existing = await findProjectByName(targetName)
+  if (existing) {
+    throw new Error(`A project named “${targetName}” already exists.`)
+  }
+
+  const newId = createId()
+  const now = Date.now()
+  const newProject: ProjectRecord = {
+    ...source,
+    id: newId,
+    name: targetName.trim(),
+    createdAt: now,
+    modifiedAt: now,
+    lastOpenedAt: now,
+    openCount: 0,
+    directoryHandle: undefined, // Duplicates are browser-stored
+    source: 'created',
+    pinned: false,
+  }
+
+  const sourceFiles = await db.files.where('projectId').equals(id).toArray()
+  const sourceContents = await db.contents.where('projectId').equals(id).toArray()
+
+  const newFiles = sourceFiles.map((file) => ({
+    ...file,
+    projectId: newId,
+    createdAt: now,
+    updatedAt: now,
+  }))
+
+  const newContents = sourceContents.map((content) => ({
+    ...content,
+    projectId: newId,
+    updatedAt: now,
+  }))
+
+  await db.transaction('rw', db.projects, db.files, db.contents, async () => {
+    await db.projects.add(newProject)
+    if (newFiles.length > 0) {
+      await db.files.bulkPut(newFiles)
+    }
+    if (newContents.length > 0) {
+      await db.contents.bulkPut(newContents)
+    }
+  })
+
+  await recordActivity({
+    type: 'project:duplicate',
+    description: `Duplicated “${source.name}” as “${newProject.name}”`,
+    projectId: newId,
+    projectName: newProject.name,
+    status: 'success',
+  })
+
+  return newProject
+}
+
+export async function recordActivity(
+  input: Omit<ActivityRecord, 'id' | 'timestamp'> & { timestamp?: number },
+): Promise<ActivityRecord> {
+  const record: ActivityRecord = {
+    id: createId(),
+    timestamp: input.timestamp ?? Date.now(),
+    type: input.type,
+    description: input.description,
+    projectId: input.projectId,
+    projectName: input.projectName,
+    target: input.target,
+    status: input.status,
+    details: input.details,
+  }
+  try {
+    await db.activities.add(record)
+  } catch {
+    // Non-blocking in case storage is restricted
+  }
+  return record
+}
+
+export async function listActivities(options?: {
+  projectId?: string
+  type?: ActivityType
+  limit?: number
+}): Promise<ActivityRecord[]> {
+  try {
+    let collection = db.activities.orderBy('timestamp').reverse()
+    if (options?.projectId) {
+      collection = collection.filter((item) => item.projectId === options.projectId)
+    }
+    if (options?.type) {
+      collection = collection.filter((item) => item.type === options.type)
+    }
+    if (options?.limit) {
+      return await collection.limit(options.limit).toArray()
+    }
+    return await collection.toArray()
+  } catch {
+    return []
+  }
+}
+
+export async function clearActivities(): Promise<void> {
+  await db.activities.clear()
 }
 
 export async function probeStorage(): Promise<StorageSnapshot> {

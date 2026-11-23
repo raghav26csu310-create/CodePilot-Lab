@@ -20,6 +20,8 @@ export type TerminalSurfaceHandle = {
   focus: () => void
   /** Re-fit the terminal to its host (use after showing a previously hidden session). */
   fit: () => void
+  /** Search active buffer and select matching term. */
+  search: (query: string) => boolean
 }
 
 type Props = {
@@ -93,6 +95,22 @@ export const TerminalSurface = forwardRef<TerminalSurfaceHandle, Props>(
           terminalRef.current?.focus()
         },
         fit: fitNow,
+        search: (query: string) => {
+          const terminal = terminalRef.current
+          if (!terminal || !query.trim()) return false
+          const buffer = terminal.buffer.active
+          const needle = query.toLowerCase()
+          for (let i = buffer.length - 1; i >= 0; i--) {
+            const line = buffer.getLine(i)?.translateToString() ?? ''
+            const idx = line.toLowerCase().indexOf(needle)
+            if (idx !== -1) {
+              terminal.select(idx, i, query.length)
+              terminal.scrollToLine(i)
+              return true
+            }
+          }
+          return false
+        },
       }),
       [fitNow]
     )

@@ -4,6 +4,7 @@ import {
   type ProjectRecord,
   type StoredEntry,
 } from './db'
+import { logActivity } from './activityService'
 import {
   ensureHandlePermission,
   pickDirectory,
@@ -263,6 +264,14 @@ export async function saveFileContent(
 ): Promise<SaveContentResult> {
   await writeStoredContent(project.id, path, content)
   const disk = await writeContentToLinkedFolder(project, path, content)
+  void logActivity({
+    type: 'file:save',
+    description: `Saved file ${path}`,
+    projectId: project.id,
+    projectName: project.name,
+    target: path,
+    status: 'success',
+  })
   return { stored: true, disk }
 }
 
@@ -648,6 +657,14 @@ export async function createStoredEntry(
     await syncProjectFileMetadata(projectId, { touchModifiedAt: true })
   })
 
+  void logActivity({
+    type: 'file:create',
+    description: `Created ${kind} ${path}`,
+    projectId,
+    target: path,
+    status: 'success',
+  })
+
   return path
 }
 
@@ -694,6 +711,14 @@ export async function renameStoredEntry(
     await syncProjectFileMetadata(projectId, { touchModifiedAt: true })
   })
 
+  void logActivity({
+    type: 'file:rename',
+    description: `Renamed ${oldPath} to ${name}`,
+    projectId,
+    target: newPath,
+    status: 'success',
+  })
+
   return newPath
 }
 
@@ -712,6 +737,14 @@ export async function deleteStoredEntry(
     await db.files.bulkDelete(removed.map((entryPath) => [projectId, entryPath]))
     await db.contents.bulkDelete(removed.map((entryPath) => [projectId, entryPath]))
     await syncProjectFileMetadata(projectId, { touchModifiedAt: true })
+
+    void logActivity({
+      type: 'file:delete',
+      description: `Deleted ${path} (${removed.length} item${removed.length === 1 ? '' : 's'})`,
+      projectId,
+      target: path,
+      status: 'success',
+    })
 
     return removed
   })

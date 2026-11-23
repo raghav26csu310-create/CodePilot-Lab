@@ -149,6 +149,7 @@ export function createInitialWorkspaceState(entries: TreeEntry[] = []): Workspac
       editor: readEditorPreferences(),
       markers: [],
       selection: null,
+      cursor: null,
       palette: null,
       pendingReveal: null,
       pendingJob: null,
@@ -394,6 +395,22 @@ export function workspaceReducer(
         return state
       }
       return { tree, ui: { ...ui, selection: next } }
+    }
+
+    case 'editor/set-cursor': {
+      const cur = ui.cursor
+      const nxt = action.cursor
+      if (
+        cur === nxt ||
+        (cur !== null &&
+          nxt !== null &&
+          cur.line === nxt.line &&
+          cur.column === nxt.column &&
+          cur.selected === nxt.selected)
+      ) {
+        return state
+      }
+      return { tree, ui: { ...ui, cursor: nxt } }
     }
 
     case 'entry/create': {

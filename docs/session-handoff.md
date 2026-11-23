@@ -1,10 +1,63 @@
-# Session handoff — 2026-11-17
+# Session handoff — 2026-11-21
 
 This is the resume point for the next working session. It records what exists, what was
 verified, what was not, and the exact next task. It is not a claim of production
 readiness.
 
 ## Mission
+
+Turn CodePilot Lab into a genuinely functional, professional IDE development environment,
+complete with an integrated terminal, full project vault lifecycle, interactive architecture
+atlas, verifiable activity and diagnostics logging, unified settings hub, and local-first AI.
+
+## Current session achievements (Completed & Verified)
+
+- **Phase 8 — Main Workspace & Professional IDE**:
+  - Live Monaco editor with multi-tab management, breadcrumbs, code folding, minimap, syntax highlighting, and formatting.
+  - Added live cursor position readout (`Ln X, Col Y`, indent spaces, encoding) to `WorkspaceShell.tsx`.
+  - Added global keyboard shortcuts (`Ctrl+\`` and `Ctrl+J`) for toggling the bottom terminal panel.
+  - Added direct link between active project workspace and Project Atlas (`/atlas?project=${project.id}`).
+- **Phase 7 — Real Integrated Terminal**:
+  - Enhanced loopback PTY companion (`server/terminal.mjs` and `src/features/terminal/client.ts`): supports dedicated PowerShell (`powershell.exe`) and Command Prompt (`cmd.exe`) sessions.
+  - Added buffer search capability to `TerminalSurface.tsx` scanning `terminal.buffer.active` without external dependencies.
+  - Added process kill / terminate control with honest confirmation and activity logging.
+  - Enforced Origin security validation, per-boot pairing token in `sessionStorage`, and loopback bind.
+- **Module 1 — Project Vault (`/vault`)**:
+  - Created `ProjectVaultPage.tsx` and `ProjectVault.module.css`.
+  - Full project lifecycle: create, import folder/ZIP, duplicate with file cascade, rename, delete with confirmation, and pin/favourite toggle.
+  - Search, sort by name/modified/size, category filtering, and real ZIP archive export with CRC-32 checksums.
+  - Live IndexedDB storage quota readout (`navigator.storage.estimate()`).
+  - Marked `/vault` route as `live` in `ROUTES`.
+- **Module 2 — Project Atlas (`/atlas`)**:
+  - Built real static AST architecture engine (`projectAnalysis.ts`): regex-based extraction of relative imports and exports for TypeScript, JavaScript, Python, and C/C++.
+  - Detects entry points, source files, config files, tests, and assets.
+  - Interactive module inspector with directory grouping, LOC calculation, language breakdown bar, and jump-to-dependency.
+  - Integrated AI architecture explanations (`overview`, `bottlenecks`, `dependencies`) via `streamAssistant`.
+  - Marked `/atlas` route as `live` in `ROUTES` and integrated lazy route in `App.tsx`.
+- **Module 3 — Activity & Diagnostics (`/activity`)**:
+  - Upgraded Dexie schema to version 5 with `activities` table (`id, type, timestamp, projectId, status`).
+  - Created `activityService.ts` for unified cross-module event dispatching and Dexie persistence.
+  - Created `ActivityPage.tsx` and `ActivityPage.module.css`:
+    - Tab 1: Activity Centre — Live event timeline, filtering by category/project/status, search, date grouping, details inspection, JSON export, and clear history.
+    - Tab 2: Diagnostics Centre — Honest live health probes for Frontend/Storage, API Gateway (`/api/health`), Execution Sidecar (`/health`), Terminal PTY (`/terminal/health`), and GitHub Bridge (`/github/status`).
+    - Copy Diagnostic Report (Markdown) and manual re-probe with latency timing.
+  - Marked `/activity` route as `live` in `ROUTES` and integrated lazy route in `App.tsx`.
+- **Module 4 — Complete Settings System (`/settings`)**:
+  - Expanded `AiSettingsPage.tsx` into a 5-tab Settings Hub:
+    - AI & Credentials (managed AI, BYO encrypted credentials, gateway status).
+    - Editor & Workspace (live font size slider, theme toggle, minimap, word wrap, format on save, live code preview).
+    - Integrated Terminal (default shell: PowerShell vs CMD, pairing token in sessionStorage, PTY architecture).
+    - GitHub & Git (local `gh` CLI and Git companion).
+    - General & Storage (`__APP_VERSION__`, account data JSON export, storage quota, activity log purge).
+  - Built `preferencesStore.ts` for persisting editor, terminal, appearance, and general preferences.
+- **Module 5 — Code Conversion & Project Creation**:
+  - Added activity logging (`ai:convert`) to `ConverterPage.tsx` for completed, partial, and failed conversions.
+  - Added activity logging (`project:create`, `project:import`) to `ProjectDialog.tsx`.
+- **Full Verification**:
+  - `npm run typecheck` passes with 0 errors.
+  - `npm run lint` passes with 0 errors.
+  - `npx vitest run src/` passes: 102 unit tests across 16 test files in 1.47s.
+  - `npm run build` passes with zero errors, generating optimized lazy chunks in 5.03s.
 
 ## Current environment orchestration work
 

@@ -35,6 +35,7 @@ export type TerminalHealth = {
   service: string
   platform: string
   shell: string
+  availableShells?: string[]
   cwd: string
   pairingRequired: boolean
   sandboxed: boolean
@@ -55,21 +56,29 @@ export class TerminalServiceError extends Error {
   }
 }
 
+let memoryToken = ''
+
 export function getTerminalToken(): string {
   try {
-    return window.sessionStorage.getItem(TOKEN_KEY)?.trim() ?? ''
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      return window.sessionStorage.getItem(TOKEN_KEY)?.trim() ?? ''
+    }
   } catch {
-    return ''
+    // SessionStorage inaccessible
   }
+  return memoryToken
 }
 
 export function setTerminalToken(token: string): void {
   const cleaned = token.trim()
+  memoryToken = cleaned
   try {
-    if (cleaned) {
-      window.sessionStorage.setItem(TOKEN_KEY, cleaned)
-    } else {
-      window.sessionStorage.removeItem(TOKEN_KEY)
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      if (cleaned) {
+        window.sessionStorage.setItem(TOKEN_KEY, cleaned)
+      } else {
+        window.sessionStorage.removeItem(TOKEN_KEY)
+      }
     }
   } catch {
     // The token only lives for this tab; losing the preference is honest.
@@ -80,9 +89,14 @@ function terminalBase(): string {
   return getExecEndpoint()
 }
 
-export function terminalSocketUrl(token: string): string {
+export function terminalSocketUrl(token: string, shell?: string): string {
   const base = terminalBase().replace(/^http/, 'ws')
-  return `${base}/terminal?token=${encodeURIComponent(token)}`
+  const params = new URLSearchParams()
+  params.set('token', token)
+  if (shell) {
+    params.set('shell', shell)
+  }
+  return `${base}/terminal?${params.toString()}`
 }
 
 /** Probes the sidecar. Never resolves a fabricated health object. */
@@ -134,6 +148,8 @@ export type TerminalConnection = {
   sendInput: (data: string) => void
   resize: (cols: number, rows: number) => void
   changeCwd: (path: string) => void
+  switchShell: (shell: string) => void
+  kill: () => void
   close: () => void
 }
 
@@ -150,14 +166,16 @@ export type TerminalCloseInfo = {
  */
 export function connectTerminal({
   token,
+  shell,
   onFrame,
   onClose,
 }: {
   token: string
+  shell?: string
   onFrame: (frame: TerminalFrame) => void
   onClose: (info: TerminalCloseInfo) => void
 }): TerminalConnection {
-  const socket = new WebSocket(terminalSocketUrl(token))
+  const socket = new WebSocket(terminalSocketUrl(token, shell))
   let intentional = false
 
   socket.addEventListener('message', (event) => {
@@ -198,6 +216,12 @@ export function connectTerminal({
     },
     changeCwd(path) {
       send({ type: 'cwd', path })
+    },
+    switchShell(targetShell) {
+      send({ type: 'shell', shell: targetShell })
+    },
+    kill() {
+      send({ type: 'kill' })
     },
     close() {
       intentional = true

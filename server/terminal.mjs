@@ -28,16 +28,33 @@ import { resolve } from 'node:path'
 import pty from 'node-pty'
 import { WebSocket, WebSocketServer } from 'ws'
 
-const MAX_SESSIONS = 2
+const MAX_SESSIONS = 4
 const MAX_FRAME_BYTES = 64 * 1024
 const COLS = { min: 20, max: 400, initial: 100 }
 const ROWS = { min: 5, max: 200, initial: 30 }
 
-export function shellForPlatform(platform = process.platform) {
+export function defaultShellForPlatform(platform = process.platform) {
   if (platform === 'win32') {
-    return process.env.COMSPEC || 'cmd.exe'
+    return process.env.CODEPILOT_TERMINAL_SHELL || 'powershell.exe'
   }
-  return process.env.SHELL || '/bin/bash'
+  return process.env.CODEPILOT_TERMINAL_SHELL || process.env.SHELL || '/bin/bash'
+}
+
+export function shellForPlatform(platform = process.platform, candidate = null) {
+  if (candidate && typeof candidate === 'string' && candidate.trim()) {
+    const trimmed = candidate.trim()
+    if (platform === 'win32') {
+      const lower = trimmed.toLowerCase()
+      if (lower.includes('powershell') || lower === 'pwsh' || lower === 'powershell.exe') {
+        return 'powershell.exe'
+      }
+      if (lower.includes('cmd') || lower === 'cmd.exe') {
+        return process.env.COMSPEC || 'cmd.exe'
+      }
+    }
+    return trimmed
+  }
+  return defaultShellForPlatform(platform)
 }
 
 function clamp(value, min, max, fallback) {
@@ -113,6 +130,10 @@ export function createTerminalHub({
     service: 'codepilot-terminal',
     platform: process.platform,
     shell: shellForPlatform(),
+    availableShells:
+      process.platform === 'win32'
+        ? ['powershell.exe', 'cmd.exe']
+        : ['/bin/bash', '/bin/sh'],
     cwd,
     pairingRequired: true,
     sandboxed: false,
@@ -166,15 +187,17 @@ export function createTerminalHub({
         return
       }
 
-      wss.handleUpgrade(request, socket, head, (ws) => startSession(ws))
+      const requestedShell = url.searchParams.get('shell')
+      wss.handleUpgrade(request, socket, head, (ws) => startSession(ws, requestedShell))
     })
 
     return wss
   }
 
-  function startSession(ws) {
+  function startSession(ws, initialShell = null) {
     const session = { proc: null, closed: false, ws }
     sessions.add(session)
+    let currentShell = shellForPlatform(process.platform, initialShell)
 
     const send = (payload) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -193,8 +216,11 @@ export function createTerminalHub({
       sessions.delete(session)
     }
 
-    const spawnShell = () => {
-      const proc = pty.spawn(shellForPlatform(), [], {
+    const spawnShell = (shellOverride = null) => {
+      if (shellOverride) {
+        currentShell = shellForPlatform(process.platform, shellOverride)
+      }
+      const proc = pty.spawn(currentShell, [], {
         name: 'xterm-256color',
         cols: COLS.initial,
         rows: ROWS.initial,
@@ -204,7 +230,7 @@ export function createTerminalHub({
       session.proc = proc
       send({
         type: 'ready',
-        shell: shellForPlatform(),
+        shell: currentShell,
         cwd,
         pid: proc.pid,
         cols: COLS.initial,
@@ -300,6 +326,25 @@ export function createTerminalHub({
             }`,
           })
         }
+      }
+
+      if (message.type === 'shell') {
+        if (typeof message.shell === 'string' && message.shell.trim()) {
+          const proc = session.proc
+          session.proc = null
+          killTree(proc)
+          try {
+            spawnShell(message.shell.trim())
+          } catch (error) {
+            send({
+              type: 'error',
+              message: `The shell could not switch to ${message.shell}: ${
+                error instanceof Error ? error.message : 'unknown error'
+              }`,
+            })
+          }
+        }
+        return
       }
     })
 

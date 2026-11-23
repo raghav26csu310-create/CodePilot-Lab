@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowUpRight,
   FolderGit2,
+  Network,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -186,6 +187,13 @@ export function WorkspaceShell() {
             message: 'Find works inside an open file — open one first.',
           })
         }
+        return
+      }
+
+      if (key === '`' || key === 'j') {
+        event.preventDefault()
+        dispatch({ type: 'ui/toggle-bottom' })
+        return
       }
     }
 
@@ -271,6 +279,16 @@ export function WorkspaceShell() {
         </div>
 
         <div className={styles.toolbar}>
+          <Link
+            to={`/atlas?project=${project.id}`}
+            className={styles.dossier}
+            title="Open Project Atlas architecture view"
+          >
+            <Network size={13} aria-hidden="true" />
+            <span className={styles.dossierLabel}>Atlas</span>
+            <ArrowUpRight size={11} className={styles.dossierArrow} aria-hidden="true" />
+          </Link>
+
           <Link
             to={`/workspace/${project.id}/overview`}
             className={styles.dossier}
@@ -440,6 +458,19 @@ export function WorkspaceShell() {
             </span>
           </>
         ) : null}
+        {ui.cursor ? (
+          <>
+            <span className={styles.statusSep} aria-hidden="true" />
+            <span className={styles.statusItem}>
+              Ln {ui.cursor.line}, Col {ui.cursor.column}
+              {ui.cursor.selected > 0 ? ` (${ui.cursor.selected} selected)` : ''}
+            </span>
+          </>
+        ) : null}
+        <span className={styles.statusSep} aria-hidden="true" />
+        <span className={styles.statusItem}>Spaces: 2</span>
+        <span className={styles.statusSep} aria-hidden="true" />
+        <span className={styles.statusItem}>UTF-8</span>
       </footer>
 
       <WorkspaceDialogs />

@@ -117,6 +117,8 @@ export type WorkspaceUiState = WorkspaceLayout & {
   markers: EditorMarker[]
   /** Current editor selection, or null when the cursor is collapsed. */
   selection: EditorSelection | null
+  /** Live cursor coordinates reported by Monaco. */
+  cursor: { line: number; column: number; selected: number } | null
   palette: 'files' | 'search' | null
   pendingReveal: PendingReveal | null
   pendingJob: PendingWorkspaceJob | null
@@ -168,6 +170,7 @@ export type WorkspaceAction =
   | { type: 'entry/delete'; path: string }
   | { type: 'editor/set-markers'; markers: EditorMarker[] }
   | { type: 'editor/set-selection'; selection: EditorSelection | null }
+  | { type: 'editor/set-cursor'; cursor: { line: number; column: number; selected: number } | null }
   | { type: 'ui/open-dialog'; dialog: WorkspaceDialog }
   | { type: 'ui/close-dialog' }
   | { type: 'ui/toggle-explorer' }
