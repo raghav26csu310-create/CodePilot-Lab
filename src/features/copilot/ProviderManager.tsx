@@ -133,9 +133,9 @@ export function ProviderManager({ compact = false, onSaved }: Props) {
   const [draft, setDraft] = useState<ConnectionDraft | null>(null)
   const [models, setModels] = useState<string[]>([])
   const [report, setReport] = useState<GatewayTestResult | null>(null)
-  const [working, setWorking] = useState<'test' | 'save' | 'delete' | 'preferences' | 'limits' | null>(
-    null,
-  )
+  const [working, setWorking] = useState<
+    'test' | 'save' | 'delete' | 'preferences' | 'limits' | null
+  >(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [limits, setLimits] = useState(() => aiSettings.settings)

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
 
@@ -9,7 +9,27 @@ import { buildConfig, loadDotEnv } from '../config/env.ts'
 
 const { Pool } = pg
 
-const MIGRATIONS_DIR = fileURLToPath(new URL('./migrations/', import.meta.url))
+/**
+ * The SQL files live next to the TypeScript source, but a bundled serverless
+ * function (Vercel) or the compiled `dist-api` layout places them elsewhere.
+ * Try every real layout instead of assuming one.
+ */
+export function resolveMigrationsDir(): string {
+  const candidates = [
+    fileURLToPath(new URL('./migrations/', import.meta.url)),
+    resolve(process.cwd(), 'server/api/src/db/migrations'),
+    resolve(process.cwd(), 'dist-api/db/migrations'),
+  ]
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  throw new Error(
+    `SQL migrations were not found. Looked in: ${candidates.join(', ')}. ` +
+      'Build output must include the migrations directory.',
+  )
+}
+
+const MIGRATIONS_DIR = resolveMigrationsDir()
 const MIGRATION_LOCK_ID = 4_242_001
 
 type MigrationFile = {

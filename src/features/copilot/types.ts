@@ -29,7 +29,7 @@ export type AiProviderPreset = {
 export type AiSettings = {
   preset: AiProviderPresetId
   provider: AiProviderKind
-  /** AI requests use the authenticated CodePilot API; credentials never live in browser settings. */
+  /** AI requests are routed through the authenticated CodePilot API. */
   route: 'gateway' | 'direct'
   baseUrl: string
   model: string

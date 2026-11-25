@@ -4,7 +4,8 @@
   "version": "0.7.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-all.mjs",
+    "dev:vite": "vite",
     "dev:all": "node scripts/dev-all.mjs",
     "exec": "node server/index.mjs",
     "start": "tsx scripts/production.mjs",

@@ -77,7 +77,9 @@ sandbox.
   write a starter file to IndexedDB, and the workspace status bar shows the active file
   language and whether it is runnable.
 - **AI Copilot** in the workspace dock (`/copilot` explains the model; `/settings`
-  manages providers). The authenticated API provides separate adapters for OpenAI,
+  manages providers). Groq is the managed primary through the authenticated API;
+  its key is read only from the server-side `GROQ_API_KEY`. The API also provides
+  separate adapters for OpenAI,
   Anthropic, Google Gemini, Ollama, DeepSeek and custom OpenAI-compatible endpoints.
   Provider keys are encrypted on the API and never stored in the browser; requests stream
   over SSE with pre-output fallback and honest provider/model/usage metadata. Ollama must
@@ -98,11 +100,11 @@ sandbox.
   linked folder copy. Accepting applies one undoable Monaco edit; saving stays manual.
   Revisions keep the previous whole-file content for restore, and an applied file is
   visibly dirty until you save it.
-- **Credentials stay yours.** No key ships in the bundle. Keys are typed at runtime,
-  live in memory by default, and are only persisted to IndexedDB when you opt in. A
-  local proxy can hold secrets server-side by pointing the base URL at it. Status is
-  honest: `unconfigured` → `configured` (saved, unverified) → `verified` only after a
-  real model list or chat request succeeded in this session.
+- **Credentials stay server-side.** No provider key ships in the bundle or is stored in
+  browser storage. Groq uses the server environment variable `GROQ_API_KEY`; optional
+  account-owned provider keys are sent to the authenticated API and encrypted at rest.
+  Status is honest: `unconfigured` → `configured` (saved, unverified) → `verified` only
+  after a real model list or chat request succeeded in this session.
 - **Streamed, stoppable responses** with copy, clear conversation, per-request context
   disclosure, and explicit error kinds for auth, network, provider, CORS and rate-limit
   failures. Nothing is retried silently.
@@ -170,20 +172,21 @@ sandbox.
 
 ## What is deliberately not built yet
 
-Project Atlas, Project Vault, and Activity & Diagnostics remain placeholders. The Terminal tab
+Project Atlas (static architecture analysis plus optional live AI explanation), Project Vault
+(IndexedDB project lifecycle), and Activity & Diagnostics (real browser/API/sidecar probes)
+are implemented. The Terminal tab
 opens a real local shell through the loopback sidecar and states that it is a shell on the host
 machine, not a sandbox; a cloud terminal is not configured and is rendered as unavailable. The
-Output view still states plainly that no channel has produced output, and program execution
-remains available through the Run tab. There is no hardened sandbox: the execution service is a
-resource-limited local runner, not a security boundary. HTML, CSS and JSON are editor languages
-with no runtime, and only Python has a real tracer in this phase.
+Output view reports when no execution output exists. There is no hardened sandbox: the execution
+service is a resource-limited local runner, not a security boundary. HTML, CSS and JSON are editor
+languages with no runtime, and only Python has a real tracer.
 
-No paid dependency is required for the editor, execution, tracing, converter UI or practice
-grading, and the editor keeps working with no account and no AI provider. Managed CodePilot
-AI needs the API (`server/api`) running with a server-side provider configured; a local
-model (for example Ollama) or any OpenAI-compatible endpoint can instead be connected
-directly from Settings as the advanced mode. GitHub integration is not available: Settings
-shows the real configuration gate and no repository or commit action exists.
+The editor and local project storage work without an account or AI provider. Managed Groq AI
+requires the API deployment and server-side `GROQ_API_KEY`; local development starts the API
+with `npm run dev`. Optional account-owned provider connections are stored encrypted by the API.
+GitHub actions use the installed GitHub CLI and loopback companion; live authentication requires
+the user to install `gh` and authorize it. See [deployment](docs/deployment.md) for Vercel's
+required PostgreSQL and environment setup.
 
 ## Run
 

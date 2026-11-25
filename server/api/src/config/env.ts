@@ -60,6 +60,8 @@ const EnvSchema = z.object({
   MANAGED_AI_BASE_URL: z.string().default(''),
   MANAGED_AI_API_KEY: z.string().default(''),
   MANAGED_AI_MODEL: z.string().default(''),
+  GROQ_API_KEY: z.string().default(''),
+  GROQ_MODEL: z.string().trim().min(1).max(200).default('openai/gpt-oss-120b'),
   MANAGED_AI_DAILY_REQUESTS: z.coerce.number().int().min(0).max(100_000).default(100),
   MANAGED_AI_MONTHLY_TOKENS: z.coerce.number().int().min(0).max(100_000_000).default(500_000),
   MANAGED_AI_FALLBACK_MODELS: csv,
@@ -99,7 +101,11 @@ function parseManagedProvider(value: string): ManagedAiProviderId {
 
 export type AppConfig = Omit<
   ServerEnv,
-  'MANAGED_AI_PROVIDER' | 'MANAGED_AI_BASE_URL' | 'MANAGED_AI_API_KEY'
+  | 'MANAGED_AI_PROVIDER'
+  | 'MANAGED_AI_BASE_URL'
+  | 'MANAGED_AI_API_KEY'
+  | 'GROQ_API_KEY'
+  | 'GROQ_MODEL'
 > & {
   managedAi: ManagedAiConfig | null
   allowedOrigins: string[]
@@ -170,13 +176,15 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.CREDENTIAL_ENCRYPTION_KEY) {
     const key = parsed.CREDENTIAL_ENCRYPTION_KEY.trim()
     const decodedKey = Buffer.from(key, 'base64')
-    if (
-      !/^[A-Za-z0-9+/]+={0,2}$/.test(key) ||
-      decodedKey.length !== 32 ||
-      decodedKey.toString('base64').replace(/=+$/, '') !== key.replace(/=+$/, '')
-    ) {
+    const isBase64Key =
+      /^[A-Za-z0-9+/]+={0,2}$/.test(key) &&
+      decodedKey.length === 32 &&
+      decodedKey.toString('base64').replace(/=+$/, '') === key.replace(/=+$/, '')
+    // Platform-generated secrets are often not base64; they are hashed into a
+    // 32-byte key by createCredentialCipher, so only length matters here.
+    if (!isBase64Key && key.length < 32) {
       throw new ConfigurationError(
-        'CREDENTIAL_ENCRYPTION_KEY must be 32 bytes encoded as base64.',
+        'CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters, or 32 bytes encoded as base64.',
       )
     }
   }
@@ -224,13 +232,25 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  const groqApiKey = parsed.GROQ_API_KEY.trim()
   const managedConfigured =
     parsed.MANAGED_AI_BASE_URL.trim().length > 0 &&
     parsed.MANAGED_AI_API_KEY.trim().length > 0 &&
     parsed.MANAGED_AI_MODEL.trim().length > 0
 
-  const managedAi: ManagedAiConfig | null = managedConfigured
+  const managedAi: ManagedAiConfig | null = groqApiKey
     ? {
+        provider: 'openai-compatible',
+        label: 'Groq',
+        baseUrl: 'https://api.groq.com/openai/v1',
+        apiKey: groqApiKey,
+        model: parsed.GROQ_MODEL,
+        dailyRequests: parsed.MANAGED_AI_DAILY_REQUESTS,
+        monthlyTokens: parsed.MANAGED_AI_MONTHLY_TOKENS,
+        fallbackModels: [],
+      }
+    : managedConfigured
+      ? {
         provider: managedProvider,
         label: parsed.MANAGED_AI_LABEL.trim() || 'CodePilot AI',
         baseUrl: parsed.MANAGED_AI_BASE_URL.trim(),
@@ -240,7 +260,7 @@ export function buildConfig(input: NodeJS.ProcessEnv = process.env): AppConfig {
         monthlyTokens: parsed.MANAGED_AI_MONTHLY_TOKENS,
         fallbackModels: parsed.MANAGED_AI_FALLBACK_MODELS,
       }
-    : null
+      : null
 
   return {
     ...parsed,

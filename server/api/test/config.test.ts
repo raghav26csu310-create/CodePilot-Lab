@@ -24,6 +24,28 @@ describe('API environment validation', () => {
     ).toThrow(ConfigurationError)
   })
 
+  it('uses the server-only Groq key and configured model as the managed primary', () => {
+    const parsed = config({
+      GROQ_API_KEY: 'groq-server-secret',
+      GROQ_MODEL: 'openai/gpt-oss-20b',
+      MANAGED_AI_BASE_URL: 'https://legacy.example/v1',
+      MANAGED_AI_API_KEY: 'legacy-secret',
+      MANAGED_AI_MODEL: 'legacy-model',
+    })
+
+    expect(parsed.managedAi).toMatchObject({
+      provider: 'openai-compatible',
+      label: 'Groq',
+      baseUrl: 'https://api.groq.com/openai/v1',
+      apiKey: 'groq-server-secret',
+      model: 'openai/gpt-oss-20b',
+    })
+  })
+
+  it('does not enable managed AI from a model name without a Groq key', () => {
+    expect(config({ GROQ_MODEL: 'openai/gpt-oss-20b' }).managedAi).toBeNull()
+  })
+
   it('rejects non-origin CORS entries', () => {
     expect(() => config({ CORS_ORIGINS: 'https://example.test/api' })).toThrow(ConfigurationError)
   })

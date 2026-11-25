@@ -526,6 +526,58 @@ describe('managed AI streaming and quota', () => {
   })
 })
 
+describe('Groq managed AI', () => {
+  it('streams through the Groq-compatible endpoint without returning its server key', async () => {
+    const groqKey = 'groq-test-secret-not-real'
+    const fetchImpl: typeof fetch = async (input, init) => {
+      expect(String(input)).toBe('https://api.groq.com/openai/v1/chat/completions')
+      expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${groqKey}`)
+      const body = JSON.parse(String(init?.body)) as { model: string }
+      expect(body.model).toBe('openai/gpt-oss-120b')
+      return new Response(
+        'data: {"choices":[{"delta":{"content":"Groq replied."}}]}\n\n' +
+          'data: [DONE]\n\n',
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      )
+    }
+
+    const groqApp = await createApp({
+      config: testConfig({ GROQ_API_KEY: groqKey }),
+      store: new MemoryStore(),
+      fetchImpl,
+    })
+    const groqBase = await listen(groqApp)
+
+    try {
+      const health = await request(groqBase, '/api/health')
+      const healthText = await health.text()
+      expect(healthText).toContain('"label":"Groq"')
+      expect(healthText).not.toContain(groqKey)
+
+      const register = await request(groqBase, '/api/auth/register', {
+        method: 'POST',
+        body: {
+          email: 'groq@example.test',
+          password: 'correct horse battery staple',
+          displayName: 'Groq user',
+        },
+      })
+      const response = await request(groqBase, '/api/ai/chat', {
+        method: 'POST',
+        cookie: cookieFrom(register),
+        body: { messages: [{ role: 'user', content: 'Explain this code.' }] },
+      })
+      const stream = await response.text()
+      expect(response.status).toBe(200)
+      expect(stream).toContain('"label":"Groq"')
+      expect(stream).toContain('Groq replied.')
+      expect(stream).not.toContain(groqKey)
+    } finally {
+      await groqApp.close()
+    }
+  })
+})
+
 describe('BYO provider fallback', () => {
   let providerApp: RunningApp
   let providerBase = ''

@@ -1,18 +1,19 @@
 # Deployment guide
 
-CodePilot Lab has a one-process production entrypoint: `npm start` serves `dist/` and
-`/api/*` through the same Node server, applies PostgreSQL migrations at startup and
-handles graceful SIGINT/SIGTERM shutdown.
+CodePilot Lab supports Vercel serverless deployment as well as a one-process Node
+deployment. Vercel serves the Vite build from `dist/` and maps `/api/*` to the shared
+API router in `api/[...path].ts`; local development uses `npm run dev`, which starts
+Vite, the API and the optional execution companion together.
 
 ## Production requirements
 
 | Requirement | Value |
 | --- | --- |
 | Node.js | 24 recommended |
-| Database | PostgreSQL |
+| Database | PostgreSQL (required for production and Vercel) |
 | Credential encryption key | Base64 encoding of exactly 32 bytes |
 | Public origin | HTTPS |
-| AI provider | Optional; managed mode needs complete server configuration |
+| AI provider | Optional; managed Groq uses `GROQ_API_KEY` |
 | Execution / terminal | Separate loopback companion; not a public sandbox |
 
 Production startup refuses in-memory storage, incomplete credential encryption, missing
@@ -36,7 +37,22 @@ Generate a credential key:
 openssl rand -base64 32
 ```
 
-## Managed AI variables
+## Groq AI
+
+Set `GROQ_API_KEY` on the server/API deployment to enable managed Groq. It is never a
+`VITE_*` variable, is not stored in IndexedDB, and is not returned by health or AI routes.
+The key takes precedence over the legacy generic managed-provider configuration. The
+default `GROQ_MODEL` is `openai/gpt-oss-120b`, listed as a Groq production model in the
+[official supported-model catalog](https://console.groq.com/docs/models) checked
+2026-11-25. Set `GROQ_MODEL` to another currently available model ID to change it.
+
+The browser sends chat to the authenticated same-origin `/api/ai/chat` SSE endpoint; the
+API applies its request-size, message-count, rate and provider time limits and talks to
+Groq server-to-server. AI is unavailable until a Groq key or an account-owned provider
+connection exists. No AI response is synthesized when configuration or the provider is
+unavailable.
+
+## Legacy managed-provider variables
 
 All three of `MANAGED_AI_BASE_URL`, `MANAGED_AI_API_KEY` and `MANAGED_AI_MODEL` must be
 set together. `MANAGED_AI_PROVIDER` selects `openai`, `anthropic`, `gemini`, `ollama`,
@@ -53,7 +69,8 @@ set together. `MANAGED_AI_PROVIDER` selects `openai`, `anthropic`, `gemini`, `ol
 | `MANAGED_AI_MONTHLY_TOKENS` | Estimated monthly token cap |
 | `MANAGED_AI_FALLBACK_MODELS` | Optional comma-separated fallback models |
 
-Never put provider secrets in `VITE_*` variables. Never commit `.env`.
+These settings remain as a compatibility option when `GROQ_API_KEY` is absent. Never
+put provider secrets in `VITE_*` variables. Never commit `.env`.
 
 ## Build and start
 
@@ -104,14 +121,44 @@ Compose uses development defaults, an ephemeral key when the key is absent, and
 `codepilot-postgres` data. It is suitable for local containers, not as a substitute for
 production infrastructure.
 
-## Platform deployment
+## Vercel deployment
 
-Set the platform build command to `npm ci && npm run build`, start command to `npm start`,
-and health check to `/api/health/ready`. Supply PostgreSQL over a private network and
-set the public HTTPS origin exactly in `CORS_ORIGINS`.
+Use the repository root as the Vercel project root. `vercel.json` configures the Vite
+framework, `npm run build && node scripts/set-site-url.mjs`, the `dist` output, the
+serverless API catch-all and SPA rewrites. Vercel discovers `api/[...path].ts` as the
+Node.js function; the frontend uses relative `/api/*` paths unless the optional
+`VITE_API_BASE_URL` override is explicitly set for a separate-origin API.
 
-The platform must support a persistent Node process for this API. Serverless-only hosting
-is not equivalent: migrations, sessions and provider quotas require adaptation.
+Create a PostgreSQL database and set these Vercel Project → Settings → Environment
+Variables for every deployed environment that should run the API:
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL connection URL from the database provider |
+| `CREDENTIAL_ENCRYPTION_KEY` | Persistent base64 32-byte key; generate with `openssl rand -base64 32` |
+| `GROQ_API_KEY` | Groq API key (optional; keep it server-only) |
+| `GROQ_MODEL` | Optional model ID; defaults to `openai/gpt-oss-120b` |
+
+The function derives its HTTPS origin from Vercel deployment metadata. Set `PUBLIC_ORIGIN`
+to the canonical production URL when using a custom domain. The function uses a 50-second
+provider deadline within its 60-second configured maximum duration. `/api/health/live`
+reports process liveness even when other deployment configuration is incomplete;
+`/api/health/ready` and `/api/health` report actual database/API readiness.
+
+Redeploy after changing environment variables. Vercel-managed functions do not run the
+local execution/terminal companion; those controls remain unavailable on the hosted site.
+The database, provider account/limits, HTTPS domain and Vercel project are external
+infrastructure and must be provisioned by the operator.
+
+## Persistent Node deployment
+
+For a persistent Node host, use `npm ci && npm run build`, start command `npm start`,
+and health check `/api/health/ready`. Supply PostgreSQL over a private network and set
+the public HTTPS origin exactly in `CORS_ORIGINS`.
+
+PostgreSQL-backed sessions and quotas survive process restarts. Rate limiting is still
+in-memory per function/process; use a shared rate-limit store before relying on it for
+multi-instance abuse control.
 
 ## Execution and terminal sidecars
 

@@ -1,7 +1,7 @@
 import { CircleSlash, LoaderCircle, Sparkles, Square, TriangleAlert, Trash2 } from 'lucide-react'
 import { useRef, useState } from 'react'
 
-import { isConfigured, presetById, providerLabel } from '../copilot/providerPresets'
+import { isConfigured, providerLabel } from '../copilot/providerPresets'
 import { useGateway } from '../copilot/gateway/store'
 import { streamAssistant } from '../copilot/quickAsk'
 import { useAiSettings } from '../copilot/settingsStore'
@@ -42,16 +42,11 @@ export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPan
   const abortRef = useRef<AbortController | null>(null)
 
   const settings = ai.settings
-  const preset = presetById(settings.preset)
   const gatewayAvailable =
     gateway.status !== null &&
     (gateway.status.managed.available || gateway.status.connections.length > 0)
   const configured =
-    ai.loaded &&
-    isConfigured(settings) &&
-    (settings.route === 'gateway'
-      ? gatewayAvailable
-      : !preset?.keyExpected || settings.apiKey.trim().length > 0)
+    ai.loaded && isConfigured(settings) && gatewayAvailable
   const providerName =
     gateway.status?.connection?.label ??
     (gateway.status?.managed.available ? gateway.status.managed.label : providerLabel(settings))
@@ -60,17 +55,15 @@ export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPan
     gateway.status?.managed.model ??
     settings.model
   const unavailableMessage =
-    settings.route !== 'gateway'
-      ? 'Configure a provider in Settings to use AI help. The problem, editor and grader work without it.'
-      : gateway.reachable === null
-        ? 'Checking CodePilot API availability…'
-        : gateway.reachable === false
-          ? gateway.error ?? 'The CodePilot API is unavailable.'
-          : !gateway.user
-            ? 'Sign in on Settings to use AI help.'
-            : gateway.status?.managed.reason ??
-              gateway.error ??
-              'No managed or personal AI provider is available. Configure one in Settings.'
+    gateway.reachable === null
+      ? 'Checking CodePilot API availability…'
+      : gateway.reachable === false
+        ? gateway.error ?? 'The CodePilot API is unavailable.'
+        : !gateway.user
+          ? 'Sign in on Settings to use AI help.'
+          : gateway.status?.managed.reason ??
+            gateway.error ??
+            'No managed or personal AI provider is available. Configure one in Settings.'
 
   const ask = async (text: string) => {
     const trimmed = text.trim()
@@ -79,9 +72,7 @@ export function QuickAiPanel({ context, suggestions, system, scope }: QuickAiPan
     }
     if (!configured) {
       setError(
-        settings.route === 'gateway'
-          ? 'CodePilot AI is not available yet. Sign in on the Settings page and check the gateway status there.'
-          : 'No AI provider is ready. Configure the base URL, model and API key (when the provider needs one) in Settings.',
+        'CodePilot AI is not available yet. Sign in on the Settings page and check the gateway status there.',
       )
       return
     }

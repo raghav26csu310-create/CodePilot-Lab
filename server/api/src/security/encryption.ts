@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto'
 
 const VERSION = 'v1'
 const IV_BYTES = 12
@@ -68,12 +68,21 @@ export function createCredentialCipher(secret: string, isProduction: boolean): C
   }
 
   const key = Buffer.from(trimmed, 'base64')
-  if (key.length !== 32) {
-    throw new Error(
-      'CREDENTIAL_ENCRYPTION_KEY must be 32 bytes encoded as base64 (generate one with `openssl rand -base64 32`).',
-    )
+  if (key.length === 32) {
+    return new CredentialCipher(key, false)
   }
-  return new CredentialCipher(key, false)
+
+  // Hosting platforms commonly inject a high-entropy secret instead of a
+  // base64 string. Derive a deterministic 32-byte key so generated secrets
+  // work without a manual conversion step; the same input always maps to the
+  // same key, which is what makes saved credentials survive a restart.
+  if (trimmed.length >= 32) {
+    return new CredentialCipher(createHash('sha256').update(trimmed, 'utf8').digest(), false)
+  }
+
+  throw new Error(
+    'CREDENTIAL_ENCRYPTION_KEY must be at least 32 characters, or 32 bytes encoded as base64 (generate one with `openssl rand -base64 32`).',
+  )
 }
 
 export function lastFour(secret: string): string {
